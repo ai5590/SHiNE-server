@@ -3,8 +3,6 @@ package shine.db.entities;
 /**
  * Модель активной сессии (таблица active_sessions).
  *
- * Поля соответствуют схеме:
- *
  * CREATE TABLE active_sessions (
  *     sessionId              TEXT    NOT NULL PRIMARY KEY,
  *     loginId                INTEGER NOT NULL,
@@ -15,6 +13,10 @@ package shine.db.entities;
  *     pushEndpoint           TEXT,
  *     pushP256dhKey          TEXT,
  *     pushAuthKey            TEXT,
+ *     clientIp               TEXT,
+ *     clientInfoFromClient   TEXT,
+ *     clientInfoFromRequest  TEXT,
+ *     userLanguage           TEXT,
  *     FOREIGN KEY (loginId) REFERENCES solana_users(loginId)
  * );
  */
@@ -30,6 +32,12 @@ public class ActiveSession {
     private String pushP256dhKey;           // TEXT (nullable)
     private String pushAuthKey;             // TEXT (nullable)
 
+    // Новые поля
+    private String clientIp;                // IP клиента при auth/refresh
+    private String clientInfoFromClient;    // строка от клиента (PWA)
+    private String clientInfoFromRequest;   // строка, собранная на сервере
+    private String userLanguage;            // prefer-language (например, "ru-RU")
+
     public ActiveSession() {
     }
 
@@ -41,7 +49,11 @@ public class ActiveSession {
                          long lastAuthirificatedAtMs,
                          String pushEndpoint,
                          String pushP256dhKey,
-                         String pushAuthKey) {
+                         String pushAuthKey,
+                         String clientIp,
+                         String clientInfoFromClient,
+                         String clientInfoFromRequest,
+                         String userLanguage) {
         this.sessionId = sessionId;
         this.loginId = loginId;
         this.sessionPwd = sessionPwd;
@@ -51,6 +63,10 @@ public class ActiveSession {
         this.pushEndpoint = pushEndpoint;
         this.pushP256dhKey = pushP256dhKey;
         this.pushAuthKey = pushAuthKey;
+        this.clientIp = clientIp;
+        this.clientInfoFromClient = clientInfoFromClient;
+        this.clientInfoFromRequest = clientInfoFromRequest;
+        this.userLanguage = userLanguage;
     }
 
     // --- getters / setters ---
@@ -125,5 +141,37 @@ public class ActiveSession {
 
     public void setPushAuthKey(String pushAuthKey) {
         this.pushAuthKey = pushAuthKey;
+    }
+
+    public String getClientIp() {
+        return clientIp;
+    }
+
+    public void setClientIp(String clientIp) {
+        this.clientIp = clientIp;
+    }
+
+    public String getClientInfoFromClient() {
+        return clientInfoFromClient;
+    }
+
+    public void setClientInfoFromClient(String clientInfoFromClient) {
+        this.clientInfoFromClient = clientInfoFromClient;
+    }
+
+    public String getClientInfoFromRequest() {
+        return clientInfoFromRequest;
+    }
+
+    public void setClientInfoFromRequest(String clientInfoFromRequest) {
+        this.clientInfoFromRequest = clientInfoFromRequest;
+    }
+
+    public String getUserLanguage() {
+        return userLanguage;
+    }
+
+    public void setUserLanguage(String userLanguage) {
+        this.userLanguage = userLanguage;
     }
 }

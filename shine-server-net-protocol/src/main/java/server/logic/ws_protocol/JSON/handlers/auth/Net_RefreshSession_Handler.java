@@ -15,6 +15,7 @@ import shine.db.dao.ActiveSessionsDAO;
 import shine.db.dao.SolanaUsersDAO;
 import shine.db.entities.ActiveSession;
 import shine.db.entities.SolanaUser;
+import shine.geo.ClientInfoService;
 
 import java.sql.SQLException;
 
@@ -24,12 +25,15 @@ import java.sql.SQLException;
  * При успешной проверке sessionId + sessionPwd:
  *  - подтягивает пользователя по loginId из сессии;
  *  - заполняет ConnectionContext;
- *  - обновляет lastAuthirificatedAtMs в БД на текущее время;
+ *  - обновляет lastAuthirificatedAtMs и метаданные сессии в БД;
  *  - возвращает storagePwd в payload.
  */
 public class Net_RefreshSession_Handler implements JsonMessageHandler {
 
     private static final Logger log = LoggerFactory.getLogger(Net_RefreshSession_Handler.class);
+
+    // максимум 50 символов для clientInfo от клиента
+    private static final int CLIENT_INFO_MAX_LEN = 50;
 
     @Override
     public NetResponse handle(NetRequest request, ConnectionContext ctx) throws Exception {
@@ -37,6 +41,7 @@ public class Net_RefreshSession_Handler implements JsonMessageHandler {
 
         String sessionId = req.getSessionId();
         String sessionPwd = req.getSessionPwd();
+        String clientInfoFromClient = trimClientInfo(req.getClientInfo());
 
         if (sessionId == null || sessionId.isBlank()) {
             return NetExceptionResponseFactory.error(
@@ -89,7 +94,7 @@ public class Net_RefreshSession_Handler implements JsonMessageHandler {
             );
         }
 
-        // --- достаём пользователя по loginId из сессии ---
+        // --- вытаскиваем пользователя по loginId ---
         SolanaUser solanaUser = null;
         long loginId = session.getLoginId();
         try {
@@ -114,7 +119,43 @@ public class Net_RefreshSession_Handler implements JsonMessageHandler {
             );
         }
 
-        // Всё хорошо — обновляем контекст соединения
+        // --- собираем данные о клиенте из WebSocket-запроса ---
+        String clientIp = null;
+        String clientInfoFromRequest = null;
+        String userLanguage = null;
+
+        if (ctx != null && ctx.getWsSession() != null) {
+            clientIp = "8.8.8.8";  //TODO сделать нормальное получение ип адреса
+//            и сделать запрос геолокации и никуда его не сохранять запрос нужен просто что бы в кэш данные добавилиь если нужно
+            clientInfoFromRequest = ClientInfoService.buildClientInfoString(ctx.getWsSession());
+            userLanguage = ClientInfoService.extractPreferredLanguageTag(ctx.getWsSession());
+        }
+
+        long nowMs = System.currentTimeMillis();
+
+        // --- обновляем запись в БД (lastAuth + мета) ---
+        try {
+            sessionsDao.updateOnRefresh(
+                    sessionId,
+                    nowMs,
+                    clientIp,
+                    clientInfoFromClient,
+                    clientInfoFromRequest,
+                    userLanguage
+            );
+        } catch (SQLException e) {
+            log.error("Ошибка БД при обновлении метаданных сессии sessionId={}", sessionId, e);
+            // не роняем авторизацию, но логируем
+        }
+
+        // Также обновим объект session в памяти (если дальше кто-то его использует)
+        session.setLastAuthirificatedAtMs(nowMs);
+        session.setClientIp(clientIp);
+        session.setClientInfoFromClient(clientInfoFromClient);
+        session.setClientInfoFromRequest(clientInfoFromRequest);
+        session.setUserLanguage(userLanguage);
+
+        // --- обновляем контекст соединения ---
         if (ctx != null) {
             ctx.setActiveSession(session);
             ctx.setSolanaUser(solanaUser);
@@ -126,20 +167,21 @@ public class Net_RefreshSession_Handler implements JsonMessageHandler {
             ActiveConnectionsRegistry.getInstance().register(ctx);
         }
 
-        // Обновляем lastAuthirificatedAtMs в БД
-        try {
-            long nowMs = System.currentTimeMillis();
-            sessionsDao.updateLastAuthirificatedAtMs(sessionId, nowMs);
-        } catch (SQLException e) {
-            log.error("Ошибка БД при обновлении lastAuthirificatedAtMs для sessionId={}", sessionId, e);
-        }
-
-        // Возвращаем OK + storagePwd
+        // --- ответ OK + storagePwd ---
         Net_RefreshSession_Response resp = new Net_RefreshSession_Response();
         resp.setOp(req.getOp());
         resp.setRequestId(req.getRequestId());
         resp.setStatus(WireCodes.Status.OK);
         resp.setStoragePwd(session.getStoragePwd());
         return resp;
+    }
+
+    private String trimClientInfo(String info) {
+        if (info == null) return null;
+        info = info.trim();
+        if (info.length() > CLIENT_INFO_MAX_LEN) {
+            return info.substring(0, CLIENT_INFO_MAX_LEN);
+        }
+        return info;
     }
 }

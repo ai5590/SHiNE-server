@@ -5,8 +5,9 @@ import server.logic.ws_protocol.JSON.entyties.NetResponse;
 /**
  * Ответ на AuthChallenge.
  *
- * При успехе сервер возвращает временный секрет sessionPwd,
- * который клиент обязан использовать на втором шаге при формировании подписи.
+ * При успехе сервер возвращает одноразовый nonce для подписи (authNonce),
+ * который клиент обязан использовать на втором шаге при формировании строки
+ * для цифровой подписи.
  *
  * JSON:
  * {
@@ -14,22 +15,23 @@ import server.logic.ws_protocol.JSON.entyties.NetResponse;
  *   "requestId": "...",
  *   "status": 200,
  *   "payload": {
- *     "sessionPwd": "base64-строка-от-32-байт"
+ *     "authNonce": "base64-строка-от-32-байт"
  *   }
  * }
  */
 public class Net_AuthChallenge_Response extends NetResponse {
 
     /**
-     * Временный секрет, сгенерированный сервером.
+     * Одноразовый nonce для авторификации.
      * Строка — это base64-представление 32 случайных байт.
      */
-    private String sessionPwd;
+    private String authNonce;
 
-    public String getSessionPwd() {
-        return sessionPwd;
+    public String getAuthNonce() {
+        return authNonce;
     }
-    public void setSessionPwd(String sessionPwd) {
-        this.sessionPwd = sessionPwd;
+
+    public void setAuthNonce(String authNonce) {
+        this.authNonce = authNonce;
     }
 }

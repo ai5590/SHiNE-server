@@ -29,6 +29,8 @@ dependencies {
     implementation project(':shine-server-crypto')       // модуль сервера для работы с криптографией
     implementation project(':shine-server-blockchain')   // модуль для работы с блокчейном
     implementation project(':shine-server-db')           // модуль для работы с БД содержит и сущности из БД и саму работу с БД
+    implementation project(':shine-server-geo')           // модуль для определения геолокации по IP
+
 
 }
 

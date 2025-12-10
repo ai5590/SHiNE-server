@@ -46,7 +46,6 @@ public class Net_AuthChallenge_Handler implements JsonMessageHandler {
         SolanaUser solanaUser = SolanaUsersDAO.getInstance().getByLogin(login);
 
         if (solanaUser == null) {
-            // TODO позже — запрос в Solana, если не нашли локально
             return NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.UNVERIFIED,
@@ -55,22 +54,23 @@ public class Net_AuthChallenge_Handler implements JsonMessageHandler {
             );
         }
 
-        // 3) Заполняем контекст целиком пользователем
+        // 3) Заполняем контекст пользователем
         ctx.setSolanaUser(solanaUser);
 
-        // 4) Генерируем надёжный sessionPwd = base64(32 случайных байт)
+        // 4) Генерируем одноразовый authNonce = base64(32 случайных байт)
         byte[] buf = new byte[32];
         RANDOM.nextBytes(buf);
-        String sessionPwd = Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
+        String authNonce = Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
 
-        ctx.setSessionPwd(sessionPwd);
+        // Используем поле sessionPwd в контексте как хранилище challenge (authNonce) до шага 2
+        ctx.setSessionPwd(authNonce);
 
         // 5) Формируем ответ
         Net_AuthChallenge_Response resp = new Net_AuthChallenge_Response();
         resp.setOp(req.getOp());
         resp.setRequestId(req.getRequestId());
         resp.setStatus(WireCodes.Status.OK);
-        resp.setSessionPwd(sessionPwd);
+        resp.setAuthNonce(authNonce);
 
         return resp;
     }

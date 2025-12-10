@@ -2,18 +2,25 @@ package shine.geo;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import shine.db.dao.IpGeoCacheDAO;
+import shine.db.entities.IpGeoCacheEntry;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.SQLException;
 
 /**
  * Сервис для геолокации по IP.
- * .
- * Основной метод:
- *   resolveCountryCityOrIp(ip) -> "Country, City" или GEO_UNKNOWN, если не удалось.
+ *
+ * Основной метод без кэша:
+ *   resolveCountryCityOrIp(ip) -> "Country, City" или GEO_UNKNOWN
+ *
+ * Метод с кэшированием в БД:
+ *   resolveCountryCityOrIpWithCache(ip) -> сначала смотрит в ip_geo_cache,
+ *   при отсутствии записи — обращается к внешнему сервису, сохраняет результат в кэш и возвращает его.
  */
 public final class GeoLookupService {
 
@@ -34,6 +41,8 @@ public final class GeoLookupService {
     }
 
     /**
+     * ВАРИАНТ БЕЗ КЭША.
+     *
      * Возвращает строку вида "Country, City" по IP.
      * Если запрос не удался, возвращает GEO_UNKNOWN.
      */
@@ -79,7 +88,6 @@ public final class GeoLookupService {
                 return GEO_UNKNOWN;
             }
 
-            // Собираем строку
             if (country != null && city != null) {
                 return country + ", " + city;
             } else if (country != null) {
@@ -92,6 +100,64 @@ public final class GeoLookupService {
             // Ошибки сети — возвращаем unknown
             return GEO_UNKNOWN;
         }
+    }
+
+    /**
+     * ВАРИАНТ С КЭШЕМ В БАЗЕ (ip_geo_cache).
+     *
+     * Логика:
+     *  1) Если IP пустой или локальный — сразу GEO_UNKNOWN (и ничего не пишем в кэш).
+     *  2) Пытаемся найти ip в ip_geo_cache:
+     *       - если нашли — возвращаем geo из записи.
+     *  3) Если не нашли — вызываем resolveCountryCityOrIp(ip) (внешний сервис),
+     *       - результат (включая GEO_UNKNOWN) сохраняем в ip_geo_cache через IpGeoCacheDAO.upsert()
+     *       - возвращаем сохранённый результат.
+     *
+     * В случае ошибок БД — просто падаем назад на поведение без кэша.
+     */
+    public static String resolveCountryCityOrIpWithCache(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return GEO_UNKNOWN;
+        }
+
+        // Приватные/локальные IP не кешируем и не запрашиваем
+        if (isPrivateOrLocalIp(ip)) {
+            return GEO_UNKNOWN;
+        }
+
+        // 1. Сначала пробуем взять из кэша
+        IpGeoCacheDAO dao = IpGeoCacheDAO.getInstance();
+        try {
+            IpGeoCacheEntry cached = dao.getByIp(ip);
+            if (cached != null) {
+                String geo = cached.getGeo();
+                if (geo != null && !geo.isBlank()) {
+                    return geo;
+                }
+                // Если geo пустая строка (на всякий случай) — идём за свежими данными.
+            }
+        } catch (SQLException e) {
+            // Ошибка БД — логируем при желании и продолжаем без кэша
+            // log.warn("Failed to read IP geo cache", e);
+        }
+
+        // 2. Вызываем "сырой" метод, который ходит во внешний сервис
+        String resolvedGeo = resolveCountryCityOrIp(ip);
+
+        // 3. Пишем результат в кэш (включая GEO_UNKNOWN)
+        try {
+            IpGeoCacheEntry entry = new IpGeoCacheEntry(
+                    ip,
+                    resolvedGeo,
+                    System.currentTimeMillis()
+            );
+            dao.upsert(entry);
+        } catch (SQLException e) {
+            // Ошибка БД при записи — просто игнорируем, кэш не обязателен для работы
+            // log.warn("Failed to upsert IP geo cache", e);
+        }
+
+        return resolvedGeo;
     }
 
     /**

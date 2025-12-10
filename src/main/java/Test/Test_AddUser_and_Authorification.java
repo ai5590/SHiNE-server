@@ -20,10 +20,13 @@ import java.util.concurrent.CountDownLatch;
  *  1) AddUser  — добавляем пользователя в локальную БД
  *     (loginKey и deviceKey разные).
  *
- *  2) AuthChallenge — запрашиваем sessionPwd.
+ *  2) AuthChallenge — запрашиваем одноразовый authNonce
+ *     для подписи шаге 2.
  *
  *  3) CreateAuthSession — подтверждаем владение deviceKey,
- *     создаётся сессия, сервер возвращает sessionId (строка).
+ *     создаётся сессия, сервер возвращает:
+ *       - sessionId (строка, base64-32 байта)
+ *       - sessionPwd (секрет сессии, base64-32 байта)
  *
  *  4) Новое подключение:
  *       - отправляем RefreshSession с тем же sessionId,
@@ -47,6 +50,9 @@ public class Test_AddUser_and_Authorification {
     private static final long TEST_LOGIN_ID = 100120L;
     private static final long TEST_BCH_ID = 4222L;
     private static final int TEST_BCH_LIMIT = 1_000_000;
+
+    // Краткая строка clientInfo, которую клиент шлёт на шаге CreateAuthSession
+    private static final String TEST_CLIENT_INFO = "JavaTestClient/1.0";
 
     // --- Тестовые пары ключей ---
     // loginKey — ключ аккаунта (например, "основной")
@@ -72,11 +78,14 @@ public class Test_AddUser_and_Authorification {
 
     // --- Глобальные переменные между сценариями ---
 
-    /** sessionPwd, выданный на шаге AuthChallenge. */
-    private static String GLOBAL_SESSION_PWD;
+    /** authNonce, выданный на шаге AuthChallenge. */
+    private static String GLOBAL_AUTH_NONCE;
 
     /** sessionId (строка, base64-32 байта), выданный на шаге CreateAuthSession. */
     private static String GLOBAL_SESSION_ID;
+
+    /** sessionPwd (секрет сессии), выданный на шаге CreateAuthSession. */
+    private static String GLOBAL_SESSION_PWD;
 
     /** storagePwd, который мы отправили при CreateAuthSession (для информации). */
     private static String GLOBAL_STORAGE_PWD_SENT;
@@ -107,7 +116,7 @@ public class Test_AddUser_and_Authorification {
         CountDownLatch latch = new CountDownLatch(1);
         HttpClient client = HttpClient.newHttpClient();
 
-        WebSocket ws = client.newWebSocketBuilder()
+        client.newWebSocketBuilder()
                 .buildAsync(URI.create(WS_URI), new Listener() {
 
                     private int step = 0; // 0 - AddUser, 1 - AuthStep1, 2 - AuthStep2
@@ -138,7 +147,7 @@ public class Test_AddUser_and_Authorification {
                             }
                             case 2 -> {
                                 GLOBAL_STORAGE_PWD_SENT = generateFakeStoragePwd();
-                                String json = buildAuthStep2Json(GLOBAL_SESSION_PWD, GLOBAL_STORAGE_PWD_SENT);
+                                String json = buildAuthStep2Json(GLOBAL_AUTH_NONCE, GLOBAL_STORAGE_PWD_SENT);
                                 System.out.println();
                                 System.out.println("📤 [S1 / Шаг 3] Отправляем CreateAuthSession (подпись deviceKey):");
                                 System.out.println(json);
@@ -160,17 +169,19 @@ public class Test_AddUser_and_Authorification {
                         System.out.println(message);
                         System.out.println("-----------------------------------------------------");
 
-                        // Шаг 2: получаем sessionPwd
+                        // Шаг 2: получаем authNonce
                         if (step == 1) {
-                            GLOBAL_SESSION_PWD = extractSessionPwd(message);
-                            System.out.println("🔑 [S1] Извлечён sessionPwd: " + GLOBAL_SESSION_PWD);
+                            GLOBAL_AUTH_NONCE = extractAuthNonce(message);
+                            System.out.println("🔑 [S1] Извлечён authNonce: " + GLOBAL_AUTH_NONCE);
                         }
 
-                        // Шаг 3: получаем sessionId
+                        // Шаг 3: получаем sessionId и sessionPwd
                         if (step == 2) {
                             GLOBAL_SESSION_ID = extractSessionId(message);
+                            GLOBAL_SESSION_PWD = extractSessionPwd(message);
                             System.out.println("🆔 [S1] Извлечён sessionId: " + GLOBAL_SESSION_ID);
-                            System.out.println("   (Эта sessionId и sessionPwd понадобятся в сценариях 2 и 3)");
+                            System.out.println("🔐 [S1] Извлечён sessionPwd: " + GLOBAL_SESSION_PWD);
+                            System.out.println("   (Эти sessionId и sessionPwd понадобятся в сценариях 2 и 3)");
                         }
 
                         step++;
@@ -221,7 +232,7 @@ public class Test_AddUser_and_Authorification {
         // Специально подменяем пароль, чтобы сервер его НЕ принял
         String wrongPwd = GLOBAL_SESSION_PWD + "_WRONG";
 
-        WebSocket ws = client.newWebSocketBuilder()
+        client.newWebSocketBuilder()
                 .buildAsync(URI.create(WS_URI), new Listener() {
 
                     @Override
@@ -281,7 +292,7 @@ public class Test_AddUser_and_Authorification {
         System.out.println();
         System.out.println("=== СЦЕНАРИЙ 3: RefreshSession с КОРРЕКТНЫМ sessionPwd ===");
         System.out.println("Ожидаем УСПЕШНЫЙ ответ сервера (status=200),");
-        System.out.println(" а в payload должен вернуться актуальный storagePwd (по твоей схеме).");
+        System.out.println(" а в payload должен вернуться актуальный storagePwd.");
 
         if (GLOBAL_SESSION_ID == null || GLOBAL_SESSION_PWD == null) {
             System.out.println("⚠️ Нет sessionId или sessionPwd из сценария 1, пропускаем сценарий 3.");
@@ -291,7 +302,7 @@ public class Test_AddUser_and_Authorification {
         CountDownLatch latch = new CountDownLatch(1);
         HttpClient client = HttpClient.newHttpClient();
 
-        WebSocket ws = client.newWebSocketBuilder()
+        client.newWebSocketBuilder()
                 .buildAsync(URI.create(WS_URI), new Listener() {
 
                     @Override
@@ -318,7 +329,7 @@ public class Test_AddUser_and_Authorification {
                         System.out.println("💬 [S3] Если status=200 — сессия успешно восстановлена.");
                         String storagePwdFromServer = extractStoragePwd(message);
                         System.out.println("🧾 [S3] storagePwd от сервера: " + storagePwdFromServer);
-                        System.out.println("   (Может совпадать с тем, что был в шаге 2, или быть обновлённым — зависит от логики сервера)");
+                        System.out.println("   (Должен совпадать с тем, что отправляли в шаге 3 сценария 1)");
 
                         webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "scenario3 done");
                         webSocket.request(1);
@@ -375,7 +386,7 @@ public class Test_AddUser_and_Authorification {
         );
     }
 
-    // 2) Шаг 1 авторизации: запрос sessionPwd
+    // 2) Шаг 1 авторизации: запрос authNonce
     private static String buildAuthStep1Json() {
         return """
                 {
@@ -388,11 +399,15 @@ public class Test_AddUser_and_Authorification {
                 """.formatted(TEST_LOGIN);
     }
 
-    // 3) Шаг 2 авторизации: подтверждение подписью
-    // payload: storagePwd, timeMs, signatureB64
-    private static String buildAuthStep2Json(String sessionPwd, String storagePwd) {
-        if (sessionPwd == null) {
-            sessionPwd = "";
+    /**
+     * 3) Шаг 2 авторизации: подтверждение подписью.
+     *
+     * @param authNonce  одноразовый nonce с шага 1
+     * @param storagePwd клиентский storagePwd
+     */
+    private static String buildAuthStep2Json(String authNonce, String storagePwd) {
+        if (authNonce == null) {
+            authNonce = "";
         }
         if (storagePwd == null || storagePwd.isBlank()) {
             storagePwd = generateFakeStoragePwd();
@@ -400,8 +415,8 @@ public class Test_AddUser_and_Authorification {
 
         long timeMs = System.currentTimeMillis();
 
-        // preimage = "AUTHORIFICATED:" + timeMs + sessionPwd
-        String preimageStr = "AUTHORIFICATED:" + timeMs + sessionPwd;
+        // preimage = "AUTHORIFICATED:" + timeMs + authNonce
+        String preimageStr = "AUTHORIFICATED:" + timeMs + authNonce;
         byte[] preimage = preimageStr.getBytes(StandardCharsets.UTF_8);
 
         // Подписываем приватным ключом устройства (deviceKey)
@@ -415,31 +430,35 @@ public class Test_AddUser_and_Authorification {
                   "payload": {
                     "storagePwd": "%s",
                     "timeMs": %d,
-                    "signatureB64": "%s"
+                    "signatureB64": "%s",
+                    "clientInfo": "%s"
                   }
                 }
                 """.formatted(
                 storagePwd,
                 timeMs,
-                sigB64
+                sigB64,
+                TEST_CLIENT_INFO
         );
     }
 
     // 4) RefreshSession: всё в payload
     private static String buildRefreshSessionJson(String sessionId, String sessionPwd, String requestId) {
         return """
-                {
-                  "op": "RefreshSession",
-                  "requestId": "%s",
-                  "payload": {
-                    "sessionId": "%s",
-                    "sessionPwd": "%s"
-                  }
-                }
-                """.formatted(
+            {
+              "op": "RefreshSession",
+              "requestId": "%s",
+              "payload": {
+                "sessionId": "%s",
+                "sessionPwd": "%s",
+                "clientInfo": "%s"
+              }
+            }
+            """.formatted(
                 requestId,
                 sessionId,
-                sessionPwd
+                sessionPwd,
+                TEST_CLIENT_INFO
         );
     }
 
@@ -455,6 +474,19 @@ public class Test_AddUser_and_Authorification {
     // ==========================================================
     //                     JSON HELPERS
     // ==========================================================
+
+    private static String extractAuthNonce(String json) {
+        try {
+            JsonNode root = JSON_MAPPER.readTree(json);
+            JsonNode payload = root.get("payload");
+            if (payload != null && payload.has("authNonce")) {
+                return payload.get("authNonce").asText();
+            }
+        } catch (Exception e) {
+            System.out.println("⚠️ Не удалось распарсить authNonce из ответа: " + e.getMessage());
+        }
+        return null;
+    }
 
     private static String extractSessionPwd(String json) {
         try {

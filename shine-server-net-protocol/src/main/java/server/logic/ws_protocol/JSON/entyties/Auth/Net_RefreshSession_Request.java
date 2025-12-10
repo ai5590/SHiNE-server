@@ -11,13 +11,20 @@ import server.logic.ws_protocol.JSON.entyties.NetRequest;
  * JSON (payload):
  * {
  *   "sessionId": "base64-id-сессии",
- *   "sessionPwd": "base64-sessionPwd"
+ *   "sessionPwd": "base64-sessionPwd",
+ *   "clientInfo": "до 50 символов, краткая строка об устройстве"
  * }
  */
 public class Net_RefreshSession_Request extends NetRequest {
 
     private String sessionId;
     private String sessionPwd;
+
+    /**
+     * Краткая строка с информацией об устройстве/клиенте, до 50 символов.
+     * Например: "PWA/Chrome/Android".
+     */
+    private String clientInfo;
 
     public String getSessionId() {
         return sessionId;
@@ -33,5 +40,13 @@ public class Net_RefreshSession_Request extends NetRequest {
 
     public void setSessionPwd(String sessionPwd) {
         this.sessionPwd = sessionPwd;
+    }
+
+    public String getClientInfo() {
+        return clientInfo;
+    }
+
+    public void setClientInfo(String clientInfo) {
+        this.clientInfo = clientInfo;
     }
 }

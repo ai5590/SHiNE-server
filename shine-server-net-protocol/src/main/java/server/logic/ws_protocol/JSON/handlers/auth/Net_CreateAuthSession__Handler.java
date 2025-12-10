@@ -14,8 +14,13 @@ import server.logic.ws_protocol.WireCodes;
 import shine.db.dao.ActiveSessionsDAO;
 import shine.db.entities.ActiveSession;
 import shine.db.entities.SolanaUser;
+import shine.geo.ClientInfoService;
 import utils.crypto.Ed25519Util;
 
+import org.eclipse.jetty.websocket.api.Session;
+
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.security.SecureRandom;
@@ -28,20 +33,18 @@ import java.util.Base64;
  *  - storagePwd    (base64 от 32 байт)
  *  - timeMs        (long, мс с 1970-01-01)
  *  - signatureB64  (подпись Ed25519 над строкой:
- *                   "AUTHORIFICATED:" + timeMs + sessionPwd)
+ *                   "AUTHORIFICATED:" + timeMs + authNonce)
+ *  - clientInfo    (опционально, до 50 символов)
  *
- * Параметр sessionPwd клиент получил на шаге 1.
- * Для проверки подписи используется pubkey1 (второй публичный ключ пользователя).
- *
- * Дополнительно:
- *  - timeMs должен отличаться от текущего времени сервера не более чем на 30 секунд.
+ * authNonce клиент получил на шаге 1 (AuthChallenge).
  *
  * При успехе:
  *  - создаётся запись ActiveSession в БД;
  *  - генерируется sessionId (base64 от 32 случайных байт);
+ *  - генерируется sessionPwd (base64 от 32 случайных байт);
  *  - sessionCreatedAtMs и lastAuthirificatedAtMs = текущее время;
- *  - pushEndpoint / pushP256dhKey / pushAuthKey остаются пустыми;
- *  - возвращается sessionId в ответе.
+ *  - заполняются поля clientIp, clientInfoFromClient, clientInfoFromRequest, userLanguage;
+ *  - возвращается sessionId и sessionPwd в ответе.
  */
 public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
@@ -107,7 +110,6 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         long timeMs = req.getTimeMs();
         long nowMs = System.currentTimeMillis();
 
-        // Проверка, что время клиента не отличается от времени сервера больше чем на 30 секунд
         long diff = Math.abs(nowMs - timeMs);
         if (diff > ALLOWED_SKEW_MS) {
             return NetExceptionResponseFactory.error(
@@ -116,6 +118,12 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
                     "TIME_SKEW",
                     "Время клиента отличается от сервера более чем на 30 секунд"
             );
+        }
+
+        // Короткая строка clientInfo от клиента (до 50 символов)
+        String clientInfoFromClient = req.getClientInfo();
+        if (clientInfoFromClient != null && clientInfoFromClient.length() > 50) {
+            clientInfoFromClient = clientInfoFromClient.substring(0, 50);
         }
 
         // --- выбираем публичный ключ pubkey1 ---
@@ -143,8 +151,11 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             );
         }
 
-        // --- собираем строку для подписи: "AUTHORIFICATED:" + timeMs + sessionPwd ---
-        String preimageStr = "AUTHORIFICATED:" + timeMs + ctx.getSessionPwd();
+        // --- authNonce (challenge) мы сохранили в ctx.sessionPwd на шаге 1 ---
+        String authNonce = ctx.getSessionPwd();
+
+        // --- собираем строку для подписи: "AUTHORIFICATED:" + timeMs + authNonce ---
+        String preimageStr = "AUTHORIFICATED:" + timeMs + authNonce;
         byte[] preimage = preimageStr.getBytes(StandardCharsets.UTF_8);
 
         boolean sigOk = Ed25519Util.verify(preimage, signature64, publicKey32);
@@ -157,25 +168,47 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             );
         }
 
-        // --- создаём уникальный sessionId (base64 от 32 байт) и записываем в БД ---
+        // --- Генерируем настоящий секрет сессии (sessionPwd) и sessionId ---
+        String newSessionPwd = generateRandomSecret();
+        String sessionId = generateRandomSessionId();
+        long now = System.currentTimeMillis();
+
+        // --- Сбор данных о клиенте (IP, UA, язык) ---
+        Session wsSession = ctx.getWsSession();
+        String clientInfoFromRequest = ClientInfoService.buildClientInfoString(wsSession);
+        String userLanguage = ClientInfoService.extractPreferredLanguageTag(wsSession);
+
+        String clientIp = "";
+        if (wsSession != null) {
+            SocketAddress rawAddr = wsSession.getRemoteAddress();
+            if (rawAddr instanceof InetSocketAddress inet) {
+                if (inet.getAddress() != null) {
+                    clientIp = inet.getAddress().getHostAddress();
+                }
+            }
+        }
+// TODO и сдесь тоже переписываем получение ИП адреса на стандартный метод и тоже дёргаем запрос геолокации который никуда не сохраняем просто что бы он в кэш сервера попал
+
+
+        // --- создаём запись ActiveSession и сохраняем в БД ---
         ActiveSessionsDAO dao = ActiveSessionsDAO.getInstance();
-        String sessionId;
         ActiveSession activeSession;
 
         try {
-            sessionId = generateRandomSessionId();
-            long now = System.currentTimeMillis();
-
             activeSession = new ActiveSession(
                     sessionId,
                     loginId,
-                    ctx.getSessionPwd(),
+                    newSessionPwd,           // настоящий секрет сессии
                     storagePwd,
                     now,
                     now,
-                    null,   // pushEndpoint
-                    null,   // pushP256dhKey
-                    null    // pushAuthKey
+                    null,                    // pushEndpoint
+                    null,                    // pushP256dhKey
+                    null,                    // pushAuthKey
+                    clientIp,
+                    clientInfoFromClient,
+                    clientInfoFromRequest,
+                    userLanguage
             );
 
             dao.insert(activeSession);
@@ -192,9 +225,9 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         // --- обновляем контекст ---
         ctx.setActiveSession(activeSession);
         ctx.setSessionId(sessionId);
+        ctx.setSessionPwd(newSessionPwd);  // теперь в контексте хранится секрет сессии, а не authNonce
         ctx.setAuthenticationStatus(ConnectionContext.AUTH_STATUS_USER);
 
-        // Регистрируем это подключение в глобальном реестре активных соединений
         ActiveConnectionsRegistry.getInstance().register(ctx);
 
         // --- формируем ответ ---
@@ -202,7 +235,8 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         resp.setOp(req.getOp());
         resp.setRequestId(req.getRequestId());
         resp.setStatus(WireCodes.Status.OK);
-        resp.setSessionId(sessionId);  // попадёт в payload.sessionId
+        resp.setSessionId(sessionId);
+        resp.setSessionPwd(newSessionPwd);
         return resp;
     }
 
@@ -210,6 +244,15 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
      * Генерация случайного sessionId: base64-строка от 32 байт.
      */
     private String generateRandomSessionId() {
+        byte[] buf = new byte[32];
+        RANDOM.nextBytes(buf);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
+    }
+
+    /**
+     * Генерация случайного секрета (sessionPwd): base64-строка от 32 байт.
+     */
+    private String generateRandomSecret() {
         byte[] buf = new byte[32];
         RANDOM.nextBytes(buf);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(buf);

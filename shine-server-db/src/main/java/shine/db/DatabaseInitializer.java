@@ -34,7 +34,6 @@ public class DatabaseInitializer {
 
         Path dbFile = Paths.get(dbPath);
         try {
-            // создаём директорию, если нужно
             Path parent = dbFile.getParent();
             if (parent != null && !Files.exists(parent)) {
                 Files.createDirectories(parent);
@@ -75,18 +74,17 @@ public class DatabaseInitializer {
         try (Connection conn = DriverManager.getConnection(jdbcUrl);
              Statement st = conn.createStatement()) {
 
-            // включаем внешние ключи на этом соединении (для инициализации тоже)
             st.execute("PRAGMA foreign_keys = ON");
 
-            // 1. Таблица solana_users
+            // 1. solana_users
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS solana_users (
                     login       TEXT    NOT NULL,
                     loginId     INTEGER NOT NULL PRIMARY KEY,
                     bchId       INTEGER NOT NULL,
-                    loginKey    TEXT,              -- основной публичный ключ (логин)
-                    deviceKey   TEXT,              -- публичный ключ устройства
-                    bchLimit    INTEGER            -- может быть NULL
+                    loginKey    TEXT,
+                    deviceKey   TEXT,
+                    bchLimit    INTEGER
                 );
                 """);
 
@@ -95,8 +93,7 @@ public class DatabaseInitializer {
                 ON solana_users (login);
                 """);
 
-            // 2. Таблица active_sessions
-            // sessionId TEXT (base64 от 32 байт).
+            // 2. active_sessions
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS active_sessions (
                     sessionId                TEXT    NOT NULL PRIMARY KEY,
@@ -108,6 +105,10 @@ public class DatabaseInitializer {
                     pushEndpoint             TEXT,
                     pushP256dhKey            TEXT,
                     pushAuthKey              TEXT,
+                    clientIp                 TEXT,
+                    clientInfoFromClient     TEXT,
+                    clientInfoFromRequest    TEXT,
+                    userLanguage             TEXT,
                     FOREIGN KEY (loginId) REFERENCES solana_users(loginId)
                 );
                 """);
@@ -117,8 +118,7 @@ public class DatabaseInitializer {
                 ON active_sessions (loginId);
                 """);
 
-            // 3. Таблица users_params
-            // Пара (loginId, param) должна быть уникальна.
+            // 3. users_params
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS users_params (
                     loginId        INTEGER NOT NULL,
@@ -138,7 +138,7 @@ public class DatabaseInitializer {
                 ON users_params (loginId);
                 """);
 
-            // 4. Таблица ip_geo_cache — персистентный кэш геолокации по IP
+            // 4. ip_geo_cache
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS ip_geo_cache (
                     ip             TEXT    NOT NULL PRIMARY KEY,
