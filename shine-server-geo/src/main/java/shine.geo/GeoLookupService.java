@@ -11,16 +11,19 @@ import java.net.http.HttpResponse;
 
 /**
  * Сервис для геолокации по IP.
- *.
+ * .
  * Основной метод:
- *   resolveCountryCityOrIp(ip) -> "Country, City" или исходный ip, если не удалось.
+ *   resolveCountryCityOrIp(ip) -> "Country, City" или GEO_UNKNOWN, если не удалось.
  */
 public final class GeoLookupService {
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
-    // Сервис геолокации. Сейчас ip-api.com, можно потом вынести в конфиг.
+    // Константа — что возвращать, если геолокация недоступна
+    public static final String GEO_UNKNOWN = "unknown";
+
+    // Сервис геолокации (потом можно вынести в конфиг)
     private static final String GEO_API_URL = "http://ip-api.com/json/";
 
     // Сервис для получения собственного внешнего IP
@@ -32,12 +35,16 @@ public final class GeoLookupService {
 
     /**
      * Возвращает строку вида "Country, City" по IP.
-     * Если запрос не удался, возвращает исходный ip.
+     * Если запрос не удался, возвращает GEO_UNKNOWN.
      */
     public static String resolveCountryCityOrIp(String ip) {
-        // На всякий случай простая защита от private/локальных IP (они всё равно не определяются)
+        if (ip == null || ip.isBlank()) {
+            return GEO_UNKNOWN;
+        }
+
+        // Приватные/локальные IP — геолокация невозможна
         if (isPrivateOrLocalIp(ip)) {
-            return ip;
+            return GEO_UNKNOWN;
         }
 
         try {
@@ -54,24 +61,25 @@ public final class GeoLookupService {
             );
 
             if (response.statusCode() != 200) {
-                return ip;
+                return GEO_UNKNOWN;
             }
 
             JsonNode root = JSON_MAPPER.readTree(response.body());
             String status = root.path("status").asText();
+
             if (!"success".equals(status)) {
-                // Например: {"status":"fail","message":"private range"}
-                return ip;
+                // "fail", "private range", "quota exceeded", и т.д.
+                return GEO_UNKNOWN;
             }
 
             String country = root.path("country").asText(null);
             String city = root.path("city").asText(null);
 
             if (country == null && city == null) {
-                return ip;
+                return GEO_UNKNOWN;
             }
 
-            // Собираем аккуратную строку
+            // Собираем строку
             if (country != null && city != null) {
                 return country + ", " + city;
             } else if (country != null) {
@@ -79,9 +87,10 @@ public final class GeoLookupService {
             } else {
                 return city;
             }
+
         } catch (IOException | InterruptedException e) {
-            // В боевом коде можно логировать
-            return ip;
+            // Ошибки сети — возвращаем unknown
+            return GEO_UNKNOWN;
         }
     }
 
@@ -111,19 +120,16 @@ public final class GeoLookupService {
             }
 
             return body.trim();
+
         } catch (IOException | InterruptedException e) {
-            // В боевом коде можно логировать
             return fallbackIp;
         }
     }
 
     /**
-     * Примитивная проверка на частные и локальные IP.
-     * Для внешней геолокации они бесполезны.
+     * Проверка на частные/локальные IP.
      */
     private static boolean isPrivateOrLocalIp(String ip) {
-        if (ip == null) return true;
-
         ip = ip.trim();
 
         return ip.startsWith("10.")

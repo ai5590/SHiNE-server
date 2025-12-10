@@ -19,6 +19,7 @@ import java.sql.Statement;
  *  - solana_users
  *  - active_sessions
  *  - users_params
+ *  - ip_geo_cache
  */
 public class DatabaseInitializer {
 
@@ -95,7 +96,7 @@ public class DatabaseInitializer {
                 """);
 
             // 2. Таблица active_sessions
-            // sessionId теперь TEXT (base64 от 32 байт), а не INTEGER.
+            // sessionId TEXT (base64 от 32 байт).
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS active_sessions (
                     sessionId                TEXT    NOT NULL PRIMARY KEY,
@@ -135,6 +136,20 @@ public class DatabaseInitializer {
             st.executeUpdate("""
                 CREATE INDEX IF NOT EXISTS idx_users_params_loginId
                 ON users_params (loginId);
+                """);
+
+            // 4. Таблица ip_geo_cache — персистентный кэш геолокации по IP
+            st.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS ip_geo_cache (
+                    ip             TEXT    NOT NULL PRIMARY KEY,
+                    geo            TEXT,
+                    updated_at_ms  INTEGER NOT NULL
+                );
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_ip_geo_cache_updated_at
+                ON ip_geo_cache (updated_at_ms);
                 """);
         }
     }
