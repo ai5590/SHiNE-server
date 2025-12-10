@@ -14,6 +14,10 @@ public final class ClientInfoService {
 
     private ClientInfoService() { }
 
+    /**
+     * Собирает строку с информацией о клиенте:
+     * User-Agent, client-hints и удалённый IP.
+     */
     public static String buildClientInfoString(Session wsSession) {
         if (wsSession == null) {
             return CLIENT_INFO_UNKNOWN;
@@ -29,14 +33,8 @@ public final class ClientInfoService {
         String secChPlatform = getFirstHeader(req, "Sec-CH-UA-Platform");
         String secChMobile   = getFirstHeader(req, "Sec-CH-UA-Mobile");
 
-        // --- Исправленный блок определения IP ---
-        String remoteIp = "";
-        SocketAddress rawAddr = wsSession.getRemoteAddress();
-        if (rawAddr instanceof InetSocketAddress inet) {
-            if (inet.getAddress() != null) {
-                remoteIp = inet.getAddress().getHostAddress();
-            }
-        }
+        // IP берём через общий метод, чтобы не дублировать логику
+        String remoteIp = extractClientIp(wsSession);
 
         StringBuilder sb = new StringBuilder();
 
@@ -55,13 +53,56 @@ public final class ClientInfoService {
             appendSep(sb);
             sb.append("mobile=").append(secChMobile);
         }
-        if (!remoteIp.isEmpty()) {
+        if (remoteIp != null && !remoteIp.isEmpty()) {
             appendSep(sb);
             sb.append("remote=").append(remoteIp);
         }
 
         String result = sb.toString().trim();
         return result.isEmpty() ? CLIENT_INFO_UNKNOWN : result;
+    }
+
+    /**
+     * Пытается вытащить реальный IP клиента из WebSocket-сессии.
+     *
+     * Приоритет:
+     *  1) X-Forwarded-For (если стоим за прокси / балансировщиком)
+     *  2) X-Real-IP
+     *  3) remoteAddress из WebSocket-сессии
+     */
+    public static String extractClientIp(Session wsSession) {
+        if (wsSession == null) {
+            return null;
+        }
+
+        UpgradeRequest req = wsSession.getUpgradeRequest();
+
+        // 1) X-Forwarded-For: может быть список IP через запятую
+        if (req != null) {
+            String xff = getFirstHeader(req, "X-Forwarded-For");
+            if (xff != null && !xff.isBlank()) {
+                String first = xff.split(",")[0].trim();
+                if (!first.isBlank()) {
+                    return first;
+                }
+            }
+
+            // 2) X-Real-IP
+            String xRealIp = getFirstHeader(req, "X-Real-IP");
+            if (xRealIp != null && !xRealIp.isBlank()) {
+                return xRealIp.trim();
+            }
+        }
+
+        // 3) fallback: remoteAddress из WebSocket-сессии
+        SocketAddress rawAddr = wsSession.getRemoteAddress();
+        if (rawAddr instanceof InetSocketAddress inet) {
+            if (inet.getAddress() != null) {
+                return inet.getAddress().getHostAddress();
+            }
+        }
+
+        return null;
     }
 
     public static String extractPreferredLanguageTag(Session wsSession) {
@@ -102,5 +143,6 @@ public final class ClientInfoService {
         if (sb.length() > 0) {
             sb.append("; ");
         }
+        // если строка пустая — разделитель не нужен
     }
 }

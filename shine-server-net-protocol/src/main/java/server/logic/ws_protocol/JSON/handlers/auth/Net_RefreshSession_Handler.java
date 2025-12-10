@@ -16,6 +16,7 @@ import shine.db.dao.SolanaUsersDAO;
 import shine.db.entities.ActiveSession;
 import shine.db.entities.SolanaUser;
 import shine.geo.ClientInfoService;
+import shine.geo.GeoLookupService;
 
 import java.sql.SQLException;
 
@@ -125,8 +126,20 @@ public class Net_RefreshSession_Handler implements JsonMessageHandler {
         String userLanguage = null;
 
         if (ctx != null && ctx.getWsSession() != null) {
-            clientIp = "8.8.8.8";  //TODO сделать нормальное получение ип адреса
-//            и сделать запрос геолокации и никуда его не сохранять запрос нужен просто что бы в кэш данные добавилиь если нужно
+            // Нормальное получение IP-адреса клиента
+            clientIp = ClientInfoService.extractClientIp(ctx.getWsSession());
+
+            // Сделать запрос геолокации и никуда её не сохранять:
+            // вызов с кэшированием в БД, нужно только для прогрева кэша.
+            if (clientIp != null && !clientIp.isBlank()) {
+                try {
+                    GeoLookupService.resolveCountryCityOrIpWithCache(clientIp);
+                } catch (Exception e) {
+                    // Геолокация не критична, просто логируем на debug/trace при желании
+                    log.debug("Geo lookup failed for ip={}", clientIp, e);
+                }
+            }
+
             clientInfoFromRequest = ClientInfoService.buildClientInfoString(ctx.getWsSession());
             userLanguage = ClientInfoService.extractPreferredLanguageTag(ctx.getWsSession());
         }

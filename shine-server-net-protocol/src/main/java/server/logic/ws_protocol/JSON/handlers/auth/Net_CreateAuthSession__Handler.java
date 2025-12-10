@@ -15,12 +15,11 @@ import shine.db.dao.ActiveSessionsDAO;
 import shine.db.entities.ActiveSession;
 import shine.db.entities.SolanaUser;
 import shine.geo.ClientInfoService;
+import shine.geo.GeoLookupService;
 import utils.crypto.Ed25519Util;
 
 import org.eclipse.jetty.websocket.api.Session;
 
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.security.SecureRandom;
@@ -178,17 +177,26 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         String clientInfoFromRequest = ClientInfoService.buildClientInfoString(wsSession);
         String userLanguage = ClientInfoService.extractPreferredLanguageTag(wsSession);
 
-        String clientIp = "";
+        String clientIp = null;
         if (wsSession != null) {
-            SocketAddress rawAddr = wsSession.getRemoteAddress();
-            if (rawAddr instanceof InetSocketAddress inet) {
-                if (inet.getAddress() != null) {
-                    clientIp = inet.getAddress().getHostAddress();
+            // стандартный метод получения IP
+            clientIp = ClientInfoService.extractClientIp(wsSession);
+
+            // Дёргаем запрос геолокации (ничего не сохраняем в сессию),
+            // нужно лишь для того, чтобы данные попали в кэш сервера.
+            if (clientIp != null && !clientIp.isBlank()) {
+                try {
+                    GeoLookupService.resolveCountryCityOrIpWithCache(clientIp);
+                } catch (Exception e) {
+                    // геолокация не критична, можно тихо залогировать на debug
+                    log.debug("Geo lookup failed for ip={}", clientIp, e);
                 }
             }
         }
-// TODO и сдесь тоже переписываем получение ИП адреса на стандартный метод и тоже дёргаем запрос геолокации который никуда не сохраняем просто что бы он в кэш сервера попал
 
+        if (clientIp == null) {
+            clientIp = "";
+        }
 
         // --- создаём запись ActiveSession и сохраняем в БД ---
         ActiveSessionsDAO dao = ActiveSessionsDAO.getInstance();
