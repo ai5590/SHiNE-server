@@ -35,7 +35,8 @@ import java.util.Base64;
  *                   "AUTHORIFICATED:" + timeMs + authNonce)
  *  - clientInfo    (опционально, до 50 символов)
  *
- * authNonce клиент получил на шаге 1 (AuthChallenge).
+ * authNonce клиент получил на шаге 1 (AuthChallenge) и сервер
+ * сохранил его в ctx.authNonce.
  *
  * При успехе:
  *  - создаётся запись ActiveSession в БД;
@@ -59,27 +60,19 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
     public Net_Response handle(Net_Request baseReq, ConnectionContext ctx) throws Exception {
         Net_CreateAuthSession_Request req = (Net_CreateAuthSession_Request) baseReq;
 
-        // --- базовые проверки контекста ---
-        if (ctx == null || ctx.getSolanaUser() == null || ctx.getSessionPwd() == null) {
+        // --- базовые проверки контекста шага 1 ---
+        if (ctx == null
+                || ctx.getSolanaUser() == null
+                || ctx.getAuthNonce() == null
+                || ctx.getAuthenticationStatus() != ConnectionContext.AUTH_STATUS_AUTH_IN_PROGRESS) {
+
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.BAD_REQUEST,
                     "NO_STEP1_CONTEXT",
                     "Шаг 1 авторизации не был корректно выполнен для данного соединения"
             );
-            WsConnectionUtils.closeConnection(ctx, 4001, "Auth failed: no step1 context");
-            return err;
-        }
-
-        // Ожидаем, что перед этим был AuthChallenge и статус = AUTH_IN_PROGRESS
-        if (ctx.getAuthenticationStatus() != ConnectionContext.AUTH_STATUS_AUTH_IN_PROGRESS) {
-            Net_Response err = NetExceptionResponseFactory.error(
-                    req,
-                    WireCodes.Status.BAD_REQUEST,
-                    "BAD_AUTH_FLOW_STATE",
-                    "Неожиданное состояние авторификации для данного соединения"
-            );
-            WsConnectionUtils.closeConnection(ctx, 4001, "Auth failed: bad auth flow state");
+            WsConnectionUtils.closeConnection(ctx, 4001, "Auth failed: no step1 context or bad auth state");
             return err;
         }
 
@@ -170,8 +163,8 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             return err;
         }
 
-        // --- authNonce (challenge) мы сохранили в ctx.sessionPwd на шаге 1 ---
-        String authNonce = ctx.getSessionPwd();
+        // --- authNonce (challenge) мы сохранили в ctx.authNonce на шаге 1 ---
+        String authNonce = ctx.getAuthNonce();
 
         // --- собираем строку для подписи: "AUTHORIFICATED:" + timeMs + authNonce ---
         String preimageStr = "AUTHORIFICATED:" + timeMs + authNonce;
@@ -201,16 +194,12 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
         String clientIp = null;
         if (wsSession != null) {
-            // стандартный метод получения IP
             clientIp = ClientInfoService.extractClientIp(wsSession);
 
-            // Дёргаем запрос геолокации (ничего не сохраняем в сессию),
-            // нужно лишь для того, чтобы данные попали в кэш сервера.
             if (clientIp != null && !clientIp.isBlank()) {
                 try {
                     GeoLookupService.resolveCountryCityOrIpWithCache(clientIp);
                 } catch (Exception e) {
-                    // геолокация не критична, можно тихо залогировать на debug
                     log.debug("Geo lookup failed for ip={}", clientIp, e);
                 }
             }
@@ -257,7 +246,8 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         // --- обновляем контекст ---
         ctx.setActiveSession(activeSession);
         ctx.setSessionId(sessionId);
-        ctx.setSessionPwd(newSessionPwd);  // теперь в контексте хранится секрет сессии, а не authNonce
+        ctx.setSessionPwd(newSessionPwd);   // теперь в контексте хранится секрет сессии
+        ctx.setAuthNonce(null);            // одноразовый nonce больше не нужен
         ctx.setAuthenticationStatus(ConnectionContext.AUTH_STATUS_USER);
 
         ActiveConnectionsRegistry.getInstance().register(ctx);

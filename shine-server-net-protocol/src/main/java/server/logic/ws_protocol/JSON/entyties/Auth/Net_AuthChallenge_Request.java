@@ -3,9 +3,9 @@ package server.logic.ws_protocol.JSON.entyties.Auth;
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
 
 /**
- * Шаг 1 авторизации: запрос выдачи временного пароля сессии (sessionPwd).
+ * Шаг 1 авторизации: запрос выдачи одноразового nonce (authNonce).
  *
- * Клиент по логину просит сервер сгенерировать случайный секрет sessionPwd,
+ * Клиент по логину просит сервер сгенерировать случайный authNonce,
  * который будет использован на втором шаге при подписи.
  *
  * Формат входящего JSON:
@@ -23,7 +23,7 @@ import server.logic.ws_protocol.JSON.entyties.Net_Request;
  *   "requestId": "...",
  *   "status": 200,
  *   "payload": {
- *     "sessionPwd": "base64-строка-от-32-байт"
+ *     "authNonce": "base64-строка-от-32-байт"
  *   }
  * }
  */

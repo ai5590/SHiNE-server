@@ -71,8 +71,8 @@ public class Net_AuthChallenge_Handler implements JsonMessageHandler {
         RANDOM.nextBytes(buf);
         String authNonce = Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
 
-        // Используем поле sessionPwd в контексте как хранилище challenge (authNonce) до шага 2
-        ctx.setSessionPwd(authNonce);
+        // Сохраняем challenge в отдельном поле authNonce
+        ctx.setAuthNonce(authNonce);
 
         // 5) Формируем ответ
         Net_AuthChallenge_Response resp = new Net_AuthChallenge_Response();

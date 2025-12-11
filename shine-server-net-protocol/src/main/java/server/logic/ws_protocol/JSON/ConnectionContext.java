@@ -27,10 +27,15 @@ public class ConnectionContext {
     private String sessionId;
 
     /**
-     * Временный секрет шага 1, который используется на шаге 2 и хранится в БД,
-     * а после успешной авторизации — настоящий секрет сессии.
+     * Секрет сессии (то, что хранится в active_sessions.session_pwd).
      */
     private String sessionPwd;
+
+    /**
+     * Одноразовый nonce, выданный на шаге 1 (AuthChallenge),
+     * используется на шаге 2 для проверки подписи.
+     */
+    private String authNonce;
 
     /**
      * Текущий статус аутентификации.
@@ -100,6 +105,16 @@ public class ConnectionContext {
         this.sessionPwd = sessionPwd;
     }
 
+    // --- authNonce ---
+
+    public String getAuthNonce() {
+        return authNonce;
+    }
+
+    public void setAuthNonce(String authNonce) {
+        this.authNonce = authNonce;
+    }
+
     // --- auth status ---
 
     public int getAuthenticationStatus() {
@@ -124,6 +139,7 @@ public class ConnectionContext {
 
         sessionId = null;
         sessionPwd = null;
+        authNonce = null;
 
         authenticationStatus = AUTH_STATUS_NONE;
         wsSession = null;
