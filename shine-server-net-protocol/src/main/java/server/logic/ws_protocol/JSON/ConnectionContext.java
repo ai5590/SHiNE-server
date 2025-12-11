@@ -12,7 +12,7 @@ public class ConnectionContext {
 
     // Статусы аутентификации
     public static final int AUTH_STATUS_NONE = 0;              // анонимный / не авторизован
-    public static final int AUTH_STATUS_AUTH_IN_PROGRESS = 1;  // получен AuthChallenge, ждём CreateAuthSession
+    public static final int AUTH_STATUS_AUTH_IN_PROGRESS = 1;  // получен AuthChallenge
     public static final int AUTH_STATUS_USER = 2;              // авторизованный пользователь
 
     // Полный пользователь из БД (solana_users)

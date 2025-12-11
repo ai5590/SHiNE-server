@@ -54,7 +54,39 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
     private static final Logger log = LoggerFactory.getLogger(Net_CreateAuthSession__Handler.class);
 
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static final long ALLOWED_SKEW_MS = 30_000L;
+
+    /** Допустимое расхождение времени клиента и сервера (мс). */
+    public static final long ALLOWED_SKEW_MS = 30_000L;
+
+    /**
+     * Общая проверка подписи Ed25519 над строкой:
+     * "AUTHORIFICATED:" + timeMs + authNonce.
+     *
+     * Используется и в CreateAuthSession, и в CloseActiveSession (для статуса AUTH_IN_PROGRESS).
+     *
+     * @param user         пользователь (используется deviceKey)
+     * @param authNonce    одноразовый nonce из шага 1
+     * @param timeMs       время на стороне клиента
+     * @param signatureB64 подпись в base64
+     * @return true — подпись корректна; false — подпись не проходит верификацию
+     * @throws IllegalArgumentException при некорректном base64 ключа/подписи
+     */
+    public static boolean verifyAuthorificatedSignature(
+            SolanaUser user,
+            String authNonce,
+            long timeMs,
+            String signatureB64
+    ) throws IllegalArgumentException {
+
+        String pubKeyB64 = user.getDeviceKey();
+        byte[] publicKey32 = Ed25519Util.keyFromBase64(pubKeyB64);
+        byte[] signature64 = Base64.getDecoder().decode(signatureB64);
+
+        String preimageStr = "AUTHORIFICATED:" + timeMs + authNonce;
+        byte[] preimage = preimageStr.getBytes(StandardCharsets.UTF_8);
+
+        return Ed25519Util.verify(preimage, signature64, publicKey32);
+    }
 
     @Override
     public Net_Response handle(Net_Request baseReq, ConnectionContext ctx) throws Exception {
@@ -147,11 +179,13 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             return err;
         }
 
-        byte[] publicKey32;
-        byte[] signature64;
+        // --- authNonce (challenge) мы сохранили в ctx.authNonce на шаге 1 ---
+        String authNonce = ctx.getAuthNonce();
+
+        // --- проверяем подпись через общий метод ---
+        boolean sigOk;
         try {
-            publicKey32 = Ed25519Util.keyFromBase64(pubKeyB64);
-            signature64 = Base64.getDecoder().decode(signatureB64);
+            sigOk = verifyAuthorificatedSignature(user, authNonce, timeMs, signatureB64);
         } catch (IllegalArgumentException ex) {
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
@@ -163,14 +197,6 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             return err;
         }
 
-        // --- authNonce (challenge) мы сохранили в ctx.authNonce на шаге 1 ---
-        String authNonce = ctx.getAuthNonce();
-
-        // --- собираем строку для подписи: "AUTHORIFICATED:" + timeMs + authNonce ---
-        String preimageStr = "AUTHORIFICATED:" + timeMs + authNonce;
-        byte[] preimage = preimageStr.getBytes(StandardCharsets.UTF_8);
-
-        boolean sigOk = Ed25519Util.verify(preimage, signature64, publicKey32);
         if (!sigOk) {
             Net_Response err = NetExceptionResponseFactory.error(
                     req,

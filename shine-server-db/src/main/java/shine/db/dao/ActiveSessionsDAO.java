@@ -125,7 +125,7 @@ public final class ActiveSessionsDAO {
 
     /**
      * Обновить только lastAuthirificatedAtMs для конкретной сессии.
-     * (оставляю для совместимости, вдруг ещё где-то используется)
+     * (оставлено для совместимости)
      */
     public void updateLastAuthirificatedAtMs(String sessionId, long lastAuthMs) throws SQLException {
         String sql = """

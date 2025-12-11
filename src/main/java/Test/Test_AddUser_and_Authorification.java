@@ -31,12 +31,22 @@ import java.util.concurrent.CountDownLatch;
  *  4) Новое подключение:
  *       - отправляем RefreshSession с тем же sessionId,
  *         но заведомо неверным sessionPwd
- *         (в консоль пишем: ожидаем ОТРИЦАТЕЛЬНЫЙ ответ).
+ *         (ожидаем ОТРИЦАТЕЛЬНЫЙ ответ: status != 200,
+ *          code = SESSION_PWD_MISMATCH).
  *
  *  5) Ещё одно новое подключение:
  *       - отправляем RefreshSession с sessionId
  *         и корректным sessionPwd
- *         (в консоль пишем: ожидаем УСПЕШНЫЙ ответ).
+ *         (ожидаем УСПЕШНЫЙ ответ: status=200,
+ *          storagePwd совпадает с тем, что отправляли на шаге 3).
+ *
+ *     В ЭТОМ ЖЕ подключении:
+ *       - вызываем CloseActiveSession для этой sessionId;
+ *         ждём 200 (успешное закрытие сессии).
+ *
+ *  6) Новое подключение:
+ *       - снова пытаемся сделать RefreshSession по той же sessionId/sessionPwd;
+ *         ожидаем ошибку: status != 200, code = SESSION_NOT_FOUND.
  */
 public class Test_AddUser_and_Authorification {
 
@@ -51,7 +61,7 @@ public class Test_AddUser_and_Authorification {
     private static final long TEST_BCH_ID = 4222L;
     private static final int TEST_BCH_LIMIT = 1_000_000;
 
-    // Краткая строка clientInfo, которую клиент шлёт на шаге CreateAuthSession
+    // Краткая строка clientInfo, которую клиент шлёт на шаге CreateAuthSession и RefreshSession
     private static final String TEST_CLIENT_INFO = "JavaTestClient/1.0";
 
     // --- Тестовые пары ключей ---
@@ -87,7 +97,7 @@ public class Test_AddUser_and_Authorification {
     /** sessionPwd (секрет сессии), выданный на шаге CreateAuthSession. */
     private static String GLOBAL_SESSION_PWD;
 
-    /** storagePwd, который мы отправили при CreateAuthSession (для информации). */
+    /** storagePwd, который мы отправили при CreateAuthSession. */
     private static String GLOBAL_STORAGE_PWD_SENT;
 
     public static void main(String[] args) throws Exception {
@@ -99,8 +109,11 @@ public class Test_AddUser_and_Authorification {
         // Сценарий 2: новое подключение, RefreshSession с неверным sessionPwd
         runScenario_RefreshSession_WrongPwd();
 
-        // Сценарий 3: новое подключение, RefreshSession с корректным sessionPwd
-        runScenario_RefreshSession_CorrectPwd();
+        // Сценарий 3: новое подключение, RefreshSession с корректным sessionPwd + CloseActiveSession
+        runScenario_RefreshSession_CorrectPwd_And_Close();
+
+        // Сценарий 4: новое подключение, RefreshSession после закрытия сессии
+        runScenario_RefreshSession_AfterClose();
 
         System.out.println("Все тесты завершены, выходим.");
     }
@@ -169,19 +182,50 @@ public class Test_AddUser_and_Authorification {
                         System.out.println(message);
                         System.out.println("-----------------------------------------------------");
 
-                        // Шаг 2: получаем authNonce
-                        if (step == 1) {
-                            GLOBAL_AUTH_NONCE = extractAuthNonce(message);
-                            System.out.println("🔑 [S1] Извлечён authNonce: " + GLOBAL_AUTH_NONCE);
-                        }
-
-                        // Шаг 3: получаем sessionId и sessionPwd
-                        if (step == 2) {
-                            GLOBAL_SESSION_ID = extractSessionId(message);
-                            GLOBAL_SESSION_PWD = extractSessionPwd(message);
-                            System.out.println("🆔 [S1] Извлечён sessionId: " + GLOBAL_SESSION_ID);
-                            System.out.println("🔐 [S1] Извлечён sessionPwd: " + GLOBAL_SESSION_PWD);
-                            System.out.println("   (Эти sessionId и sessionPwd понадобятся в сценариях 2 и 3)");
+                        int status = extractStatus(message);
+                        switch (step) {
+                            case 0 -> {
+                                // AddUser: ждём status=200
+                                if (status == 200) {
+                                    printOk("[S1] AddUser", "Пользователь успешно добавлен (status=200)");
+                                } else {
+                                    String code = extractErrorCode(message);
+                                    printFail("[S1] AddUser", "Ожидали status=200, получили status=" + status + ", code=" + code);
+                                }
+                            }
+                            case 1 -> {
+                                // AuthChallenge: статус 200 + authNonce
+                                String nonce = extractAuthNonce(message);
+                                GLOBAL_AUTH_NONCE = nonce;
+                                if (status == 200 && nonce != null && !nonce.isBlank()) {
+                                    printOk("[S1] AuthChallenge", "status=200, получен authNonce=" + nonce);
+                                } else {
+                                    String code = extractErrorCode(message);
+                                    printFail("[S1] AuthChallenge",
+                                            "Ожидали status=200 + непустой authNonce, получили status="
+                                                    + status + ", nonce=" + nonce + ", code=" + code);
+                                }
+                            }
+                            case 2 -> {
+                                // CreateAuthSession: статус 200 + sessionId & sessionPwd
+                                String sid = extractSessionId(message);
+                                String spwd = extractSessionPwd(message);
+                                GLOBAL_SESSION_ID = sid;
+                                GLOBAL_SESSION_PWD = spwd;
+                                if (status == 200 && sid != null && !sid.isBlank()
+                                        && spwd != null && !spwd.isBlank()) {
+                                    printOk("[S1] CreateAuthSession",
+                                            "status=200, sessionId и sessionPwd получены");
+                                } else {
+                                    String code = extractErrorCode(message);
+                                    printFail("[S1] CreateAuthSession",
+                                            "Ожидали status=200 + непустые sessionId/sessionPwd, получили status="
+                                                    + status + ", sid=" + sid + ", code=" + code);
+                                }
+                            }
+                            default -> {
+                                // не должно сюда попадать
+                            }
                         }
 
                         step++;
@@ -219,7 +263,7 @@ public class Test_AddUser_and_Authorification {
     private static void runScenario_RefreshSession_WrongPwd() throws Exception {
         System.out.println();
         System.out.println("=== СЦЕНАРИЙ 2: RefreshSession с НЕВЕРНЫМ sessionPwd ===");
-        System.out.println("Ожидаем ОТРИЦАТЕЛЬНЫЙ ответ сервера (UNVERIFIED / SESSION_PWD_MISMATCH и т.п.)");
+        System.out.println("Ожидаем ОТРИЦАТЕЛЬНЫЙ ответ сервера: status != 200, code = SESSION_PWD_MISMATCH");
 
         if (GLOBAL_SESSION_ID == null || GLOBAL_SESSION_PWD == null) {
             System.out.println("⚠️ Нет sessionId или sessionPwd из сценария 1, пропускаем сценарий 2.");
@@ -256,7 +300,18 @@ public class Test_AddUser_and_Authorification {
                         System.out.println("📥 [S2] Ответ сервера (ожидаем ошибку):");
                         System.out.println(message);
                         System.out.println("-----------------------------------------------------");
-                        System.out.println("💬 [S2] Если в ответе status != 200 и/или код ошибки про неверный пароль — это ПРАВИЛЬНОЕ поведение.");
+
+                        int status = extractStatus(message);
+                        String code = extractErrorCode(message);
+
+                        if (status != 200 && "SESSION_PWD_MISMATCH".equals(code)) {
+                            printOk("[S2] RefreshSession (wrong pwd)",
+                                    "Получена ожидаемая ошибка: status=" + status + ", code=" + code);
+                        } else {
+                            printFail("[S2] RefreshSession (wrong pwd)",
+                                    "Ожидали status!=200 + code=SESSION_PWD_MISMATCH, получили status="
+                                            + status + ", code=" + code);
+                        }
 
                         webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "scenario2 done");
                         webSocket.request(1);
@@ -285,17 +340,17 @@ public class Test_AddUser_and_Authorification {
     }
 
     // ==========================================================
-    //         SCENARIO 3: RefreshSession с правильными данными
+    //   SCENARIO 3: RefreshSession OK + CloseActiveSession
     // ==========================================================
 
-    private static void runScenario_RefreshSession_CorrectPwd() throws Exception {
+    private static void runScenario_RefreshSession_CorrectPwd_And_Close() throws Exception {
         System.out.println();
-        System.out.println("=== СЦЕНАРИЙ 3: RefreshSession с КОРРЕКТНЫМ sessionPwd ===");
-        System.out.println("Ожидаем УСПЕШНЫЙ ответ сервера (status=200),");
-        System.out.println(" а в payload должен вернуться актуальный storagePwd.");
+        System.out.println("=== СЦЕНАРИЙ 3: RefreshSession с КОРРЕКТНЫМ sessionPwd + CloseActiveSession ===");
+        System.out.println("1) Ожидаем: status=200 и корректный storagePwd");
+        System.out.println("2) Затем в этом же подключении вызываем CloseActiveSession для той же sessionId и ждём status=200.");
 
-        if (GLOBAL_SESSION_ID == null || GLOBAL_SESSION_PWD == null) {
-            System.out.println("⚠️ Нет sessionId или sessionPwd из сценария 1, пропускаем сценарий 3.");
+        if (GLOBAL_SESSION_ID == null || GLOBAL_SESSION_PWD == null || GLOBAL_STORAGE_PWD_SENT == null) {
+            System.out.println("⚠️ Нет необходимых данных из сценария 1, пропускаем сценарий 3.");
             return;
         }
 
@@ -305,6 +360,8 @@ public class Test_AddUser_and_Authorification {
         client.newWebSocketBuilder()
                 .buildAsync(URI.create(WS_URI), new Listener() {
 
+                    private int step = 0; // 0 - RefreshSession OK, 1 - CloseActiveSession
+
                     @Override
                     public void onOpen(WebSocket webSocket) {
                         System.out.println("✅ [S3] WebSocket подключен");
@@ -312,7 +369,7 @@ public class Test_AddUser_and_Authorification {
 
                         String json = buildRefreshSessionJson(GLOBAL_SESSION_ID, GLOBAL_SESSION_PWD, "test-refresh-ok-1");
                         System.out.println();
-                        System.out.println("📤 [S3] Отправляем RefreshSession с КОРРЕКТНЫМ sessionPwd:");
+                        System.out.println("📤 [S3 / Шаг 1] Отправляем RefreshSession с КОРРЕКТНЫМ sessionPwd:");
                         System.out.println(json);
                         webSocket.sendText(json, true);
                         Listener.super.onOpen(webSocket);
@@ -323,15 +380,52 @@ public class Test_AddUser_and_Authorification {
                                                      CharSequence data,
                                                      boolean last) {
                         String message = data.toString();
-                        System.out.println("📥 [S3] Ответ сервера (ожидаем успех):");
+                        System.out.println("📥 [S3] Ответ сервера (step=" + step + "):");
                         System.out.println(message);
                         System.out.println("-----------------------------------------------------");
-                        System.out.println("💬 [S3] Если status=200 — сессия успешно восстановлена.");
-                        String storagePwdFromServer = extractStoragePwd(message);
-                        System.out.println("🧾 [S3] storagePwd от сервера: " + storagePwdFromServer);
-                        System.out.println("   (Должен совпадать с тем, что отправляли в шаге 3 сценария 1)");
 
-                        webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "scenario3 done");
+                        if (step == 0) {
+                            // Ответ на RefreshSession
+                            int status = extractStatus(message);
+                            String storagePwdFromServer = extractStoragePwd(message);
+
+                            if (status == 200 && GLOBAL_STORAGE_PWD_SENT.equals(storagePwdFromServer)) {
+                                printOk("[S3] RefreshSession (correct pwd)",
+                                        "status=200, storagePwd совпадает с отправленным ранее");
+                            } else {
+                                String code = extractErrorCode(message);
+                                printFail("[S3] RefreshSession (correct pwd)",
+                                        "Ожидали status=200 + storagePwd="
+                                                + GLOBAL_STORAGE_PWD_SENT
+                                                + ", получили status=" + status
+                                                + ", storagePwd=" + storagePwdFromServer
+                                                + ", code=" + code);
+                            }
+
+                            // Теперь отправляем CloseActiveSession для этой же sessionId
+                            String closeJson = buildCloseActiveSessionJson(GLOBAL_SESSION_ID, "test-close-1");
+                            System.out.println();
+                            System.out.println("📤 [S3 / Шаг 2] Отправляем CloseActiveSession для sessionId=" + GLOBAL_SESSION_ID);
+                            System.out.println(closeJson);
+                            webSocket.sendText(closeJson, true);
+                            step = 1;
+                        } else if (step == 1) {
+                            // Ответ на CloseActiveSession
+                            int status = extractStatus(message);
+                            String code = extractErrorCode(message);
+
+                            if (status == 200) {
+                                printOk("[S3] CloseActiveSession",
+                                        "status=200, сессия закрыта (запись в БД удалена, другие подключения при наличии закрыты)");
+                            } else {
+                                printFail("[S3] CloseActiveSession",
+                                        "Ожидали status=200, получили status=" + status + ", code=" + code);
+                            }
+
+                            // Сервер может сам закрыть WebSocket, но мы тоже корректно закрываем
+                            webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "scenario3 done");
+                        }
+
                         webSocket.request(1);
                         return CompletableFuture.completedFuture(null);
                     }
@@ -355,6 +449,86 @@ public class Test_AddUser_and_Authorification {
 
         latch.await();
         System.out.println("=== СЦЕНАРИЙ 3 завершён ===");
+    }
+
+    // ==========================================================
+    //   SCENARIO 4: RefreshSession после закрытия сессии
+    // ==========================================================
+
+    private static void runScenario_RefreshSession_AfterClose() throws Exception {
+        System.out.println();
+        System.out.println("=== СЦЕНАРИЙ 4: RefreshSession после CloseActiveSession ===");
+        System.out.println("Ожидаем: status != 200, code = SESSION_NOT_FOUND");
+
+        if (GLOBAL_SESSION_ID == null || GLOBAL_SESSION_PWD == null) {
+            System.out.println("⚠️ Нет sessionId или sessionPwd, пропускаем сценарий 4.");
+            return;
+        }
+
+        CountDownLatch latch = new CountDownLatch(1);
+        HttpClient client = HttpClient.newHttpClient();
+
+        client.newWebSocketBuilder()
+                .buildAsync(URI.create(WS_URI), new Listener() {
+
+                    @Override
+                    public void onOpen(WebSocket webSocket) {
+                        System.out.println("✅ [S4] WebSocket подключен");
+                        webSocket.request(1);
+
+                        String json = buildRefreshSessionJson(GLOBAL_SESSION_ID, GLOBAL_SESSION_PWD, "test-refresh-after-close-1");
+                        System.out.println();
+                        System.out.println("📤 [S4] Отправляем RefreshSession ПОСЛЕ закрытия сессии:");
+                        System.out.println(json);
+                        webSocket.sendText(json, true);
+                        Listener.super.onOpen(webSocket);
+                    }
+
+                    @Override
+                    public CompletionStage<?> onText(WebSocket webSocket,
+                                                     CharSequence data,
+                                                     boolean last) {
+                        String message = data.toString();
+                        System.out.println("📥 [S4] Ответ сервера:");
+                        System.out.println(message);
+                        System.out.println("-----------------------------------------------------");
+
+                        int status = extractStatus(message);
+                        String code = extractErrorCode(message);
+
+                        if (status != 200 && "SESSION_NOT_FOUND".equals(code)) {
+                            printOk("[S4] RefreshSession after Close",
+                                    "Получена ожидаемая ошибка: status=" + status + ", code=" + code);
+                        } else {
+                            printFail("[S4] RefreshSession after Close",
+                                    "Ожидали status!=200 + code=SESSION_NOT_FOUND, получили status="
+                                            + status + ", code=" + code);
+                        }
+
+                        webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "scenario4 done");
+                        webSocket.request(1);
+                        return CompletableFuture.completedFuture(null);
+                    }
+
+                    @Override
+                    public void onError(WebSocket webSocket, Throwable error) {
+                        System.out.println("❌ [S4] Ошибка WebSocket-клиента: " + error.getMessage());
+                        error.printStackTrace(System.out);
+                        latch.countDown();
+                    }
+
+                    @Override
+                    public CompletionStage<?> onClose(WebSocket webSocket,
+                                                      int statusCode,
+                                                      String reason) {
+                        System.out.println("🔚 [S4] Соединение закрыто. Код=" + statusCode + ", причина=" + reason);
+                        latch.countDown();
+                        return CompletableFuture.completedFuture(null);
+                    }
+                }).join();
+
+        latch.await();
+        System.out.println("=== СЦЕНАРИЙ 4 завершён ===");
     }
 
     // ==========================================================
@@ -462,6 +636,26 @@ public class Test_AddUser_and_Authorification {
         );
     }
 
+    // 5) CloseActiveSession: можно передать sessionId, timeMs и signatureB64
+    // В нашем случае уже есть авторизованная сессия, поэтому timeMs и signatureB64
+    // можно задать нулями/пустыми — сервер их игнорирует в AUTH_STATUS_USER.
+    private static String buildCloseActiveSessionJson(String sessionId, String requestId) {
+        return """
+            {
+              "op": "CloseActiveSession",
+              "requestId": "%s",
+              "payload": {
+                "sessionId": "%s",
+                "timeMs": 0,
+                "signatureB64": ""
+              }
+            }
+            """.formatted(
+                requestId,
+                sessionId
+        );
+    }
+
     // просто для теста: base64 от 32 байт "storage" ключа
     private static String generateFakeStoragePwd() {
         byte[] data = new byte[32];
@@ -525,5 +719,42 @@ public class Test_AddUser_and_Authorification {
             System.out.println("⚠️ Не удалось распарсить storagePwd из ответа: " + e.getMessage());
         }
         return null;
+    }
+
+    private static int extractStatus(String json) {
+        try {
+            JsonNode root = JSON_MAPPER.readTree(json);
+            if (root.has("status")) {
+                return root.get("status").asInt();
+            }
+        } catch (Exception e) {
+            System.out.println("⚠️ Не удалось распарсить status из ответа: " + e.getMessage());
+        }
+        return -1;
+    }
+
+    private static String extractErrorCode(String json) {
+        try {
+            JsonNode root = JSON_MAPPER.readTree(json);
+            JsonNode payload = root.get("payload");
+            if (payload != null && payload.has("code") && !payload.get("code").isNull()) {
+                return payload.get("code").asText();
+            }
+        } catch (Exception e) {
+            System.out.println("⚠️ Не удалось распарсить code из ответа: " + e.getMessage());
+        }
+        return null;
+    }
+
+    // ==========================================================
+    //                     PRINT HELPERS
+    // ==========================================================
+
+    private static void printOk(String testName, String details) {
+        System.out.println("✅ " + testName + " — " + details);
+    }
+
+    private static void printFail(String testName, String details) {
+        System.out.println("❌ " + testName + " — " + details);
     }
 }

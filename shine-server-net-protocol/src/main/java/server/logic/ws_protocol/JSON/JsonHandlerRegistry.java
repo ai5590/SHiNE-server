@@ -1,15 +1,17 @@
 package server.logic.ws_protocol.JSON;
 
-import server.logic.ws_protocol.JSON.entyties.*;
+import server.logic.ws_protocol.JSON.entyties.Net_Request;
 import server.logic.ws_protocol.JSON.entyties.Auth.Net_AuthChallenge_Request;
 import server.logic.ws_protocol.JSON.entyties.Auth.Net_CreateAuthSession_Request;
 import server.logic.ws_protocol.JSON.entyties.Auth.Net_RefreshSession_Request;
-import server.logic.ws_protocol.JSON.handlers.*;
+import server.logic.ws_protocol.JSON.entyties.Auth.Net_CloseActiveSession_Request;
 import server.logic.ws_protocol.JSON.entyties.tempToTest.Net_AddUser_Request;
+import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
+import server.logic.ws_protocol.JSON.handlers.auth.Net_AuthChallenge_Handler;
 import server.logic.ws_protocol.JSON.handlers.auth.Net_CreateAuthSession__Handler;
 import server.logic.ws_protocol.JSON.handlers.auth.Net_RefreshSession_Handler;
+import server.logic.ws_protocol.JSON.handlers.auth.Net_CloseActiveSession_Handler;
 import server.logic.ws_protocol.JSON.handlers.tempToTest.Net_AddUser_Handler;
-import server.logic.ws_protocol.JSON.handlers.auth.Net_AuthChallenge_Handler;
 
 import java.util.Map;
 
@@ -25,18 +27,20 @@ import java.util.Map;
 public final class JsonHandlerRegistry {
 
     private static final Map<String, JsonMessageHandler> HANDLERS = Map.of(
-            "RefreshSession", new Net_RefreshSession_Handler(),
-            "AddUser",        new Net_AddUser_Handler(),
-            "AuthChallenge", new Net_AuthChallenge_Handler(),
-            "CreateAuthSession",   new Net_CreateAuthSession__Handler()
+            "RefreshSession",     new Net_RefreshSession_Handler(),
+            "AddUser",            new Net_AddUser_Handler(),
+            "AuthChallenge",      new Net_AuthChallenge_Handler(),
+            "CreateAuthSession",  new Net_CreateAuthSession__Handler(),
+            "CloseActiveSession", new Net_CloseActiveSession_Handler()
             // сюда потом добавишь другие операции
     );
 
     private static final Map<String, Class<? extends Net_Request>> REQUEST_TYPES = Map.of(
-            "RefreshSession", Net_RefreshSession_Request.class,
-            "AddUser",        Net_AddUser_Request.class,
-            "AuthChallenge", Net_AuthChallenge_Request.class,
-            "CreateAuthSession",   Net_CreateAuthSession_Request.class
+            "RefreshSession",     Net_RefreshSession_Request.class,
+            "AddUser",            Net_AddUser_Request.class,
+            "AuthChallenge",      Net_AuthChallenge_Request.class,
+            "CreateAuthSession",  Net_CreateAuthSession_Request.class,
+            "CloseActiveSession", Net_CloseActiveSession_Request.class
     );
 
     private JsonHandlerRegistry() {
