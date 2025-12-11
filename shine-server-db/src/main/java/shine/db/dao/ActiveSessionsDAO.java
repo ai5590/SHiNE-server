@@ -4,6 +4,8 @@ import shine.db.SqliteDbController;
 import shine.db.entities.ActiveSession;
 
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * DAO для таблицы active_sessions.
@@ -124,8 +126,45 @@ public final class ActiveSessionsDAO {
     }
 
     /**
+     * Получить список всех активных сессий пользователя по loginId.
+     */
+    public List<ActiveSession> getByLoginId(long loginId) throws SQLException {
+        String sql = """
+            SELECT
+                sessionId,
+                loginId,
+                sessionPwd,
+                storagePwd,
+                sessionCreatedAtMs,
+                lastAuthirificatedAtMs,
+                pushEndpoint,
+                pushP256dhKey,
+                pushAuthKey,
+                clientIp,
+                clientInfoFromClient,
+                clientInfoFromRequest,
+                userLanguage
+            FROM active_sessions
+            WHERE loginId = ?
+            """;
+
+        List<ActiveSession> result = new ArrayList<>();
+
+        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
+            ps.setLong(1, loginId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(mapRow(rs));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * Обновить только lastAuthirificatedAtMs для конкретной сессии.
-     * (оставлено для совместимости)
+     * (оставляю для совместимости, вдруг ещё где-то используется)
      */
     public void updateLastAuthirificatedAtMs(String sessionId, long lastAuthMs) throws SQLException {
         String sql = """
