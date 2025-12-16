@@ -26,6 +26,8 @@ dependencies {
     implementation 'org.slf4j:slf4j-api:2.0.16'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
+    implementation project(':shine-server-db')           // модуль для работы с БД содержит и сущности из БД и саму работу с БД
+
 }
 
 test {

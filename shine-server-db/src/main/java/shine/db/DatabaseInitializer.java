@@ -20,6 +20,7 @@ import java.sql.Statement;
  *  - active_sessions
  *  - users_params
  *  - ip_geo_cache
+ *  - blockchain_state (MVP: одна таблица, линии 0..7 внутри строки)
  */
 public class DatabaseInitializer {
 
@@ -150,6 +151,50 @@ public class DatabaseInitializer {
             st.executeUpdate("""
                 CREATE INDEX IF NOT EXISTS idx_ip_geo_cache_updated_at
                 ON ip_geo_cache (updated_at_ms);
+                """);
+
+            // 5. blockchain_state (MVP)
+            // TODO: позже можно вынести линии в отдельную таблицу blockchain_line_state и убрать "широкую" схему.
+            st.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS blockchain_state (
+                    blockchain_id           INTEGER NOT NULL PRIMARY KEY,
+                    user_login              TEXT    NOT NULL,
+                    public_key_base64       TEXT    NOT NULL,
+                    size_limit              INTEGER NOT NULL,
+                    size_bytes              INTEGER NOT NULL,
+                    last_global_number      INTEGER NOT NULL,
+                    last_global_hash        TEXT    NOT NULL,
+                    updated_at_ms           INTEGER NOT NULL,
+
+                    -- Линии 0..7 (MVP: максимум 8 линий)
+                    line0_last_number       INTEGER NOT NULL,
+                    line0_last_hash         TEXT    NOT NULL,
+                    line1_last_number       INTEGER NOT NULL,
+                    line1_last_hash         TEXT    NOT NULL,
+                    line2_last_number       INTEGER NOT NULL,
+                    line2_last_hash         TEXT    NOT NULL,
+                    line3_last_number       INTEGER NOT NULL,
+                    line3_last_hash         TEXT    NOT NULL,
+                    line4_last_number       INTEGER NOT NULL,
+                    line4_last_hash         TEXT    NOT NULL,
+                    line5_last_number       INTEGER NOT NULL,
+                    line5_last_hash         TEXT    NOT NULL,
+                    line6_last_number       INTEGER NOT NULL,
+                    line6_last_hash         TEXT    NOT NULL,
+                    line7_last_number       INTEGER NOT NULL,
+                    line7_last_hash         TEXT    NOT NULL
+                );
+                """);
+
+            // Индексы под быстрые проверки/поиск
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_blockchain_state_user_login
+                ON blockchain_state (user_login);
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_blockchain_state_updated_at
+                ON blockchain_state (updated_at_ms);
                 """);
         }
     }
