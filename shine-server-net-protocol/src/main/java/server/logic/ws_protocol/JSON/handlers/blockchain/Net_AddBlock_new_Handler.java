@@ -14,7 +14,7 @@ public final class Net_AddBlock_new_Handler implements JsonMessageHandler {
     public Net_Response handle(Net_Request baseReq, ConnectionContext ctx) throws Exception {
         Net_AddBlock_new_Request req = (Net_AddBlock_new_Request) baseReq;
 
-        var r = BlockchainStateService_new.getInstance().addBlockAtomically(
+        var r = BlockchainStateService_new.getInstance().addBlock(
                 req.getLogin(),
                 req.getBlockchainId(),
                 req.getGlobalNumber(),
@@ -32,8 +32,6 @@ public final class Net_AddBlock_new_Handler implements JsonMessageHandler {
             resp.setStatus(WireCodes.Status.OK);
             resp.setReasonCode(null);
         } else {
-            // 409 / 422 / 403 / 404...
-            // у тебя WireCodes.Status — это “HTTP-подобное”? тогда маппим:
             resp.setStatus(r.httpStatus);
             resp.setReasonCode(r.reasonCode);
         }
