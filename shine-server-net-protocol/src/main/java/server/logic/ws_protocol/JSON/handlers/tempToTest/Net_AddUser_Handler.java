@@ -11,7 +11,7 @@ import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.dao.SolanaUsersDAO;
-import shine.db.entities.SolanaUser;
+import shine.db.entities.SolanaUserEntry;
 
 import java.sql.SQLException;
 
@@ -61,7 +61,7 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
         try {
             SolanaUsersDAO dao = SolanaUsersDAO.getInstance();
 
-            SolanaUser user = new SolanaUser(
+            SolanaUserEntry user = new SolanaUserEntry(
                     req.getLoginId(),
                     req.getLogin(),
                     req.getBchId(),

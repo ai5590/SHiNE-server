@@ -1,7 +1,7 @@
 package shine.db.dao;
 
 import shine.db.SqliteDbController;
-import shine.db.entities.ActiveSession;
+import shine.db.entities.ActiveSessionEntry;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -53,7 +53,7 @@ public final class ActiveSessionsDAO {
     /**
      * Вставка новой сессии.
      */
-    public void insert(ActiveSession session) throws SQLException {
+    public void insert(ActiveSessionEntry session) throws SQLException {
         String sql = """
             INSERT INTO active_sessions (
                 sessionId,
@@ -94,7 +94,7 @@ public final class ActiveSessionsDAO {
     /**
      * Получить сессию по sessionId.
      */
-    public ActiveSession getBySessionId(String sessionId) throws SQLException {
+    public ActiveSessionEntry getBySessionId(String sessionId) throws SQLException {
         String sql = """
             SELECT
                 sessionId,
@@ -128,7 +128,7 @@ public final class ActiveSessionsDAO {
     /**
      * Получить список всех активных сессий пользователя по loginId.
      */
-    public List<ActiveSession> getByLoginId(long loginId) throws SQLException {
+    public List<ActiveSessionEntry> getByLoginId(long loginId) throws SQLException {
         String sql = """
             SELECT
                 sessionId,
@@ -148,7 +148,7 @@ public final class ActiveSessionsDAO {
             WHERE loginId = ?
             """;
 
-        List<ActiveSession> result = new ArrayList<>();
+        List<ActiveSessionEntry> result = new ArrayList<>();
 
         try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
             ps.setLong(1, loginId);
@@ -235,7 +235,7 @@ public final class ActiveSessionsDAO {
     /**
      * Маппинг ResultSet → ActiveSession (все 13 полей).
      */
-    private ActiveSession mapRow(ResultSet rs) throws SQLException {
+    private ActiveSessionEntry mapRow(ResultSet rs) throws SQLException {
         String sessionId              = rs.getString("sessionId");
         long   loginId                = rs.getLong("loginId");
         String sessionPwd             = rs.getString("sessionPwd");
@@ -250,7 +250,7 @@ public final class ActiveSessionsDAO {
         String clientInfoFromRequest  = rs.getString("clientInfoFromRequest");
         String userLanguage           = rs.getString("userLanguage");
 
-        return new ActiveSession(
+        return new ActiveSessionEntry(
                 sessionId,
                 loginId,
                 sessionPwd,

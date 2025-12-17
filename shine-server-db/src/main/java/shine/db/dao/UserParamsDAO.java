@@ -1,7 +1,7 @@
 package shine.db.dao;
 
 import shine.db.SqliteDbController;
-import shine.db.entities.UserParam;
+import shine.db.entities.UserParamEntry;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -33,7 +33,7 @@ public final class UserParamsDAO {
      * Если запись существует -> обновляем поля.
      * Если нет -> вставляем новую запись.
      */
-    public void upsert(UserParam param) throws SQLException {
+    public void upsert(UserParamEntry param) throws SQLException {
         String sql = """
             INSERT INTO users_params (
                 loginId,
@@ -68,7 +68,7 @@ public final class UserParamsDAO {
     /**
      * Получить параметр по loginId + param.
      */
-    public UserParam getByUserIdAndParam(long loginId, String paramName) throws SQLException {
+    public UserParamEntry getByUserIdAndParam(long loginId, String paramName) throws SQLException {
         String sql = """
             SELECT
                 loginId,
@@ -95,7 +95,7 @@ public final class UserParamsDAO {
     /**
      * Получить все параметры пользователя.
      */
-    public List<UserParam> getByUserId(long loginId) throws SQLException {
+    public List<UserParamEntry> getByUserId(long loginId) throws SQLException {
         String sql = """
             SELECT
                 loginId,
@@ -110,7 +110,7 @@ public final class UserParamsDAO {
             ORDER BY time_ms DESC
             """;
 
-        List<UserParam> result = new ArrayList<>();
+        List<UserParamEntry> result = new ArrayList<>();
 
         try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
             ps.setLong(1, loginId);
@@ -122,8 +122,8 @@ public final class UserParamsDAO {
         return result;
     }
 
-    private UserParam mapRow(ResultSet rs) throws SQLException {
-        return new UserParam(
+    private UserParamEntry mapRow(ResultSet rs) throws SQLException {
+        return new UserParamEntry(
                 rs.getLong("loginId"),
                 rs.getString("param"),
                 rs.getLong("bch_channel_id"),

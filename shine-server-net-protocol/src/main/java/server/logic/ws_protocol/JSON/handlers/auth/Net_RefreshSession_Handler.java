@@ -13,8 +13,8 @@ import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.dao.ActiveSessionsDAO;
 import shine.db.dao.SolanaUsersDAO;
-import shine.db.entities.ActiveSession;
-import shine.db.entities.SolanaUser;
+import shine.db.entities.ActiveSessionEntry;
+import shine.db.entities.SolanaUserEntry;
 import shine.geo.ClientInfoService;
 import shine.geo.GeoLookupService;
 
@@ -63,7 +63,7 @@ public class Net_RefreshSession_Handler implements JsonMessageHandler {
         }
 
         ActiveSessionsDAO sessionsDao = ActiveSessionsDAO.getInstance();
-        ActiveSession session;
+        ActiveSessionEntry session;
         try {
             session = sessionsDao.getBySessionId(sessionId);
         } catch (SQLException e) {
@@ -96,11 +96,11 @@ public class Net_RefreshSession_Handler implements JsonMessageHandler {
         }
 
         // --- вытаскиваем пользователя по loginId ---
-        SolanaUser solanaUser = null;
+        SolanaUserEntry solanaUserEntry = null;
         long loginId = session.getLoginId();
         try {
             SolanaUsersDAO usersDao = SolanaUsersDAO.getInstance();
-            solanaUser = usersDao.getByLoginId(loginId);
+            solanaUserEntry = usersDao.getByLoginId(loginId);
         } catch (SQLException e) {
             log.error("Ошибка БД при поиске пользователя по loginId={} из сессии", loginId, e);
             return NetExceptionResponseFactory.error(
@@ -111,7 +111,7 @@ public class Net_RefreshSession_Handler implements JsonMessageHandler {
             );
         }
 
-        if (solanaUser == null) {
+        if (solanaUserEntry == null) {
             return NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.UNVERIFIED,
@@ -171,7 +171,7 @@ public class Net_RefreshSession_Handler implements JsonMessageHandler {
         // --- обновляем контекст соединения ---
         if (ctx != null) {
             ctx.setActiveSession(session);
-            ctx.setSolanaUser(solanaUser);
+            ctx.setSolanaUser(solanaUserEntry);
             ctx.setSessionId(sessionId);
             ctx.setSessionPwd(sessionPwd);
             ctx.setAuthenticationStatus(ConnectionContext.AUTH_STATUS_USER);

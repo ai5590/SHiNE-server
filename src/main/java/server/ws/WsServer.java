@@ -5,8 +5,6 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.websocket.server.config.JettyWebSocketServletContainerInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import shine.db.dao.SolanaUsersDAO;
-import shine.db.entities.SolanaUser;
 import utils.config.AppConfig;
 
 import java.time.Duration;

@@ -9,11 +9,11 @@ import java.nio.ByteOrder;
  * Правило совместимости (строгое):
  * - если (type, version) неизвестны → кидаем IllegalArgumentException
  */
-public final class BodyRecordParser_new {
+public final class BodyRecordParser {
 
-    private BodyRecordParser_new() {}
+    private BodyRecordParser() {}
 
-    public static BodyRecord_new parse(byte[] bodyBytes) {
+    public static BodyRecord parse(byte[] bodyBytes) {
         if (bodyBytes == null) throw new IllegalArgumentException("bodyBytes == null");
         if (bodyBytes.length < 4) throw new IllegalArgumentException("bodyBytes too short (<4)");
 
@@ -25,8 +25,8 @@ public final class BodyRecordParser_new {
         int key = ((type & 0xFFFF) << 16) | (ver & 0xFFFF);
 
         return switch (key) {
-            case 0x0000_0001 -> new HeaderBody_new(bodyBytes); // type=0, ver=1
-            case 0x0001_0001 -> new TextBody_new(bodyBytes);   // type=1, ver=1
+            case 0x0000_0001 -> new HeaderBody(bodyBytes); // type=0, ver=1
+            case 0x0001_0001 -> new TextBody(bodyBytes);   // type=1, ver=1
             default -> throw new IllegalArgumentException(String.format(
                     "Unknown body type/version: type=%d ver=%d (key=0x%08X)",
                     (type & 0xFFFF), (ver & 0xFFFF), key

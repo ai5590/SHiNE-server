@@ -1,8 +1,8 @@
 package server.logic.ws_protocol.JSON;
 
 import org.eclipse.jetty.websocket.api.Session;
-import shine.db.entities.SolanaUser;
-import shine.db.entities.ActiveSession;
+import shine.db.entities.SolanaUserEntry;
+import shine.db.entities.ActiveSessionEntry;
 
 /**
  * ConnectionContext — контекст состояния одного WebSocket-соединения.
@@ -16,10 +16,10 @@ public class ConnectionContext {
     public static final int AUTH_STATUS_USER = 2;              // авторизованный пользователь
 
     // Полный пользователь из БД (solana_users)
-    private SolanaUser solanaUser;
+    private SolanaUserEntry solanaUserEntry;
 
     // Активная сессия из БД (active_sessions)
-    private ActiveSession activeSession;
+    private ActiveSessionEntry activeSessionEntry;
 
     /**
      * Идентификатор сессии — base64-строка от 32 байт.
@@ -61,30 +61,30 @@ public class ConnectionContext {
 
     // --- SolanaUser / ActiveSession ---
 
-    public SolanaUser getSolanaUser() {
-        return solanaUser;
+    public SolanaUserEntry getSolanaUser() {
+        return solanaUserEntry;
     }
 
-    public void setSolanaUser(SolanaUser solanaUser) {
-        this.solanaUser = solanaUser;
+    public void setSolanaUser(SolanaUserEntry solanaUserEntry) {
+        this.solanaUserEntry = solanaUserEntry;
     }
 
-    public ActiveSession getActiveSession() {
-        return activeSession;
+    public ActiveSessionEntry getActiveSession() {
+        return activeSessionEntry;
     }
 
-    public void setActiveSession(ActiveSession activeSession) {
-        this.activeSession = activeSession;
+    public void setActiveSession(ActiveSessionEntry activeSessionEntry) {
+        this.activeSessionEntry = activeSessionEntry;
     }
 
     // --- Удобные геттеры для логина ---
 
     public String getLogin() {
-        return solanaUser != null ? solanaUser.getLogin() : null;
+        return solanaUserEntry != null ? solanaUserEntry.getLogin() : null;
     }
 
     public Long getLoginId() {
-        return solanaUser != null ? solanaUser.getLoginId() : null;
+        return solanaUserEntry != null ? solanaUserEntry.getLoginId() : null;
     }
 
     // --- sessionId / sessionPwd ---
@@ -134,8 +134,8 @@ public class ConnectionContext {
     }
 
     public void reset() {
-        solanaUser = null;
-        activeSession = null;
+        solanaUserEntry = null;
+        activeSessionEntry = null;
 
         sessionId = null;
         sessionPwd = null;

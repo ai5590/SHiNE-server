@@ -10,7 +10,7 @@ package shine.db.entities;
  *  - deviceKey — публичный ключ устройства (второй ключ);
  *  - bchLimit  — лимит по количеству блоков / размеру цепочки (может быть null).
  */
-public class SolanaUser {
+public class SolanaUserEntry {
 
     private long loginId;
     private String login;
@@ -19,15 +19,15 @@ public class SolanaUser {
     private String deviceKey;  // раньше pubkey1
     private Integer bchLimit;  // может быть null
 
-    public SolanaUser() {
+    public SolanaUserEntry() {
     }
 
-    public SolanaUser(long loginId,
-                      String login,
-                      long bchId,
-                      String loginKey,
-                      String deviceKey,
-                      Integer bchLimit) {
+    public SolanaUserEntry(long loginId,
+                           String login,
+                           long bchId,
+                           String loginKey,
+                           String deviceKey,
+                           Integer bchLimit) {
         this.loginId = loginId;
         this.login = login;
         this.bchId = bchId;

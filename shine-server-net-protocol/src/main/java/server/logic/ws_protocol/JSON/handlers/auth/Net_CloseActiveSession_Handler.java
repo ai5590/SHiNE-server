@@ -13,8 +13,8 @@ import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import server.ws.WsConnectionUtils;
 import shine.db.dao.ActiveSessionsDAO;
-import shine.db.entities.ActiveSession;
-import shine.db.entities.SolanaUser;
+import shine.db.entities.ActiveSessionEntry;
+import shine.db.entities.SolanaUserEntry;
 
 import java.sql.SQLException;
 
@@ -62,7 +62,7 @@ public class Net_CloseActiveSession_Handler implements JsonMessageHandler {
             );
         }
 
-        SolanaUser user = ctx.getSolanaUser();
+        SolanaUserEntry user = ctx.getSolanaUser();
         long currentLoginId = user.getLoginId();
 
         int authStatus = ctx.getAuthenticationStatus();
@@ -158,7 +158,7 @@ public class Net_CloseActiveSession_Handler implements JsonMessageHandler {
         }
 
         ActiveSessionsDAO sessionsDao = ActiveSessionsDAO.getInstance();
-        ActiveSession targetSession;
+        ActiveSessionEntry targetSession;
         try {
             targetSession = sessionsDao.getBySessionId(targetSessionId);
         } catch (SQLException e) {

@@ -12,8 +12,8 @@ import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.dao.ActiveSessionsDAO;
-import shine.db.entities.ActiveSession;
-import shine.db.entities.SolanaUser;
+import shine.db.entities.ActiveSessionEntry;
+import shine.db.entities.SolanaUserEntry;
 import shine.geo.GeoLookupService;
 
 import java.sql.SQLException;
@@ -50,7 +50,7 @@ public class Net_ListSessions_Handler implements JsonMessageHandler {
             );
         }
 
-        SolanaUser user = ctx.getSolanaUser();
+        SolanaUserEntry user = ctx.getSolanaUser();
         long currentLoginId = user.getLoginId();
 
         int authStatus = ctx.getAuthenticationStatus();
@@ -128,7 +128,7 @@ public class Net_ListSessions_Handler implements JsonMessageHandler {
         }
 
         // 3) Тянем все активные сессии пользователя из БД
-        List<ActiveSession> sessions;
+        List<ActiveSessionEntry> sessions;
         try {
             sessions = ActiveSessionsDAO.getInstance().getByLoginId(currentLoginId);
         } catch (SQLException e) {
@@ -143,7 +143,7 @@ public class Net_ListSessions_Handler implements JsonMessageHandler {
 
         // 4) Собираем DTO с геолокацией
         List<SessionInfo> resultList = new ArrayList<>();
-        for (ActiveSession s : sessions) {
+        for (ActiveSessionEntry s : sessions) {
             SessionInfo info = new SessionInfo();
             info.setSessionId(s.getSessionId());
             info.setClientInfoFromClient(s.getClientInfoFromClient());

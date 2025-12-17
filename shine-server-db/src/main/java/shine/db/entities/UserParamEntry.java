@@ -1,6 +1,6 @@
 package shine.db.entities;
 
-public class UserParam {
+public class UserParamEntry {
 
     private long loginId;
     private String param;
@@ -10,16 +10,16 @@ public class UserParam {
     private short pubkeyNum;
     private String signature;
 
-    public UserParam() {
+    public UserParamEntry() {
     }
 
-    public UserParam(long loginId,
-                     String param,
-                     long bchChannelId,
-                     String value,
-                     long timeMs,
-                     short pubkeyNum,
-                     String signature) {
+    public UserParamEntry(long loginId,
+                          String param,
+                          long bchChannelId,
+                          String value,
+                          long timeMs,
+                          short pubkeyNum,
+                          String signature) {
         this.loginId = loginId;
         this.param = param;
         this.bchChannelId = bchChannelId;

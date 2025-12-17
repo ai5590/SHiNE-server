@@ -1,7 +1,7 @@
 package shine.db.dao;
 
 import shine.db.SqliteDbController;
-import shine.db.entities.SolanaUser;
+import shine.db.entities.SolanaUserEntry;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -36,7 +36,7 @@ public final class SolanaUsersDAO {
         return instance;
     }
 
-    public void insert(SolanaUser user) throws SQLException {
+    public void insert(SolanaUserEntry user) throws SQLException {
         String sql = """
             INSERT INTO solana_users (login, loginId, bchId, loginKey, deviceKey, bchLimit)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -59,7 +59,7 @@ public final class SolanaUsersDAO {
         }
     }
 
-    public SolanaUser getByLoginId(long loginId) throws SQLException {
+    public SolanaUserEntry getByLoginId(long loginId) throws SQLException {
         String sql = """
             SELECT login, loginId, bchId, loginKey, deviceKey, bchLimit
             FROM solana_users
@@ -76,7 +76,7 @@ public final class SolanaUsersDAO {
         }
     }
 
-    public SolanaUser getByLogin(String login) throws SQLException {
+    public SolanaUserEntry getByLogin(String login) throws SQLException {
         String sql = """
             SELECT login, loginId, bchId, loginKey, deviceKey, bchLimit
             FROM solana_users
@@ -93,7 +93,7 @@ public final class SolanaUsersDAO {
         }
     }
 
-    public List<SolanaUser> searchByLoginPrefix(String prefix) throws SQLException {
+    public List<SolanaUserEntry> searchByLoginPrefix(String prefix) throws SQLException {
         String sql = """
             SELECT login, loginId, bchId, loginKey, deviceKey, bchLimit
             FROM solana_users
@@ -102,7 +102,7 @@ public final class SolanaUsersDAO {
             LIMIT 5
             """;
 
-        List<SolanaUser> result = new ArrayList<>();
+        List<SolanaUserEntry> result = new ArrayList<>();
 
         try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
             ps.setString(1, prefix.toLowerCase() + "%");
@@ -115,8 +115,8 @@ public final class SolanaUsersDAO {
         return result;
     }
 
-    private SolanaUser mapRow(ResultSet rs) throws SQLException {
-        return new SolanaUser(
+    private SolanaUserEntry mapRow(ResultSet rs) throws SQLException {
+        return new SolanaUserEntry(
                 rs.getLong("loginId"),
                 rs.getString("login"),
                 rs.getLong("bchId"),

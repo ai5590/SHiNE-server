@@ -8,7 +8,7 @@ import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.dao.SolanaUsersDAO;
-import shine.db.entities.SolanaUser;
+import shine.db.entities.SolanaUserEntry;
 
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -49,9 +49,9 @@ public class Net_AuthChallenge_Handler implements JsonMessageHandler {
         }
 
         // 2) Ищем пользователя в локальной БД
-        SolanaUser solanaUser = SolanaUsersDAO.getInstance().getByLogin(login);
+        SolanaUserEntry solanaUserEntry = SolanaUsersDAO.getInstance().getByLogin(login);
 
-        if (solanaUser == null) {
+        if (solanaUserEntry == null) {
             return NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.UNVERIFIED,
@@ -61,7 +61,7 @@ public class Net_AuthChallenge_Handler implements JsonMessageHandler {
         }
 
         // 3) Заполняем контекст пользователем
-        ctx.setSolanaUser(solanaUser);
+        ctx.setSolanaUser(solanaUserEntry);
 
         // 3.1) Отмечаем, что по этому соединению начата авторификация
         ctx.setAuthenticationStatus(ConnectionContext.AUTH_STATUS_AUTH_IN_PROGRESS);

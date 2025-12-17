@@ -20,7 +20,7 @@ package shine.db.entities;
  *     FOREIGN KEY (loginId) REFERENCES solana_users(loginId)
  * );
  */
-public class ActiveSession {
+public class ActiveSessionEntry {
 
     private String sessionId;               // TEXT base64(32 bytes)
     private long   loginId;                 // INTEGER
@@ -38,22 +38,22 @@ public class ActiveSession {
     private String clientInfoFromRequest;   // строка, собранная на сервере
     private String userLanguage;            // prefer-language (например, "ru-RU")
 
-    public ActiveSession() {
+    public ActiveSessionEntry() {
     }
 
-    public ActiveSession(String sessionId,
-                         long loginId,
-                         String sessionPwd,
-                         String storagePwd,
-                         long sessionCreatedAtMs,
-                         long lastAuthirificatedAtMs,
-                         String pushEndpoint,
-                         String pushP256dhKey,
-                         String pushAuthKey,
-                         String clientIp,
-                         String clientInfoFromClient,
-                         String clientInfoFromRequest,
-                         String userLanguage) {
+    public ActiveSessionEntry(String sessionId,
+                              long loginId,
+                              String sessionPwd,
+                              String storagePwd,
+                              long sessionCreatedAtMs,
+                              long lastAuthirificatedAtMs,
+                              String pushEndpoint,
+                              String pushP256dhKey,
+                              String pushAuthKey,
+                              String clientIp,
+                              String clientInfoFromClient,
+                              String clientInfoFromRequest,
+                              String userLanguage) {
         this.sessionId = sessionId;
         this.loginId = loginId;
         this.sessionPwd = sessionPwd;

@@ -14,8 +14,8 @@ import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import server.ws.WsConnectionUtils;
 import shine.db.dao.ActiveSessionsDAO;
-import shine.db.entities.ActiveSession;
-import shine.db.entities.SolanaUser;
+import shine.db.entities.ActiveSessionEntry;
+import shine.db.entities.SolanaUserEntry;
 import shine.geo.ClientInfoService;
 import shine.geo.GeoLookupService;
 import utils.crypto.Ed25519Util;
@@ -72,7 +72,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
      * @throws IllegalArgumentException при некорректном base64 ключа/подписи
      */
     public static boolean verifyAuthorificatedSignature(
-            SolanaUser user,
+            SolanaUserEntry user,
             String authNonce,
             long timeMs,
             String signatureB64
@@ -108,7 +108,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             return err;
         }
 
-        SolanaUser user = ctx.getSolanaUser();
+        SolanaUserEntry user = ctx.getSolanaUser();
         Long loginId = user.getLoginId();
         if (loginId == null) {
             Net_Response err = NetExceptionResponseFactory.error(
@@ -237,10 +237,10 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
         // --- создаём запись ActiveSession и сохраняем в БД ---
         ActiveSessionsDAO dao = ActiveSessionsDAO.getInstance();
-        ActiveSession activeSession;
+        ActiveSessionEntry activeSessionEntry;
 
         try {
-            activeSession = new ActiveSession(
+            activeSessionEntry = new ActiveSessionEntry(
                     sessionId,
                     loginId,
                     newSessionPwd,           // настоящий секрет сессии
@@ -256,7 +256,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
                     userLanguage
             );
 
-            dao.insert(activeSession);
+            dao.insert(activeSessionEntry);
         } catch (SQLException e) {
             log.error("Ошибка БД при создании новой сессии для loginId={}", loginId, e);
             Net_Response err = NetExceptionResponseFactory.error(
@@ -270,7 +270,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         }
 
         // --- обновляем контекст ---
-        ctx.setActiveSession(activeSession);
+        ctx.setActiveSession(activeSessionEntry);
         ctx.setSessionId(sessionId);
         ctx.setSessionPwd(newSessionPwd);   // теперь в контексте хранится секрет сессии
         ctx.setAuthNonce(null);            // одноразовый nonce больше не нужен
