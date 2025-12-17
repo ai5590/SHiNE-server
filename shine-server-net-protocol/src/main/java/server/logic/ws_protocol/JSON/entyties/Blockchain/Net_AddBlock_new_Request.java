@@ -2,36 +2,48 @@ package server.logic.ws_protocol.JSON.entyties.Blockchain;
 
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
 
+/**
+ * AddBlock_new request.
+ *
+ * payload:
+ *  - userLogin
+ *  - blockchainId
+ *  - globalBlockNumber
+ *  - prevGlobalHashHex (может быть "" для нулевого)
+ *  - line (0..7)
+ *  - lineBlockNumber
+ *  - blockBase64 (FULL bytes блока)
+ */
 public class Net_AddBlock_new_Request extends Net_Request {
 
+    private String userLogin;
+
     private long blockchainId;
+    private int globalBlockNumber;
+    private String prevGlobalHashHex;
 
-    private int globalNumber;
-    private String prevGlobalHash; // HEX(64) or ""
-
-    private int lineNumber;        // 0..7
+    private short line;
     private int lineBlockNumber;
-    private String prevLineHash;   // HEX(64) or ""
 
-    private String blockBase64;    // base64url of raw .bch bytes
+    private String blockBase64;
+
+    public String getUserLogin() { return userLogin; }
+    public void setUserLogin(String userLogin) { this.userLogin = userLogin; }
 
     public long getBlockchainId() { return blockchainId; }
     public void setBlockchainId(long blockchainId) { this.blockchainId = blockchainId; }
 
-    public int getGlobalNumber() { return globalNumber; }
-    public void setGlobalNumber(int globalNumber) { this.globalNumber = globalNumber; }
+    public int getGlobalBlockNumber() { return globalBlockNumber; }
+    public void setGlobalBlockNumber(int globalBlockNumber) { this.globalBlockNumber = globalBlockNumber; }
 
-    public String getPrevGlobalHash() { return prevGlobalHash; }
-    public void setPrevGlobalHash(String prevGlobalHash) { this.prevGlobalHash = prevGlobalHash; }
+    public String getPrevGlobalHashHex() { return prevGlobalHashHex; }
+    public void setPrevGlobalHashHex(String prevGlobalHashHex) { this.prevGlobalHashHex = prevGlobalHashHex; }
 
-    public int getLineNumber() { return lineNumber; }
-    public void setLineNumber(int lineNumber) { this.lineNumber = lineNumber; }
+    public short getLine() { return line; }
+    public void setLine(short line) { this.line = line; }
 
     public int getLineBlockNumber() { return lineBlockNumber; }
     public void setLineBlockNumber(int lineBlockNumber) { this.lineBlockNumber = lineBlockNumber; }
-
-    public String getPrevLineHash() { return prevLineHash; }
-    public void setPrevLineHash(String prevLineHash) { this.prevLineHash = prevLineHash; }
 
     public String getBlockBase64() { return blockBase64; }
     public void setBlockBase64(String blockBase64) { this.blockBase64 = blockBase64; }

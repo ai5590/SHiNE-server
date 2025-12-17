@@ -127,6 +127,14 @@ public final class BchBlockEntry_new {
         this.fullBytes = bb.array();
     }
 
+
+    public byte[] getRawBytes() {
+        int rawLen = recordSize - SIGNATURE_LEN - HASH_LEN;
+        byte[] raw = new byte[rawLen];
+        System.arraycopy(fullBytes, 0, raw, 0, rawLen);
+        return raw;
+    }
+
     /* ===================================================================== */
 
     public byte[] getSignature64() {
