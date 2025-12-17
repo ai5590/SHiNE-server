@@ -187,7 +187,13 @@ public final class BlockchainStateService_new {
         s.setLastGlobalHash(ZERO64);
 
         for (int i = 0; i < 8; i++) {
-            s.setLastLineNumber(i, 0);
+            if (i == 0) {
+                // линия 0: заглавный блок имеет lineNumber=0
+                s.setLastLineNumber(i, -1);
+            } else {
+                // остальные линии: первый блок будет lineNumber=1
+                s.setLastLineNumber(i, 0);
+            }
             s.setLastLineHash(i, ZERO64);
         }
 

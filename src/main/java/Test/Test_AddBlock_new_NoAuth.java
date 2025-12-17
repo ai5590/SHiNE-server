@@ -13,7 +13,6 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -24,7 +23,6 @@ public class Test_AddBlock_new_NoAuth {
     private static final String WS_URI = "ws://localhost:7070/ws";
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    // ======= ДАННЫЕ (взяты по аналогии с твоим тестом) =======
     private static final String TEST_LOGIN = "anya24";
     private static final long   TEST_BCH_ID = 4222L;
 
@@ -36,8 +34,8 @@ public class Test_AddBlock_new_NoAuth {
         LOGIN_PUB_KEY  = Ed25519Util.derivePublicKey(LOGIN_PRIV_KEY);
     }
 
-    // Нулевой хэш (для первого блока)
     private static final byte[] ZERO32 = new byte[32];
+    private static final String ZERO64 = "0".repeat(64);
 
     public static void main(String[] args) throws Exception {
         CountDownLatch latch = new CountDownLatch(1);
@@ -48,26 +46,32 @@ public class Test_AddBlock_new_NoAuth {
 
                     private int step = 0;
 
-                    // сервер просил в request: blockchainId + globalNumber + prevGlobalHash + bytes блока
-                    // prevLineHash сервер может не просить — но для подписи нам он нужен
-                    private byte[] lastGlobalHash = ZERO32;
-                    private byte[] lastLineHash   = ZERO32;
+                    // Эти значения обновим ПО ОТВЕТУ сервера на header
+                    private String lastGlobalHashHex = ZERO64;
+                    private String lastLineHashHex   = ZERO64;
 
                     @Override
                     public void onOpen(WebSocket ws) {
                         System.out.println("✅ WS connected: " + WS_URI);
                         ws.request(1);
 
-                        // 1) Header block
+                        // 1) HEADER (global=0, line=0, lineNumber=0)
                         byte[] headerFull = buildHeaderBlockFullBytes(
                                 /*global*/0,
                                 /*lineIndex*/(short)0,
                                 /*lineBlock*/0,
-                                lastGlobalHash,
-                                lastLineHash
+                                /*prevGlobal*/ZERO32,
+                                /*prevLine*/ZERO32
                         );
 
-                        String json = buildAddBlockJson("test-add-header", TEST_BCH_ID, 0, bytesToHex(lastGlobalHash), base64(headerFull));
+                        String json = buildAddBlockJson(
+                                "test-add-header",
+                                TEST_BCH_ID,
+                                0,
+                                ZERO64,                 // prevGlobalHash для первого блока — нули
+                                base64(headerFull)
+                        );
+
                         System.out.println("\n📤 SEND #1 (HEADER):\n" + json);
                         ws.sendText(json, true);
                     }
@@ -80,6 +84,7 @@ public class Test_AddBlock_new_NoAuth {
 
                         try {
                             int status = extractStatus(msg);
+
                             if (step == 0) {
                                 if (status != 200) {
                                     System.out.println("❌ HEADER rejected, status=" + status);
@@ -87,32 +92,54 @@ public class Test_AddBlock_new_NoAuth {
                                     return CompletableFuture.completedFuture(null);
                                 }
 
-                                // Обновляем prev-хэши для следующего блока: берём хэш из нашего же блока (как ожидаемую цепочку)
-                                byte[] headerFull = lastSentBlockFullFromResponseOrLocalFallback(true);
-                                // Fallback: просто пересоберём ровно так же (надёжнее: хранить отправленные байты)
-                                headerFull = buildHeaderBlockFullBytes(0, (short)0, 0, ZERO32, ZERO32);
+                                // Берём ИМЕННО ТОТ хэш, который сервер сохранил в state
+                                String serverLastGlobalHash = extractPayloadString(msg, "serverLastGlobalHash");
+                                String serverLastLineHash   = extractPayloadString(msg, "serverLastLineHash");
 
-                                BchBlockEntry_new hb = new BchBlockEntry_new(headerFull);
-                                lastGlobalHash = hb.getHash32();
-                                lastLineHash   = hb.getHash32();
+                                if (serverLastGlobalHash == null || serverLastGlobalHash.isBlank()) {
+                                    System.out.println("❌ No serverLastGlobalHash in response");
+                                    ws.sendClose(WebSocket.NORMAL_CLOSURE, "bad-response");
+                                    return CompletableFuture.completedFuture(null);
+                                }
+                                if (serverLastLineHash == null || serverLastLineHash.isBlank()) {
+                                    // fallback: пусть будет как global (если сервер так хранит)
+                                    serverLastLineHash = serverLastGlobalHash;
+                                }
 
-                                // 2) Text block
+                                lastGlobalHashHex = serverLastGlobalHash;
+                                lastLineHashHex   = serverLastLineHash;
+
+                                byte[] prevGlobal32 = hexToBytes32(lastGlobalHashHex);
+                                byte[] prevLine32   = hexToBytes32(lastLineHashHex);
+
+                                // 2) TEXT (global=1, line=0, lineNumber=1)
                                 byte[] textFull = buildTextBlockFullBytes(
                                         /*global*/1,
                                         /*lineIndex*/(short)0,
                                         /*lineBlock*/1,
-                                        lastGlobalHash,
-                                        lastLineHash,
+                                        prevGlobal32,
+                                        prevLine32,
                                         "Hello from test client"
                                 );
 
-                                String json2 = buildAddBlockJson("test-add-text", TEST_BCH_ID, 1, bytesToHex(lastGlobalHash), base64(textFull));
+                                String json2 = buildAddBlockJson(
+                                        "test-add-text",
+                                        TEST_BCH_ID,
+                                        1,
+                                        lastGlobalHashHex,     // prevGlobalHash = хэш header'а из ответа сервера
+                                        base64(textFull)
+                                );
+
                                 System.out.println("\n📤 SEND #2 (TEXT):\n" + json2);
                                 step = 1;
                                 ws.sendText(json2, true);
 
                             } else if (step == 1) {
-                                System.out.println("✅ Done. Closing.");
+                                if (status != 200) {
+                                    System.out.println("❌ TEXT rejected, status=" + status);
+                                } else {
+                                    System.out.println("✅ Done. Closing.");
+                                }
                                 ws.sendClose(WebSocket.NORMAL_CLOSURE, "ok");
                             }
 
@@ -153,7 +180,6 @@ public class Test_AddBlock_new_NoAuth {
                                                     byte[] prevGlobalHash32,
                                                     byte[] prevLineHash32) {
 
-        // bodyBytes (включая type+version внутри)
         HeaderBody body = new HeaderBody(
                 TEST_BCH_ID,
                 TEST_LOGIN,
@@ -173,6 +199,7 @@ public class Test_AddBlock_new_NoAuth {
                                                   byte[] prevGlobalHash32,
                                                   byte[] prevLineHash32,
                                                   String text) {
+
         TextBody body = new TextBody(text);
         byte[] bodyBytes = body.toBytes();
 
@@ -188,13 +215,11 @@ public class Test_AddBlock_new_NoAuth {
 
         long ts = System.currentTimeMillis() / 1000L;
 
-        // Собираем rawBytes вручную в точности как BchBlockEntry_new RAW:
-        // [4]recordSize [4]recordNumber [8]ts [2]lineIndex [4]lineBlockNumber [body...]
         int recordSize =
                 BchBlockEntry_new.RAW_HEADER_SIZE +
-                bodyBytes.length +
-                BchBlockEntry_new.SIGNATURE_LEN +
-                BchBlockEntry_new.HASH_LEN;
+                        bodyBytes.length +
+                        BchBlockEntry_new.SIGNATURE_LEN +
+                        BchBlockEntry_new.HASH_LEN;
 
         byte[] rawBytes = ByteBuffer.allocate(BchBlockEntry_new.RAW_HEADER_SIZE + bodyBytes.length)
                 .order(ByteOrder.BIG_ENDIAN)
@@ -215,10 +240,9 @@ public class Test_AddBlock_new_NoAuth {
 
         byte[] hash32 = BchCryptoVerifier_new.sha256(preimage);
 
-        // ВАЖНО: если у тебя в протоколе подпись делается НЕ по hash32, а по preimage — замени тут на preimage
+        // если у тебя подпись должна быть по preimage — меняй тут
         byte[] signature64 = Ed25519Util.sign(hash32, LOGIN_PRIV_KEY);
 
-        // FULL block
         return new BchBlockEntry_new(
                 globalNumber,
                 ts,
@@ -235,11 +259,10 @@ public class Test_AddBlock_new_NoAuth {
     // =================================================================================
 
     private static String buildAddBlockJson(String requestId,
-                                           long blockchainId,
-                                           int globalNumber,
-                                           String prevGlobalHashHex,
-                                           String blockBytesB64) {
-        // Если у тебя в Net_AddBlock_new_Request другие имена полей — скажешь, подправлю.
+                                            long blockchainId,
+                                            int globalNumber,
+                                            String prevGlobalHashHex,
+                                            String blockBytesB64) {
         return """
             {
               "op": "AddBlock",
@@ -267,18 +290,32 @@ public class Test_AddBlock_new_NoAuth {
         return -1;
     }
 
+    private static String extractPayloadString(String json, String field) {
+        try {
+            JsonNode root = JSON.readTree(json);
+            JsonNode payload = root.get("payload");
+            if (payload != null && payload.has(field)) {
+                return payload.get(field).asText();
+            }
+        } catch (Exception ignore) {}
+        return null;
+    }
+
     private static String base64(byte[] bytes) {
         return Base64.getEncoder().encodeToString(bytes);
     }
 
-    private static String bytesToHex(byte[] b) {
-        StringBuilder sb = new StringBuilder(b.length * 2);
-        for (byte x : b) sb.append(String.format("%02x", x));
-        return sb.toString();
-    }
-
-    // Заглушка: в этом тесте проще хранить отправленные байты локально.
-    private static byte[] lastSentBlockFullFromResponseOrLocalFallback(boolean header) {
-        return null;
+    private static byte[] hexToBytes32(String hex) {
+        if (hex == null) throw new IllegalArgumentException("hex is null");
+        String s = hex.trim();
+        if (s.length() != 64) throw new IllegalArgumentException("hex must be 64 chars, got " + s.length());
+        byte[] out = new byte[32];
+        for (int i = 0; i < 32; i++) {
+            int hi = Character.digit(s.charAt(i * 2), 16);
+            int lo = Character.digit(s.charAt(i * 2 + 1), 16);
+            if (hi < 0 || lo < 0) throw new IllegalArgumentException("bad hex at pos " + (i * 2));
+            out[i] = (byte) ((hi << 4) | lo);
+        }
+        return out;
     }
 }
