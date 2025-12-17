@@ -5,10 +5,6 @@ import shine.db.entities.BlockchainStateEntry;
 
 import java.sql.*;
 
-/**
- * DAO для таблицы blockchain_state.
- * 1 строка = 1 blockchainId, линии 0..7 в колонках.
- */
 public final class BlockchainStateDAO {
 
     private static volatile BlockchainStateDAO instance;
@@ -25,7 +21,8 @@ public final class BlockchainStateDAO {
         return instance;
     }
 
-    public BlockchainStateEntry getByBlockchainId(long blockchainId) throws SQLException {
+    // --- Новый вариант: работа на переданном соединении ---
+    public BlockchainStateEntry getByBlockchainId(Connection conn, long blockchainId) throws SQLException {
         String sql = """
             SELECT
                 blockchain_id,
@@ -48,7 +45,7 @@ public final class BlockchainStateDAO {
             WHERE blockchain_id = ?
             """;
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, blockchainId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) return null;
@@ -57,11 +54,15 @@ public final class BlockchainStateDAO {
         }
     }
 
-    /**
-     * UPSERT: если строки нет — вставка, если есть — обновление.
-     * Это один вызов из кода, и один SQL.
-     */
-    public void upsert(BlockchainStateEntry e) throws SQLException {
+    // Старый вариант: сам открывает/закрывает conn
+    public BlockchainStateEntry getByBlockchainId(long blockchainId) throws SQLException {
+        try (Connection conn = db.getConnection()) {
+            return getByBlockchainId(conn, blockchainId);
+        }
+    }
+
+    // --- Новый вариант: UPSERT на переданном соединении ---
+    public void upsert(Connection conn, BlockchainStateEntry e) throws SQLException {
         long now = System.currentTimeMillis();
         if (e.getUpdatedAtMs() <= 0) e.setUpdatedAtMs(now);
 
@@ -124,8 +125,7 @@ public final class BlockchainStateDAO {
                 updated_at_ms      = excluded.updated_at_ms
             """;
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
-
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
             int i = 1;
             ps.setLong(i++, e.getBlockchainId());
             ps.setString(i++, nn(e.getUserLogin()));
@@ -141,8 +141,14 @@ public final class BlockchainStateDAO {
             }
 
             ps.setLong(i++, e.getUpdatedAtMs());
-
             ps.executeUpdate();
+        }
+    }
+
+    // Старый вариант: сам открывает/закрывает conn
+    public void upsert(BlockchainStateEntry e) throws SQLException {
+        try (Connection conn = db.getConnection()) {
+            upsert(conn, e);
         }
     }
 

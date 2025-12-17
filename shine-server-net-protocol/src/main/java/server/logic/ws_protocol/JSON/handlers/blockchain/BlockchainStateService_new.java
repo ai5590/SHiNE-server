@@ -8,8 +8,9 @@ import utils.files.FileStoreUtil;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Base64;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 public final class BlockchainStateService_new {
 
@@ -32,6 +33,13 @@ public final class BlockchainStateService_new {
     private static final BlockchainStateService_new INSTANCE = new BlockchainStateService_new();
     public static BlockchainStateService_new getInstance() { return INSTANCE; }
     private BlockchainStateService_new() {}
+
+    // --- MVP: локи в памяти по blockchainId ---
+    private static final ConcurrentHashMap<Long, ReentrantLock> LOCKS = new ConcurrentHashMap<>();
+
+    private static ReentrantLock lockFor(long blockchainId) {
+        return LOCKS.computeIfAbsent(blockchainId, id -> new ReentrantLock());
+    }
 
     public Result addBlockAtomically(
             String login,
@@ -68,85 +76,78 @@ public final class BlockchainStateService_new {
         if (lineIndex < 0 || lineIndex > 7)
             return new Result(400, "BAD_LINE_INDEX", null, lineIndex);
 
-        Connection conn = SqliteDbController.getInstance().getConnection();
-        boolean oldAuto = conn.getAutoCommit();
-        conn.setAutoCommit(false);
+        ReentrantLock lock = lockFor(blockchainId);
+        lock.lock();
+        try (Connection conn = SqliteDbController.getInstance().getConnection()) {
 
-        try (Statement st = conn.createStatement()) {
-            // важно: заранее берём write lock
-            st.execute("BEGIN IMMEDIATE");
+            // Транзакция — норм, но БЕЗ "BEGIN IMMEDIATE".
+            boolean oldAuto = conn.getAutoCommit();
+            conn.setAutoCommit(false);
 
-            BlockchainStateEntry state = BlockchainStateDAO.getInstance().getByBlockchainId(blockchainId);
-            if (state == null) {
+            try {
+                BlockchainStateEntry state =
+                        BlockchainStateDAO.getInstance().getByBlockchainId(conn, blockchainId);
+
+                if (state == null) {
+                    conn.rollback();
+                    return new Result(404, "UNKNOWN_BLOCKCHAIN", null, lineIndex);
+                }
+
+                if (!login.equals(state.getUserLogin())) {
+                    conn.rollback();
+                    return new Result(403, "LOGIN_MISMATCH", state, lineIndex);
+                }
+
+                int expectedGlobal = state.getLastGlobalNumber() + 1;
+                if (globalNumber != expectedGlobal) {
+                    conn.rollback();
+                    return new Result(409, "OUT_OF_SEQUENCE_GLOBAL", state, lineIndex);
+                }
+
+                String dbPrevGlobalHash = nn(state.getLastGlobalHash());
+                if (!eqHash(prevGlobalHashHex, dbPrevGlobalHash)) {
+                    conn.rollback();
+                    return new Result(409, "GLOBAL_HASH_MISMATCH", state, lineIndex);
+                }
+
+                int expectedLineNumber = state.getLastLineNumber(lineIndex) + 1;
+                if (block.lineNumber != expectedLineNumber) {
+                    conn.rollback();
+                    return new Result(409, "OUT_OF_SEQUENCE_LINE", state, lineIndex);
+                }
+
+                // prevLineHash (пока просто читаем, дальше пригодится для крипто-проверки)
+                String dbPrevLineHashHex = nn(state.getLastLineHash(lineIndex));
+
+                // TODO crypto check (потом подключим)
+
+                // 1) пишем в файл
+                FileStoreUtil.getInstance().addDataToBlockchain(blockchainId, block.toBytes());
+
+                // 2) обновляем state в БД
+                state.setLastGlobalNumber(globalNumber);
+                state.setLastGlobalHash(bytesToHex(block.getHash32()));
+
+                state.setLastLineNumber(lineIndex, block.lineNumber);
+                state.setLastLineHash(lineIndex, bytesToHex(block.getHash32()));
+
+                state.setSizeBytes(state.getSizeBytes() + fullBytes.length);
+                state.setUpdatedAtMs(System.currentTimeMillis());
+
+                BlockchainStateDAO.getInstance().upsert(conn, state);
+
+                conn.commit();
+                return new Result(200, null, state, lineIndex);
+
+            } catch (SQLException e) {
                 conn.rollback();
-                return new Result(404, "UNKNOWN_BLOCKCHAIN", null, lineIndex);
+                throw e;
+            } finally {
+                conn.setAutoCommit(oldAuto);
             }
 
-            // 1) защита от подмены логина
-            if (!login.equals(state.getUserLogin())) {
-                conn.rollback();
-                return new Result(403, "LOGIN_MISMATCH", state, lineIndex);
-            }
-
-            // 2) проверяем ожидаемый global
-            int expectedGlobal = state.getLastGlobalNumber() + 1;
-            if (globalNumber != expectedGlobal) {
-                conn.rollback();
-                return new Result(409, "OUT_OF_SEQUENCE_GLOBAL", state, lineIndex);
-            }
-
-            // 3) проверяем prev global hash
-            String dbPrevGlobalHash = nn(state.getLastGlobalHash());
-            if (!eqHash(prevGlobalHashHex, dbPrevGlobalHash)) {
-                conn.rollback();
-                return new Result(409, "GLOBAL_HASH_MISMATCH", state, lineIndex);
-            }
-
-            // 4) проверяем lineNumber
-            int expectedLineNumber = state.getLastLineNumber(lineIndex) + 1;
-            if (block.lineNumber != expectedLineNumber) {
-                conn.rollback();
-                return new Result(409, "OUT_OF_SEQUENCE_LINE", state, lineIndex);
-            }
-
-            // 5) prevLineHash берём из БД (он хранится!)
-            String dbPrevLineHashHex = nn(state.getLastLineHash(lineIndex));
-
-            // 6) полноценная крипто-проверка (хэш/подпись)
-            // TODO: тут подключи твой реальный verifier:
-            // - посчитать preimage по твоим правилам (login + prevGlobalHash32 + prevLineHash32 + rawBytes)
-            // - сверить sha256(preimage) == block.hash32
-            // - проверить Ed25519 подпись
-            //
-            // Если не ок:
-            // conn.rollback(); return new Result(422, "CRYPTO_INVALID", state, lineIndex);
-
-            // 7) запись блока в файл (append)
-            FileStoreUtil.getInstance().addDataToBlockchain(blockchainId, block.toBytes());
-
-            // 8) апдейт состояния в БД
-            state.setLastGlobalNumber(globalNumber);
-            state.setLastGlobalHash(bytesToHex(block.getHash32())); // новый global hash = hash блока
-
-            state.setLastLineNumber(lineIndex, block.lineNumber);
-            // ВАЖНО: line hash тоже логично сделать = hash блока (если так задумано)
-            state.setLastLineHash(lineIndex, bytesToHex(block.getHash32()));
-
-            // size_bytes += len(fullBytes)
-            state.setSizeBytes(state.getSizeBytes() + fullBytes.length);
-            state.setUpdatedAtMs(System.currentTimeMillis());
-
-            BlockchainStateDAO.getInstance().upsert(state);
-
-            conn.commit();
-            return new Result(200, null, state, lineIndex);
-
-        } catch (SQLException e) {
-            conn.rollback();
-            // если хочешь красиво: SQLITE_BUSY → 503 RETRY
-            throw e;
         } finally {
-            conn.setAutoCommit(oldAuto);
+            lock.unlock();
         }
     }
 

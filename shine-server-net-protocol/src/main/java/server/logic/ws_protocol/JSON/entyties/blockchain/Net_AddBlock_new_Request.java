@@ -8,7 +8,7 @@ public final class Net_AddBlock_new_Request extends Net_Request {
     private long blockchainId;         // обязателен
     private int globalNumber;          // обязателен
     private String prevGlobalHash;     // HEX(64) или "" для нулевого
-    private String blockBase64;        // байты FULL-блока (raw+sig+hash) в Base64
+    private String blockBytesB64;        // байты FULL-блока (raw+sig+hash) в Base64
 
     public String getLogin() { return login; }
     public void setLogin(String login) { this.login = login; }
@@ -22,6 +22,6 @@ public final class Net_AddBlock_new_Request extends Net_Request {
     public String getPrevGlobalHash() { return prevGlobalHash; }
     public void setPrevGlobalHash(String prevGlobalHash) { this.prevGlobalHash = prevGlobalHash; }
 
-    public String getBlockBase64() { return blockBase64; }
-    public void setBlockBase64(String blockBase64) { this.blockBase64 = blockBase64; }
+    public String getBlockBytesB64() { return blockBytesB64; }
+    public void setBlockBytesB64(String blockBytesB64) { this.blockBytesB64 = blockBytesB64; }
 }

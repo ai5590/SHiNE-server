@@ -19,7 +19,7 @@ public final class Net_AddBlock_new_Handler implements JsonMessageHandler {
                 req.getBlockchainId(),
                 req.getGlobalNumber(),
                 req.getPrevGlobalHash(),
-                req.getBlockBase64()
+                req.getBlockBytesB64()
         );
 
         Net_AddBlock_new_Response resp = new Net_AddBlock_new_Response();
