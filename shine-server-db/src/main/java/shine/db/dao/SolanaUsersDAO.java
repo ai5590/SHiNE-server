@@ -42,7 +42,9 @@ public final class SolanaUsersDAO {
             VALUES (?, ?, ?, ?, ?, ?)
             """;
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
+        try (Connection c = db.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+
             ps.setString(1, user.getLogin());
             ps.setLong(2, user.getLoginId());
             ps.setLong(3, user.getBchId());
@@ -66,9 +68,10 @@ public final class SolanaUsersDAO {
             WHERE loginId = ?
             """;
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
-            ps.setLong(1, loginId);
+        try (Connection c = db.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
 
+            ps.setLong(1, loginId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) return null;
                 return mapRow(rs);
@@ -76,7 +79,7 @@ public final class SolanaUsersDAO {
         }
     }
 
-   // добавь рядом со старым методом
+    // добавь рядом со старым методом
     public SolanaUserEntry getByLogin(Connection c, String login) throws SQLException {
         String sql = """
         SELECT login, loginId, bchId, loginKey, deviceKey, bchLimit
@@ -100,9 +103,10 @@ public final class SolanaUsersDAO {
             WHERE LOWER(login) = LOWER(?)
             """;
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
-            ps.setString(1, login);
+        try (Connection c = db.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
 
+            ps.setString(1, login);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) return null;
                 return mapRow(rs);
@@ -121,9 +125,10 @@ public final class SolanaUsersDAO {
 
         List<SolanaUserEntry> result = new ArrayList<>();
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
-            ps.setString(1, prefix.toLowerCase() + "%");
+        try (Connection c = db.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
 
+            ps.setString(1, prefix.toLowerCase() + "%");
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) result.add(mapRow(rs));
             }

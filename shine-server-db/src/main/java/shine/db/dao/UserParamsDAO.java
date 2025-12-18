@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Здесь зраним сохранённые параметры пользователей (в основном до каково сообщения просмотрены ленты) */
-
 public final class UserParamsDAO {
 
     private static volatile UserParamsDAO instance;
@@ -53,7 +52,9 @@ public final class UserParamsDAO {
                 signature      = excluded.signature
             """;
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
+        try (Connection c = db.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+
             ps.setLong(1, param.getLoginId());
             ps.setString(2, param.getParam());
             ps.setLong(3, param.getBchChannelId());
@@ -82,7 +83,9 @@ public final class UserParamsDAO {
             WHERE loginId = ? AND param = ?
             """;
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
+        try (Connection c = db.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+
             ps.setLong(1, loginId);
             ps.setString(2, paramName);
             try (ResultSet rs = ps.executeQuery()) {
@@ -112,7 +115,9 @@ public final class UserParamsDAO {
 
         List<UserParamEntry> result = new ArrayList<>();
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
+        try (Connection c = db.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+
             ps.setLong(1, loginId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) result.add(mapRow(rs));

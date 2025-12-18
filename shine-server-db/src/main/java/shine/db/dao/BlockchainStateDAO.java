@@ -87,7 +87,7 @@ public final class BlockchainStateDAO {
                 line7_last_number, line7_last_hash,
                 updated_at_ms
             ) VALUES (
-                ?,?,?,?,?,?,?,
+                ?,?,?,?,?,?,?,?,      -- ✅ было 7, стало 8
                 ?,?,
                 ?,?,
                 ?,?,

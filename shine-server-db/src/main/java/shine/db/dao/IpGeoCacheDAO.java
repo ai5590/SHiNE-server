@@ -47,7 +47,9 @@ public final class IpGeoCacheDAO {
                 updated_at_ms = excluded.updated_at_ms
             """;
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
+        try (Connection c = db.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+
             ps.setString(1, entry.getIp());
             ps.setString(2, entry.getGeo());
             ps.setLong(3, entry.getUpdatedAtMs());
@@ -66,7 +68,9 @@ public final class IpGeoCacheDAO {
             WHERE ip = ?
             """;
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
+        try (Connection c = db.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+
             ps.setString(1, ip);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
@@ -84,7 +88,9 @@ public final class IpGeoCacheDAO {
     public int deleteOlderThan(long thresholdMs) throws SQLException {
         String sql = "DELETE FROM ip_geo_cache WHERE updated_at_ms < ?";
 
-        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
+        try (Connection c = db.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+
             ps.setLong(1, thresholdMs);
             return ps.executeUpdate();
         }
