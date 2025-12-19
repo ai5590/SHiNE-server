@@ -30,7 +30,7 @@ public final class UserParamsDAO {
     public void upsert(Connection c, UserParamEntry param) throws SQLException {
         String sql = """
             INSERT INTO users_params (
-                loginId,
+                login,
                 param,
                 bch_channel_id,
                 value,
@@ -38,7 +38,7 @@ public final class UserParamsDAO {
                 pubkey_num,
                 signature
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(loginId, param)
+            ON CONFLICT(login, param)
             DO UPDATE SET
                 bch_channel_id = excluded.bch_channel_id,
                 value          = excluded.value,
@@ -48,7 +48,7 @@ public final class UserParamsDAO {
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setLong(1, param.getLoginId());
+            ps.setString(1, param.getLogin());
             ps.setString(2, param.getParam());
             ps.setLong(3, param.getBchChannelId());
             ps.setString(4, param.getValue());
@@ -69,10 +69,10 @@ public final class UserParamsDAO {
     // -------------------- SELECT --------------------
 
     /** Получить параметр с внешним соединением. Соединение НЕ закрывает. */
-    public UserParamEntry getByUserIdAndParam(Connection c, long loginId, String paramName) throws SQLException {
+    public UserParamEntry getByUserLoginAndParam(Connection c, String login, String paramName) throws SQLException {
         String sql = """
             SELECT
-                loginId,
+                login,
                 param,
                 bch_channel_id,
                 value,
@@ -80,11 +80,11 @@ public final class UserParamsDAO {
                 pubkey_num,
                 signature
             FROM users_params
-            WHERE loginId = ? AND param = ?
+            WHERE login = ? AND param = ?
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setLong(1, loginId);
+            ps.setString(1, login);
             ps.setString(2, paramName);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) return null;
@@ -94,17 +94,17 @@ public final class UserParamsDAO {
     }
 
     /** Получить параметр без внешнего соединения. Сам открывает/закрывает. */
-    public UserParamEntry getByUserIdAndParam(long loginId, String paramName) throws SQLException {
+    public UserParamEntry getByUserLoginAndParam(String login, String paramName) throws SQLException {
         try (Connection c = db.getConnection()) {
-            return getByUserIdAndParam(c, loginId, paramName);
+            return getByUserLoginAndParam(c, login, paramName);
         }
     }
 
     /** Получить все параметры пользователя с внешним соединением. Соединение НЕ закрывает. */
-    public List<UserParamEntry> getByUserId(Connection c, long loginId) throws SQLException {
+    public List<UserParamEntry> getByUserLogin(Connection c, String login) throws SQLException {
         String sql = """
             SELECT
-                loginId,
+                login,
                 param,
                 bch_channel_id,
                 value,
@@ -112,14 +112,14 @@ public final class UserParamsDAO {
                 pubkey_num,
                 signature
             FROM users_params
-            WHERE loginId = ?
+            WHERE login = ?
             ORDER BY time_ms DESC
             """;
 
         List<UserParamEntry> result = new ArrayList<>();
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setLong(1, loginId);
+            ps.setString(1, login);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) result.add(mapRow(rs));
             }
@@ -129,9 +129,9 @@ public final class UserParamsDAO {
     }
 
     /** Получить все параметры пользователя без внешнего соединения. Сам открывает/закрывает. */
-    public List<UserParamEntry> getByUserId(long loginId) throws SQLException {
+    public List<UserParamEntry> getByUserLogin(String login) throws SQLException {
         try (Connection c = db.getConnection()) {
-            return getByUserId(c, loginId);
+            return getByUserLogin(c, login);
         }
     }
 
@@ -139,7 +139,7 @@ public final class UserParamsDAO {
 
     private UserParamEntry mapRow(ResultSet rs) throws SQLException {
         return new UserParamEntry(
-                rs.getLong("loginId"),
+                rs.getString("login"),
                 rs.getString("param"),
                 rs.getLong("bch_channel_id"),
                 rs.getString("value"),

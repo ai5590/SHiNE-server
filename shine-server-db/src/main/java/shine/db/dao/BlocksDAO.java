@@ -13,7 +13,7 @@ import java.sql.*;
  * - методы без Connection сами открывают и закрывают соединение
  *
  * Важно:
- * - PRIMARY KEY: (loginId, blockchainId, blockGlobalNumber, blockLineIndex, blockLineNumber)
+ * - PRIMARY KEY удалён (временно), поэтому "upsert" сделан через UPDATE->INSERT.
  */
 public final class BlocksDAO {
 
@@ -37,8 +37,8 @@ public final class BlocksDAO {
     public void insert(Connection c, BlockEntry e) throws SQLException {
         String sql = """
             INSERT INTO blocks (
-                loginId,
-                blockchainId,
+                login,
+                bchName,
                 blockGlobalNumber,
                 blockGlobalPreHashe,
                 blockLineIndex,
@@ -46,8 +46,8 @@ public final class BlocksDAO {
                 blockLinePreHashe,
                 msgType,
                 blockByte,
-                toLoginId,
-                toBlockchainId,
+                to_login,
+                toBchName,
                 toBlockGlobalNumber,
                 toBlockHashe
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -66,45 +66,15 @@ public final class BlocksDAO {
         }
     }
 
-    // -------------------- UPSERT --------------------
+    // -------------------- UPSERT (UPDATE -> INSERT) --------------------
 
     /**
-     * Сохранить (upsert) с внешним соединением. Соединение НЕ закрывает.
-     * Если запись с таким PK уже есть — обновляем поля.
+     * Сохранить (условный upsert) с внешним соединением. Соединение НЕ закрывает.
+     * Без PK/UNIQUE делаем: UPDATE по "ключевым" полям -> если 0 строк, то INSERT.
      */
     public void upsert(Connection c, BlockEntry e) throws SQLException {
-        String sql = """
-            INSERT INTO blocks (
-                loginId,
-                blockchainId,
-                blockGlobalNumber,
-                blockGlobalPreHashe,
-                blockLineIndex,
-                blockLineNumber,
-                blockLinePreHashe,
-                msgType,
-                blockByte,
-                toLoginId,
-                toBlockchainId,
-                toBlockGlobalNumber,
-                toBlockHashe
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(loginId, blockchainId, blockGlobalNumber, blockLineIndex, blockLineNumber)
-            DO UPDATE SET
-                blockGlobalPreHashe   = excluded.blockGlobalPreHashe,
-                blockLinePreHashe     = excluded.blockLinePreHashe,
-                msgType               = excluded.msgType,
-                blockByte             = excluded.blockByte,
-                toLoginId             = excluded.toLoginId,
-                toBlockchainId        = excluded.toBlockchainId,
-                toBlockGlobalNumber   = excluded.toBlockGlobalNumber,
-                toBlockHashe          = excluded.toBlockHashe
-            """;
-
-        try (PreparedStatement ps = c.prepareStatement(sql)) {
-            bindAll(ps, e);
-            ps.executeUpdate();
-        }
+        int updated = update(c, e);
+        if (updated == 0) insert(c, e);
     }
 
     /** Сохранить (upsert) без внешнего соединения. Сам открывает/закрывает. */
@@ -116,18 +86,18 @@ public final class BlocksDAO {
 
     // -------------------- SELECT --------------------
 
-    /** Получить блок по PK с внешним соединением. Соединение НЕ закрывает. */
+    /** Получить блок по "PK-подобному" набору полей с внешним соединением. Соединение НЕ закрывает. */
     public BlockEntry getByPk(Connection c,
-                             long loginId,
-                             long blockchainId,
+                             String login,
+                             String bchName,
                              int blockGlobalNumber,
                              int blockLineIndex,
                              int blockLineNumber) throws SQLException {
 
         String sql = """
             SELECT
-                loginId,
-                blockchainId,
+                login,
+                bchName,
                 blockGlobalNumber,
                 blockGlobalPreHashe,
                 blockLineIndex,
@@ -135,22 +105,23 @@ public final class BlocksDAO {
                 blockLinePreHashe,
                 msgType,
                 blockByte,
-                toLoginId,
-                toBlockchainId,
+                to_login,
+                toBchName,
                 toBlockGlobalNumber,
                 toBlockHashe
             FROM blocks
             WHERE
-                loginId = ?
-                AND blockchainId = ?
+                login = ?
+                AND bchName = ?
                 AND blockGlobalNumber = ?
                 AND blockLineIndex = ?
                 AND blockLineNumber = ?
+            LIMIT 1
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setLong(1, loginId);
-            ps.setLong(2, blockchainId);
+            ps.setString(1, login);
+            ps.setString(2, bchName);
             ps.setInt(3, blockGlobalNumber);
             ps.setInt(4, blockLineIndex);
             ps.setInt(5, blockLineNumber);
@@ -162,22 +133,22 @@ public final class BlocksDAO {
         }
     }
 
-    /** Получить блок по PK без внешнего соединения. Сам открывает/закрывает. */
-    public BlockEntry getByPk(long loginId,
-                             long blockchainId,
+    /** Получить блок по "PK-подобному" набору полей без внешнего соединения. Сам открывает/закрывает. */
+    public BlockEntry getByPk(String login,
+                             String bchName,
                              int blockGlobalNumber,
                              int blockLineIndex,
                              int blockLineNumber) throws SQLException {
         try (Connection c = db.getConnection()) {
-            return getByPk(c, loginId, blockchainId, blockGlobalNumber, blockLineIndex, blockLineNumber);
+            return getByPk(c, login, bchName, blockGlobalNumber, blockLineIndex, blockLineNumber);
         }
     }
 
     // -------------------- UPDATE --------------------
 
     /**
-     * Обновить (строго UPDATE) по PK с внешним соединением. Соединение НЕ закрывает.
-     * Если строки нет — updateCount будет 0.
+     * Обновить (строго UPDATE) по "PK-подобному" набору полей с внешним соединением. Соединение НЕ закрывает.
+     * Может обновить >1 строк, если в таблице появились дубликаты.
      */
     public int update(Connection c, BlockEntry e) throws SQLException {
         String sql = """
@@ -187,13 +158,13 @@ public final class BlocksDAO {
                 blockLinePreHashe     = ?,
                 msgType               = ?,
                 blockByte             = ?,
-                toLoginId             = ?,
-                toBlockchainId        = ?,
+                to_login              = ?,
+                toBchName             = ?,
                 toBlockGlobalNumber   = ?,
                 toBlockHashe          = ?
             WHERE
-                loginId = ?
-                AND blockchainId = ?
+                login = ?
+                AND bchName = ?
                 AND blockGlobalNumber = ?
                 AND blockLineIndex = ?
                 AND blockLineNumber = ?
@@ -210,13 +181,15 @@ public final class BlocksDAO {
             if (bytes != null) ps.setBytes(i++, bytes);
             else ps.setNull(i++, Types.BLOB);
 
-            ps.setLong(i++, e.getToLoginId());
-            ps.setInt(i++, e.getToBlockchainId());
+            if (e.getToLogin() != null) ps.setString(i++, e.getToLogin());
+            else ps.setNull(i++, Types.VARCHAR);
+
+            ps.setString(i++, nn(e.getToBchName()));
             ps.setInt(i++, e.getToBlockGlobalNumber());
             ps.setString(i++, nn(e.getToBlockHashe()));
 
-            ps.setLong(i++, e.getLoginId());
-            ps.setLong(i++, e.getBlockchainId());
+            ps.setString(i++, e.getLogin());
+            ps.setString(i++, e.getBchName());
             ps.setInt(i++, e.getBlockGlobalNumber());
             ps.setInt(i++, e.getBlockLineIndex());
             ps.setInt(i++, e.getBlockLineNumber());
@@ -234,10 +207,13 @@ public final class BlocksDAO {
 
     // -------------------- DELETE --------------------
 
-    /** Удалить по PK с внешним соединением. Соединение НЕ закрывает. */
+    /**
+     * Удалить по "PK-подобному" набору полей с внешним соединением. Соединение НЕ закрывает.
+     * Может удалить >1 строк, если есть дубликаты.
+     */
     public int deleteByPk(Connection c,
-                          long loginId,
-                          long blockchainId,
+                          String login,
+                          String bchName,
                           int blockGlobalNumber,
                           int blockLineIndex,
                           int blockLineNumber) throws SQLException {
@@ -245,16 +221,16 @@ public final class BlocksDAO {
         String sql = """
             DELETE FROM blocks
             WHERE
-                loginId = ?
-                AND blockchainId = ?
+                login = ?
+                AND bchName = ?
                 AND blockGlobalNumber = ?
                 AND blockLineIndex = ?
                 AND blockLineNumber = ?
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setLong(1, loginId);
-            ps.setLong(2, blockchainId);
+            ps.setString(1, login);
+            ps.setString(2, bchName);
             ps.setInt(3, blockGlobalNumber);
             ps.setInt(4, blockLineIndex);
             ps.setInt(5, blockLineNumber);
@@ -262,25 +238,25 @@ public final class BlocksDAO {
         }
     }
 
-    /** Удалить по PK без внешнего соединения. Сам открывает/закрывает. */
-    public int deleteByPk(long loginId,
-                          long blockchainId,
+    /** Удалить по "PK-подобному" набору полей без внешнего соединения. Сам открывает/закрывает. */
+    public int deleteByPk(String login,
+                          String bchName,
                           int blockGlobalNumber,
                           int blockLineIndex,
                           int blockLineNumber) throws SQLException {
         try (Connection c = db.getConnection()) {
-            return deleteByPk(c, loginId, blockchainId, blockGlobalNumber, blockLineIndex, blockLineNumber);
+            return deleteByPk(c, login, bchName, blockGlobalNumber, blockLineIndex, blockLineNumber);
         }
     }
 
     // -------------------- INTERNAL --------------------
 
-    /** Единая привязка параметров под INSERT/UPSERT — чтобы не разъезжалось. */
+    /** Единая привязка параметров под INSERT — чтобы не разъезжалось. */
     private static void bindAll(PreparedStatement ps, BlockEntry e) throws SQLException {
         int i = 1;
 
-        ps.setLong(i++, e.getLoginId());
-        ps.setLong(i++, e.getBlockchainId());
+        ps.setString(i++, e.getLogin());
+        ps.setString(i++, e.getBchName());
         ps.setInt(i++, e.getBlockGlobalNumber());
         ps.setString(i++, nn(e.getBlockGlobalPreHashe()));
 
@@ -294,8 +270,10 @@ public final class BlocksDAO {
         if (bytes != null) ps.setBytes(i++, bytes);
         else ps.setNull(i++, Types.BLOB);
 
-        ps.setLong(i++, e.getToLoginId());
-        ps.setInt(i++, e.getToBlockchainId());
+        if (e.getToLogin() != null) ps.setString(i++, e.getToLogin());
+        else ps.setNull(i++, Types.VARCHAR);
+
+        ps.setString(i++, nn(e.getToBchName()));
         ps.setInt(i++, e.getToBlockGlobalNumber());
         ps.setString(i++, nn(e.getToBlockHashe()));
     }
@@ -303,8 +281,8 @@ public final class BlocksDAO {
     private BlockEntry mapRow(ResultSet rs) throws SQLException {
         BlockEntry e = new BlockEntry();
 
-        e.setLoginId(rs.getLong("loginId"));
-        e.setBlockchainId(rs.getLong("blockchainId"));
+        e.setLogin(rs.getString("login"));
+        e.setBchName(rs.getString("bchName"));
         e.setBlockGlobalNumber(rs.getInt("blockGlobalNumber"));
         e.setBlockGlobalPreHashe(rs.getString("blockGlobalPreHashe"));
 
@@ -316,8 +294,8 @@ public final class BlocksDAO {
 
         e.setBlockByte(rs.getBytes("blockByte"));
 
-        e.setToLoginId(rs.getLong("toLoginId"));
-        e.setToBlockchainId(rs.getInt("toBlockchainId"));
+        e.setToLogin(rs.getString("to_login"));
+        e.setToBchName(rs.getString("toBchName"));
         e.setToBlockGlobalNumber(rs.getInt("toBlockGlobalNumber"));
         e.setToBlockHashe(rs.getString("toBlockHashe"));
 

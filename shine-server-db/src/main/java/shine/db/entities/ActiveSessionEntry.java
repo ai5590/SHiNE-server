@@ -3,27 +3,13 @@ package shine.db.entities;
 /**
  * Модель активной сессии (таблица active_sessions).
  *
- * CREATE TABLE active_sessions (
- *     sessionId              TEXT    NOT NULL PRIMARY KEY,
- *     loginId                INTEGER NOT NULL,
- *     sessionPwd             TEXT    NOT NULL,
- *     storagePwd             TEXT    NOT NULL,
- *     sessionCreatedAtMs     INTEGER NOT NULL,
- *     lastAuthirificatedAtMs INTEGER NOT NULL,
- *     pushEndpoint           TEXT,
- *     pushP256dhKey          TEXT,
- *     pushAuthKey            TEXT,
- *     clientIp               TEXT,
- *     clientInfoFromClient   TEXT,
- *     clientInfoFromRequest  TEXT,
- *     userLanguage           TEXT,
- *     FOREIGN KEY (loginId) REFERENCES solana_users(loginId)
- * );
+ * Теперь вместо loginId:
+ *  - login TEXT NOT NULL (FK -> solana_users(login))
  */
 public class ActiveSessionEntry {
 
     private String sessionId;               // TEXT base64(32 bytes)
-    private long   loginId;                 // INTEGER
+    private String login;                   // TEXT NOT NULL
     private String sessionPwd;              // TEXT
     private String storagePwd;              // TEXT
     private long   sessionCreatedAtMs;      // INTEGER
@@ -42,7 +28,7 @@ public class ActiveSessionEntry {
     }
 
     public ActiveSessionEntry(String sessionId,
-                              long loginId,
+                              String login,
                               String sessionPwd,
                               String storagePwd,
                               long sessionCreatedAtMs,
@@ -55,7 +41,7 @@ public class ActiveSessionEntry {
                               String clientInfoFromRequest,
                               String userLanguage) {
         this.sessionId = sessionId;
-        this.loginId = loginId;
+        this.login = login;
         this.sessionPwd = sessionPwd;
         this.storagePwd = storagePwd;
         this.sessionCreatedAtMs = sessionCreatedAtMs;
@@ -69,109 +55,42 @@ public class ActiveSessionEntry {
         this.userLanguage = userLanguage;
     }
 
-    // --- getters / setters ---
+    public String getSessionId() { return sessionId; }
+    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
 
-    public String getSessionId() {
-        return sessionId;
-    }
+    public String getLogin() { return login; }
+    public void setLogin(String login) { this.login = login; }
 
-    public void setSessionId(String sessionId) {
-        this.sessionId = sessionId;
-    }
+    public String getSessionPwd() { return sessionPwd; }
+    public void setSessionPwd(String sessionPwd) { this.sessionPwd = sessionPwd; }
 
-    public long getLoginId() {
-        return loginId;
-    }
+    public String getStoragePwd() { return storagePwd; }
+    public void setStoragePwd(String storagePwd) { this.storagePwd = storagePwd; }
 
-    public void setLoginId(long loginId) {
-        this.loginId = loginId;
-    }
+    public long getSessionCreatedAtMs() { return sessionCreatedAtMs; }
+    public void setSessionCreatedAtMs(long sessionCreatedAtMs) { this.sessionCreatedAtMs = sessionCreatedAtMs; }
 
-    public String getSessionPwd() {
-        return sessionPwd;
-    }
+    public long getLastAuthirificatedAtMs() { return lastAuthirificatedAtMs; }
+    public void setLastAuthirificatedAtMs(long lastAuthirificatedAtMs) { this.lastAuthirificatedAtMs = lastAuthirificatedAtMs; }
 
-    public void setSessionPwd(String sessionPwd) {
-        this.sessionPwd = sessionPwd;
-    }
+    public String getPushEndpoint() { return pushEndpoint; }
+    public void setPushEndpoint(String pushEndpoint) { this.pushEndpoint = pushEndpoint; }
 
-    public String getStoragePwd() {
-        return storagePwd;
-    }
+    public String getPushP256dhKey() { return pushP256dhKey; }
+    public void setPushP256dhKey(String pushP256dhKey) { this.pushP256dhKey = pushP256dhKey; }
 
-    public void setStoragePwd(String storagePwd) {
-        this.storagePwd = storagePwd;
-    }
+    public String getPushAuthKey() { return pushAuthKey; }
+    public void setPushAuthKey(String pushAuthKey) { this.pushAuthKey = pushAuthKey; }
 
-    public long getSessionCreatedAtMs() {
-        return sessionCreatedAtMs;
-    }
+    public String getClientIp() { return clientIp; }
+    public void setClientIp(String clientIp) { this.clientIp = clientIp; }
 
-    public void setSessionCreatedAtMs(long sessionCreatedAtMs) {
-        this.sessionCreatedAtMs = sessionCreatedAtMs;
-    }
+    public String getClientInfoFromClient() { return clientInfoFromClient; }
+    public void setClientInfoFromClient(String clientInfoFromClient) { this.clientInfoFromClient = clientInfoFromClient; }
 
-    public long getLastAuthirificatedAtMs() {
-        return lastAuthirificatedAtMs;
-    }
+    public String getClientInfoFromRequest() { return clientInfoFromRequest; }
+    public void setClientInfoFromRequest(String clientInfoFromRequest) { this.clientInfoFromRequest = clientInfoFromRequest; }
 
-    public void setLastAuthirificatedAtMs(long lastAuthirificatedAtMs) {
-        this.lastAuthirificatedAtMs = lastAuthirificatedAtMs;
-    }
-
-    public String getPushEndpoint() {
-        return pushEndpoint;
-    }
-
-    public void setPushEndpoint(String pushEndpoint) {
-        this.pushEndpoint = pushEndpoint;
-    }
-
-    public String getPushP256dhKey() {
-        return pushP256dhKey;
-    }
-
-    public void setPushP256dhKey(String pushP256dhKey) {
-        this.pushP256dhKey = pushP256dhKey;
-    }
-
-    public String getPushAuthKey() {
-        return pushAuthKey;
-    }
-
-    public void setPushAuthKey(String pushAuthKey) {
-        this.pushAuthKey = pushAuthKey;
-    }
-
-    public String getClientIp() {
-        return clientIp;
-    }
-
-    public void setClientIp(String clientIp) {
-        this.clientIp = clientIp;
-    }
-
-    public String getClientInfoFromClient() {
-        return clientInfoFromClient;
-    }
-
-    public void setClientInfoFromClient(String clientInfoFromClient) {
-        this.clientInfoFromClient = clientInfoFromClient;
-    }
-
-    public String getClientInfoFromRequest() {
-        return clientInfoFromRequest;
-    }
-
-    public void setClientInfoFromRequest(String clientInfoFromRequest) {
-        this.clientInfoFromRequest = clientInfoFromRequest;
-    }
-
-    public String getUserLanguage() {
-        return userLanguage;
-    }
-
-    public void setUserLanguage(String userLanguage) {
-        this.userLanguage = userLanguage;
-    }
+    public String getUserLanguage() { return userLanguage; }
+    public void setUserLanguage(String userLanguage) { this.userLanguage = userLanguage; }
 }

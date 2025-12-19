@@ -37,7 +37,7 @@ public final class ActiveSessionsDAO {
         String sql = """
             INSERT INTO active_sessions (
                 sessionId,
-                loginId,
+                login,
                 sessionPwd,
                 storagePwd,
                 sessionCreatedAtMs,
@@ -54,7 +54,7 @@ public final class ActiveSessionsDAO {
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1,  session.getSessionId());
-            ps.setLong(2,    session.getLoginId());
+            ps.setString(2,  session.getLogin());
             ps.setString(3,  session.getSessionPwd());
             ps.setString(4,  session.getStoragePwd());
             ps.setLong(5,    session.getSessionCreatedAtMs());
@@ -84,7 +84,7 @@ public final class ActiveSessionsDAO {
         String sql = """
             SELECT
                 sessionId,
-                loginId,
+                login,
                 sessionPwd,
                 storagePwd,
                 sessionCreatedAtMs,
@@ -116,12 +116,12 @@ public final class ActiveSessionsDAO {
         }
     }
 
-    /** Получить список по loginId с внешним соединением. Соединение НЕ закрывает. */
-    public List<ActiveSessionEntry> getByLoginId(Connection c, long loginId) throws SQLException {
+    /** Получить список по login с внешним соединением. Соединение НЕ закрывает. */
+    public List<ActiveSessionEntry> getByLogin(Connection c, String login) throws SQLException {
         String sql = """
             SELECT
                 sessionId,
-                loginId,
+                login,
                 sessionPwd,
                 storagePwd,
                 sessionCreatedAtMs,
@@ -134,13 +134,13 @@ public final class ActiveSessionsDAO {
                 clientInfoFromRequest,
                 userLanguage
             FROM active_sessions
-            WHERE loginId = ?
+            WHERE login = ?
             """;
 
         List<ActiveSessionEntry> result = new ArrayList<>();
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setLong(1, loginId);
+            ps.setString(1, login);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) result.add(mapRow(rs));
             }
@@ -149,10 +149,10 @@ public final class ActiveSessionsDAO {
         return result;
     }
 
-    /** Получить список по loginId без внешнего соединения. Сам открывает/закрывает. */
-    public List<ActiveSessionEntry> getByLoginId(long loginId) throws SQLException {
+    /** Получить список по login без внешнего соединения. Сам открывает/закрывает. */
+    public List<ActiveSessionEntry> getByLogin(String login) throws SQLException {
         try (Connection c = db.getConnection()) {
-            return getByLoginId(c, loginId);
+            return getByLogin(c, login);
         }
     }
 
@@ -250,7 +250,7 @@ public final class ActiveSessionsDAO {
 
     private ActiveSessionEntry mapRow(ResultSet rs) throws SQLException {
         String sessionId              = rs.getString("sessionId");
-        long   loginId                = rs.getLong("loginId");
+        String login                  = rs.getString("login");
         String sessionPwd             = rs.getString("sessionPwd");
         String storagePwd             = rs.getString("storagePwd");
         long   sessionCreatedAtMs     = rs.getLong("sessionCreatedAtMs");
@@ -265,7 +265,7 @@ public final class ActiveSessionsDAO {
 
         return new ActiveSessionEntry(
                 sessionId,
-                loginId,
+                login,
                 sessionPwd,
                 storagePwd,
                 sessionCreatedAtMs,

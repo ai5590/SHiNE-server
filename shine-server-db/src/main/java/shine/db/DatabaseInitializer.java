@@ -14,14 +14,13 @@ import java.sql.Statement;
 /**
  * DatabaseInitializer — создание новой SQLite-БД по схеме SHiNE.
  *
- * Читает путь к файлу БД из application.properties (db.path),
- * при необходимости удаляет старый файл и создаёт таблицы:
- *  - solana_users
- *  - active_sessions
- *  - users_params
+ * Таблицы:
+ *  - solana_users     (login TEXT PK, bchName TEXT)
+ *  - active_sessions  (login TEXT FK)
+ *  - users_params     (login TEXT FK, UNIQUE(login,param))
  *  - ip_geo_cache
  *  - blockchain_state (MVP)
- *  - blocks
+ *  - blocks           (login TEXT, bchName TEXT, PK убран)
  */
 public class DatabaseInitializer {
 
@@ -81,9 +80,8 @@ public class DatabaseInitializer {
             // 1. solana_users
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS solana_users (
-                    login       TEXT    NOT NULL,
-                    loginId     INTEGER NOT NULL PRIMARY KEY,
-                    bchId       INTEGER NOT NULL,
+                    login       TEXT    NOT NULL PRIMARY KEY,
+                    bchName     TEXT    NOT NULL,
                     loginKey    TEXT,
                     deviceKey   TEXT,
                     bchLimit    INTEGER
@@ -99,7 +97,7 @@ public class DatabaseInitializer {
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS active_sessions (
                     sessionId                TEXT    NOT NULL PRIMARY KEY,
-                    loginId                  INTEGER NOT NULL,
+                    login                    TEXT    NOT NULL,
                     sessionPwd               TEXT    NOT NULL,
                     storagePwd               TEXT    NOT NULL,
                     sessionCreatedAtMs       INTEGER NOT NULL,
@@ -111,33 +109,33 @@ public class DatabaseInitializer {
                     clientInfoFromClient     TEXT,
                     clientInfoFromRequest    TEXT,
                     userLanguage             TEXT,
-                    FOREIGN KEY (loginId) REFERENCES solana_users(loginId)
+                    FOREIGN KEY (login) REFERENCES solana_users(login)
                 );
                 """);
 
             st.executeUpdate("""
-                CREATE INDEX IF NOT EXISTS idx_active_sessions_loginId
-                ON active_sessions (loginId);
+                CREATE INDEX IF NOT EXISTS idx_active_sessions_login
+                ON active_sessions (login);
                 """);
 
             // 3. users_params
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS users_params (
-                    loginId        INTEGER NOT NULL,
+                    login          TEXT    NOT NULL,
                     param          TEXT    NOT NULL,
                     bch_channel_id INTEGER NOT NULL DEFAULT 0,
                     value          TEXT,
                     time_ms        INTEGER NOT NULL,
                     pubkey_num     INTEGER NOT NULL,
                     signature      TEXT,
-                    FOREIGN KEY (loginId) REFERENCES solana_users(loginId),
-                    UNIQUE (loginId, param)
+                    FOREIGN KEY (login) REFERENCES solana_users(login),
+                    UNIQUE (login, param)
                 );
                 """);
 
             st.executeUpdate("""
-                CREATE INDEX IF NOT EXISTS idx_users_params_loginId
-                ON users_params (loginId);
+                CREATE INDEX IF NOT EXISTS idx_users_params_login
+                ON users_params (login);
                 """);
 
             // 4. ip_geo_cache
@@ -154,8 +152,7 @@ public class DatabaseInitializer {
                 ON ip_geo_cache (updated_at_ms);
                 """);
 
-            // 5. blockchain_state (MVP)
-            // TODO: позже можно вынести линии в отдельную таблицу blockchain_line_state и убрать "широкую" схему.
+            // 5. blockchain_state (MVP) — оставляю как было (там уже user_login TEXT)
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS blockchain_state (
                     blockchain_id           INTEGER NOT NULL PRIMARY KEY,
@@ -201,11 +198,11 @@ public class DatabaseInitializer {
                 ON blockchain_state (updated_at_ms);
                 """);
 
-            // 6. blocks
+            // 6. blocks — PK удалён полностью
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS blocks (
-                    loginId               INTEGER NOT NULL,
-                    blockchainId          INTEGER NOT NULL,
+                    login                TEXT    NOT NULL,
+                    bchName               TEXT    NOT NULL,
                     blockGlobalNumber     INTEGER NOT NULL,
                     blockGlobalPreHashe   TEXT    NOT NULL,
 
@@ -217,28 +214,23 @@ public class DatabaseInitializer {
 
                     blockByte             BLOB,
 
-                    toLoginId             INTEGER NOT NULL,
-                    toBlockchainId        INTEGER NOT NULL,
+                    to_login              TEXT,
+                    toBchName             TEXT    NOT NULL,
                     toBlockGlobalNumber   INTEGER NOT NULL,
                     toBlockHashe          TEXT    NOT NULL,
 
-                    -- Выбранный PK (см. BlocksDAO)
-                    PRIMARY KEY (loginId, blockchainId, blockGlobalNumber, blockLineIndex, blockLineNumber),
-
-                    -- Связи (по желанию можно ослабить/убрать, если будут "частичные" данные)
-                    FOREIGN KEY (loginId) REFERENCES solana_users(loginId)
+                    FOREIGN KEY (login) REFERENCES solana_users(login)
                 );
                 """);
 
-            // Индексы под типовые запросы: по цепочке/глобальному номеру и по "to*"
             st.executeUpdate("""
                 CREATE INDEX IF NOT EXISTS idx_blocks_chain_global
-                ON blocks (loginId, blockchainId, blockGlobalNumber);
+                ON blocks (login, bchName, blockGlobalNumber);
                 """);
 
             st.executeUpdate("""
                 CREATE INDEX IF NOT EXISTS idx_blocks_to_target
-                ON blocks (toLoginId, toBlockchainId, toBlockGlobalNumber);
+                ON blocks (to_login, toBchName, toBlockGlobalNumber);
                 """);
         }
     }

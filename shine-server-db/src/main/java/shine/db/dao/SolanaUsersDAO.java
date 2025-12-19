@@ -11,16 +11,15 @@ import java.util.List;
  * SolanaUsersDAO — локальная таблица пользователей из Solana.
  *
  * Колонки:
- *  - login       TEXT
- *  - loginId     INTEGER (PK)
- *  - bchId       INTEGER
+ *  - login       TEXT (PK)
+ *  - bchName     TEXT
  *  - loginKey    TEXT
  *  - deviceKey   TEXT
  *  - bchLimit    INTEGER (может быть NULL)
  *
- *   * Правило:
- *  * - методы с Connection НЕ закрывают соединение
- *  * - методы без Connection сами открывают и закрывают соединение
+ * Правило:
+ * - методы с Connection НЕ закрывают соединение
+ * - методы без Connection сами открывают и закрывают соединение
  */
 public final class SolanaUsersDAO {
 
@@ -43,22 +42,18 @@ public final class SolanaUsersDAO {
     /** Вставка с внешним соединением. Соединение НЕ закрывает. */
     public void insert(Connection c, SolanaUserEntry user) throws SQLException {
         String sql = """
-            INSERT INTO solana_users (login, loginId, bchId, loginKey, deviceKey, bchLimit)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO solana_users (login, bchName, loginKey, deviceKey, bchLimit)
+            VALUES (?, ?, ?, ?, ?)
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, user.getLogin());
-            ps.setLong(2, user.getLoginId());
-            ps.setLong(3, user.getBchId());
-            ps.setString(4, user.getLoginKey());
-            ps.setString(5, user.getDeviceKey());
+            ps.setString(2, user.getBchName());
+            ps.setString(3, user.getLoginKey());
+            ps.setString(4, user.getDeviceKey());
 
-            if (user.getBchLimit() != null) {
-                ps.setInt(6, user.getBchLimit());
-            } else {
-                ps.setNull(6, Types.INTEGER);
-            }
+            if (user.getBchLimit() != null) ps.setInt(5, user.getBchLimit());
+            else ps.setNull(5, Types.INTEGER);
 
             ps.executeUpdate();
         }
@@ -73,34 +68,10 @@ public final class SolanaUsersDAO {
 
     // -------------------- SELECT --------------------
 
-    /** Получить по loginId с внешним соединением. Соединение НЕ закрывает. */
-    public SolanaUserEntry getByLoginId(Connection c, long loginId) throws SQLException {
-        String sql = """
-            SELECT login, loginId, bchId, loginKey, deviceKey, bchLimit
-            FROM solana_users
-            WHERE loginId = ?
-            """;
-
-        try (PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setLong(1, loginId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return null;
-                return mapRow(rs);
-            }
-        }
-    }
-
-    /** Получить по loginId без внешнего соединения. Сам открывает/закрывает. */
-    public SolanaUserEntry getByLoginId(long loginId) throws SQLException {
-        try (Connection c = db.getConnection()) {
-            return getByLoginId(c, loginId);
-        }
-    }
-
     /** Получить по login (case-insensitive) с внешним соединением. Соединение НЕ закрывает. */
     public SolanaUserEntry getByLogin(Connection c, String login) throws SQLException {
         String sql = """
-            SELECT login, loginId, bchId, loginKey, deviceKey, bchLimit
+            SELECT login, bchName, loginKey, deviceKey, bchLimit
             FROM solana_users
             WHERE LOWER(login) = LOWER(?)
             """;
@@ -124,7 +95,7 @@ public final class SolanaUsersDAO {
     /** Поиск по префиксу с внешним соединением. Соединение НЕ закрывает. */
     public List<SolanaUserEntry> searchByLoginPrefix(Connection c, String prefix) throws SQLException {
         String sql = """
-            SELECT login, loginId, bchId, loginKey, deviceKey, bchLimit
+            SELECT login, bchName, loginKey, deviceKey, bchLimit
             FROM solana_users
             WHERE LOWER(login) LIKE ?
             ORDER BY login
@@ -154,9 +125,8 @@ public final class SolanaUsersDAO {
 
     private SolanaUserEntry mapRow(ResultSet rs) throws SQLException {
         return new SolanaUserEntry(
-                rs.getLong("loginId"),
                 rs.getString("login"),
-                rs.getLong("bchId"),
+                rs.getString("bchName"),
                 rs.getString("loginKey"),
                 rs.getString("deviceKey"),
                 rs.getObject("bchLimit") != null ? rs.getInt("bchLimit") : null

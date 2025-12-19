@@ -3,22 +3,19 @@ package shine.db.entities;
 /**
  * Запись блока (таблица blocks).
  *
- * Идея:
- * - Храним и "глобальную" позицию (blockGlobalNumber + blockGlobalPreHashe),
- *   и "линейную" позицию (blockLineIndex + blockLineNumber + blockLinePreHashe),
- *   плюс полезные поля маршрутизации (to*).
+ * Теперь:
+ *  - login       TEXT NOT NULL
+ *  - bchName     TEXT NOT NULL (идёт сразу после login)
+ *  - to_login    TEXT nullable
+ *  - toBchName   TEXT NOT NULL (идёт сразу после to_login)
  *
- * В БД:
- * - int64 -> INTEGER (Java long)
- * - int32 -> INTEGER (Java int)
- * - int16 -> INTEGER (Java int/short)
- * - bytes -> BLOB (Java byte[])
- * - hashes -> TEXT
+ * PRIMARY KEY пока убран вообще.
  */
 public class BlockEntry {
 
-    private long loginId;                 // int64
-    private long blockchainId;            // int64
+    private String login;                 // TEXT
+    private String bchName;               // TEXT
+
     private int  blockGlobalNumber;       // int32
     private String blockGlobalPreHashe;   // TEXT
 
@@ -30,15 +27,15 @@ public class BlockEntry {
 
     private byte[] blockByte;             // BLOB
 
-    private long toLoginId;               // int64
-    private int  toBlockchainId;          // int32
+    private String toLogin;               // TEXT nullable
+    private String toBchName;             // TEXT
     private int  toBlockGlobalNumber;     // int32
     private String toBlockHashe;          // TEXT
 
     public BlockEntry() {}
 
-    public BlockEntry(long loginId,
-                      long blockchainId,
+    public BlockEntry(String login,
+                      String bchName,
                       int blockGlobalNumber,
                       String blockGlobalPreHashe,
                       int blockLineIndex,
@@ -46,12 +43,12 @@ public class BlockEntry {
                       String blockLinePreHashe,
                       int msgType,
                       byte[] blockByte,
-                      long toLoginId,
-                      int toBlockchainId,
+                      String toLogin,
+                      String toBchName,
                       int toBlockGlobalNumber,
                       String toBlockHashe) {
-        this.loginId = loginId;
-        this.blockchainId = blockchainId;
+        this.login = login;
+        this.bchName = bchName;
         this.blockGlobalNumber = blockGlobalNumber;
         this.blockGlobalPreHashe = blockGlobalPreHashe;
         this.blockLineIndex = blockLineIndex;
@@ -59,17 +56,17 @@ public class BlockEntry {
         this.blockLinePreHashe = blockLinePreHashe;
         this.msgType = msgType;
         this.blockByte = blockByte;
-        this.toLoginId = toLoginId;
-        this.toBlockchainId = toBlockchainId;
+        this.toLogin = toLogin;
+        this.toBchName = toBchName;
         this.toBlockGlobalNumber = toBlockGlobalNumber;
         this.toBlockHashe = toBlockHashe;
     }
 
-    public long getLoginId() { return loginId; }
-    public void setLoginId(long loginId) { this.loginId = loginId; }
+    public String getLogin() { return login; }
+    public void setLogin(String login) { this.login = login; }
 
-    public long getBlockchainId() { return blockchainId; }
-    public void setBlockchainId(long blockchainId) { this.blockchainId = blockchainId; }
+    public String getBchName() { return bchName; }
+    public void setBchName(String bchName) { this.bchName = bchName; }
 
     public int getBlockGlobalNumber() { return blockGlobalNumber; }
     public void setBlockGlobalNumber(int blockGlobalNumber) { this.blockGlobalNumber = blockGlobalNumber; }
@@ -92,11 +89,11 @@ public class BlockEntry {
     public byte[] getBlockByte() { return blockByte; }
     public void setBlockByte(byte[] blockByte) { this.blockByte = blockByte; }
 
-    public long getToLoginId() { return toLoginId; }
-    public void setToLoginId(long toLoginId) { this.toLoginId = toLoginId; }
+    public String getToLogin() { return toLogin; }
+    public void setToLogin(String toLogin) { this.toLogin = toLogin; }
 
-    public int getToBlockchainId() { return toBlockchainId; }
-    public void setToBlockchainId(int toBlockchainId) { this.toBlockchainId = toBlockchainId; }
+    public String getToBchName() { return toBchName; }
+    public void setToBchName(String toBchName) { this.toBchName = toBchName; }
 
     public int getToBlockGlobalNumber() { return toBlockGlobalNumber; }
     public void setToBlockGlobalNumber(int toBlockGlobalNumber) { this.toBlockGlobalNumber = toBlockGlobalNumber; }
