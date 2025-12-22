@@ -51,7 +51,7 @@ public class Net_ListSessions_Handler implements JsonMessageHandler {
         }
 
         SolanaUserEntry user = ctx.getSolanaUser();
-        long currentLoginId = user.getLoginId();
+        String currentLogin = user.getLogin();
 
         int authStatus = ctx.getAuthenticationStatus();
         if (authStatus != ConnectionContext.AUTH_STATUS_USER
@@ -130,9 +130,9 @@ public class Net_ListSessions_Handler implements JsonMessageHandler {
         // 3) Тянем все активные сессии пользователя из БД
         List<ActiveSessionEntry> sessions;
         try {
-            sessions = ActiveSessionsDAO.getInstance().getByLoginId(currentLoginId);
+            sessions = ActiveSessionsDAO.getInstance().getByLogin(currentLogin);
         } catch (SQLException e) {
-            log.error("Ошибка БД при получении списка сессий для loginId={}", currentLoginId, e);
+            log.error("Ошибка БД при получении списка сессий для login={}", currentLogin, e);
             return NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.SERVER_DATA_ERROR,

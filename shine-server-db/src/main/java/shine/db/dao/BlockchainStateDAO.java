@@ -40,6 +40,7 @@ public final class BlockchainStateDAO {
                 file_size_bytes,
                 last_global_number,
                 last_global_hash,
+                updated_at_ms,
                 line0_last_number, line0_last_hash,
                 line1_last_number, line1_last_hash,
                 line2_last_number, line2_last_hash,
@@ -47,8 +48,7 @@ public final class BlockchainStateDAO {
                 line4_last_number, line4_last_hash,
                 line5_last_number, line5_last_hash,
                 line6_last_number, line6_last_hash,
-                line7_last_number, line7_last_hash,
-                updated_at_ms
+                line7_last_number, line7_last_hash
             FROM blockchain_state
             WHERE blockchainName = ?
             """;
@@ -81,6 +81,7 @@ public final class BlockchainStateDAO {
                 file_size_bytes,
                 last_global_number,
                 last_global_hash,
+                updated_at_ms,
                 line0_last_number, line0_last_hash,
                 line1_last_number, line1_last_hash,
                 line2_last_number, line2_last_hash,
@@ -88,10 +89,9 @@ public final class BlockchainStateDAO {
                 line4_last_number, line4_last_hash,
                 line5_last_number, line5_last_hash,
                 line6_last_number, line6_last_hash,
-                line7_last_number, line7_last_hash,
-                updated_at_ms
+                line7_last_number, line7_last_hash
             ) VALUES (
-                ?,?,?,?,?,?,?,?,
+                ?,?,?,?,?,?,?,?,?,
                 ?,?,
                 ?,?,
                 ?,?,
@@ -100,7 +100,7 @@ public final class BlockchainStateDAO {
                 ?,?,
                 ?,?,
                 ?,?,
-                ?
+                ?,?
             )
             ON CONFLICT(blockchainName)
             DO UPDATE SET
@@ -111,6 +111,7 @@ public final class BlockchainStateDAO {
                 file_size_bytes    = excluded.file_size_bytes,
                 last_global_number = excluded.last_global_number,
                 last_global_hash   = excluded.last_global_hash,
+                updated_at_ms      = excluded.updated_at_ms,
                 line0_last_number  = excluded.line0_last_number,
                 line0_last_hash    = excluded.line0_last_hash,
                 line1_last_number  = excluded.line1_last_number,
@@ -126,12 +127,12 @@ public final class BlockchainStateDAO {
                 line6_last_number  = excluded.line6_last_number,
                 line6_last_hash    = excluded.line6_last_hash,
                 line7_last_number  = excluded.line7_last_number,
-                line7_last_hash    = excluded.line7_last_hash,
-                updated_at_ms      = excluded.updated_at_ms
+                line7_last_hash    = excluded.line7_last_hash
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             int i = 1;
+
             ps.setString(i++, e.getBlockchainName());
             ps.setString(i++, nn(e.getLogin()));
             ps.setString(i++, nn(e.getPublicKeyBase64()));
@@ -140,19 +141,20 @@ public final class BlockchainStateDAO {
             ps.setLong(i++, e.getFileSizeBytes());
             ps.setInt(i++, e.getLastGlobalNumber());
             ps.setString(i++, nn(e.getLastGlobalHash()));
+            ps.setLong(i++, e.getUpdatedAtMs());
 
             for (int line = 0; line < 8; line++) {
                 ps.setInt(i++, e.getLastLineNumber(line));
                 ps.setString(i++, nn(e.getLastLineHash(line)));
             }
 
-            ps.setLong(i++, e.getUpdatedAtMs());
             ps.executeUpdate();
         }
     }
 
     private BlockchainStateEntry mapRow(ResultSet rs) throws SQLException {
         BlockchainStateEntry e = new BlockchainStateEntry();
+
         e.setBlockchainName(rs.getString("blockchainName"));
         e.setLogin(rs.getString("login"));
         e.setPublicKeyBase64(rs.getString("public_key_base64"));
@@ -164,12 +166,13 @@ public final class BlockchainStateDAO {
         e.setLastGlobalNumber(rs.getInt("last_global_number"));
         e.setLastGlobalHash(rs.getString("last_global_hash"));
 
+        e.setUpdatedAtMs(rs.getLong("updated_at_ms"));
+
         for (int line = 0; line < 8; line++) {
             e.setLastLineNumber(line, rs.getInt("line" + line + "_last_number"));
             e.setLastLineHash(line, rs.getString("line" + line + "_last_hash"));
         }
 
-        e.setUpdatedAtMs(rs.getLong("updated_at_ms"));
         return e;
     }
 

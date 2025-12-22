@@ -77,14 +77,10 @@ public class ConnectionContext {
         this.activeSessionEntry = activeSessionEntry;
     }
 
-    // --- Удобные геттеры для логина ---
+    // --- Удобный геттер для логина ---
 
     public String getLogin() {
         return solanaUserEntry != null ? solanaUserEntry.getLogin() : null;
-    }
-
-    public Long getLoginId() {
-        return solanaUserEntry != null ? solanaUserEntry.getLoginId() : null;
     }
 
     // --- sessionId / sessionPwd ---
@@ -149,7 +145,6 @@ public class ConnectionContext {
     public String toString() {
         return "ConnectionContext{" +
                 "login='" + getLogin() + '\'' +
-                ", loginId=" + getLoginId() +
                 ", sessionId=" + sessionId +
                 ", authenticationStatus=" + authenticationStatus +
                 '}';

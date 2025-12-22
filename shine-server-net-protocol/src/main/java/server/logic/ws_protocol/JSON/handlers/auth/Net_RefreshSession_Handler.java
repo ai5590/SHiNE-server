@@ -95,14 +95,15 @@ public class Net_RefreshSession_Handler implements JsonMessageHandler {
             );
         }
 
-        // --- вытаскиваем пользователя по loginId ---
-        SolanaUserEntry solanaUserEntry = null;
-        long loginId = session.getLoginId();
+        // --- вытаскиваем пользователя по login из сессии ---
+        SolanaUserEntry solanaUserEntry;
+        String login = session.getLogin();
+
         try {
             SolanaUsersDAO usersDao = SolanaUsersDAO.getInstance();
-            solanaUserEntry = usersDao.getByLoginId(loginId);
+            solanaUserEntry = usersDao.getByLogin(login);
         } catch (SQLException e) {
-            log.error("Ошибка БД при поиске пользователя по loginId={} из сессии", loginId, e);
+            log.error("Ошибка БД при поиске пользователя по login={} из сессии", login, e);
             return NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.SERVER_DATA_ERROR,

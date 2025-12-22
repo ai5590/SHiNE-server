@@ -11,7 +11,6 @@ import shine.db.entities.SolanaUserEntry;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.util.Base64;
 
 /**
@@ -28,9 +27,9 @@ public final class BlockchainStateService_new {
 
     /** Результат атомарного addBlock */
     public static final class AddBlockResult {
-        public final int lineIndex;                  // 0..7 (пока ставим 0)
-        public final int httpStatus;                 // WireCodes.Status.*
-        public final String reasonCode;              // null если ok
+        public final int lineIndex;                   // 0..7 (пока ставим 0)
+        public final int httpStatus;                  // WireCodes.Status.*
+        public final String reasonCode;               // null если ok
         public final BlockchainStateEntry stateAfter; // состояние после (может быть null)
 
         public AddBlockResult(int lineIndex, int httpStatus, String reasonCode, BlockchainStateEntry stateAfter) {
@@ -69,7 +68,7 @@ public final class BlockchainStateService_new {
      */
     public AddBlockResult addBlockAtomically(
             String login,
-            long blockchainId,
+            String blockchainName,
             int globalNumber,
             String prevGlobalHash,
             String blockBytesB64
@@ -91,11 +90,21 @@ public final class BlockchainStateService_new {
             );
         }
 
+        if (login == null || login.isBlank()) {
+            return new AddBlockResult(lineIndex, WireCodes.Status.BAD_REQUEST, "empty_login", null);
+        }
+        if (blockchainName == null || blockchainName.isBlank()) {
+            return new AddBlockResult(lineIndex, WireCodes.Status.BAD_REQUEST, "empty_blockchain_name", null);
+        }
+        if (blockBytes == null || blockBytes.length == 0) {
+            return new AddBlockResult(lineIndex, WireCodes.Status.BAD_REQUEST, "empty_block_bytes", null);
+        }
+
         try (Connection c = db.getConnection()) {
             boolean oldAutoCommit = c.getAutoCommit();
             c.setAutoCommit(false);
             try {
-                // 1) получаем loginId по login
+                // 1) получаем пользователя по login (если надо валидировать существование)
                 SolanaUserEntry u = solanaUsersDAO.getByLogin(c, login);
                 if (u == null) {
                     c.rollback();
@@ -106,13 +115,12 @@ public final class BlockchainStateService_new {
                             null
                     );
                 }
-                long loginId = u.getLoginId();
 
                 // 2) вставляем блок в blocks
-                insertBlockRow(c, loginId, blockchainId, globalNumber, prevGlobalHash, blockBytes, lineIndex);
+                insertBlockRow(c, login, blockchainName, globalNumber, prevGlobalHash, blockBytes, lineIndex);
 
-                // 3) обновляем агрегатное состояние blockchain_state
-                BlockchainStateEntry st = stateDAO.getByBlockchainId(c, blockchainId);
+                // 3) обновляем агрегатное состояние blockchain_state (по blockchainName)
+                BlockchainStateEntry st = stateDAO.getByBlockchainName(c, blockchainName);
                 if (st == null) {
                     c.rollback();
                     return new AddBlockResult(
@@ -124,7 +132,6 @@ public final class BlockchainStateService_new {
                 }
 
                 // MVP: обновляем “последний глобальный номер”.
-                // Хэш тут сейчас оставлен как заглушка — лучше поставить фактический хэш нового блока.
                 st.setLastGlobalNumber(globalNumber);
                 st.setLastGlobalHash(nn(prevGlobalHash)); // TODO: заменить на hash нового блока
                 st.setUpdatedAtMs(System.currentTimeMillis());
@@ -158,8 +165,8 @@ public final class BlockchainStateService_new {
 
     private void insertBlockRow(
             Connection c,
-            long loginId,
-            long blockchainId,
+            String login,
+            String blockchainName,
             int globalNumber,
             String prevGlobalHash,
             byte[] blockBytes,
@@ -167,8 +174,9 @@ public final class BlockchainStateService_new {
     ) throws SQLException {
 
         BlockEntry e = new BlockEntry();
-        e.setLoginId(loginId);
-        e.setBlockchainId(blockchainId);
+
+        e.setLogin(login);
+        e.setBchName(blockchainName);
 
         e.setBlockGlobalNumber(globalNumber);
         e.setBlockGlobalPreHashe(nn(prevGlobalHash));
@@ -182,10 +190,11 @@ public final class BlockchainStateService_new {
 
         e.setBlockByte(blockBytes);
 
-        e.setToLoginId(0);
-        e.setToBlockchainId(0);
-        e.setToBlockGlobalNumber(0);
-        e.setToBlockHashe("");
+        // NEW: nullable ссылки (не забиваем фейковыми нулями)
+        e.setToLogin(null);
+        e.setToBchName(null);
+        e.setToBlockGlobalNumber(null);
+        e.setToBlockHashe(null);
 
         blocksDAO.upsert(c, e);
     }

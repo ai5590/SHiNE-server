@@ -27,16 +27,15 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
         Net_AddUser_Request req = (Net_AddUser_Request) baseRequest;
 
         if (req.getLogin() == null || req.getLogin().isBlank()
+                || req.getBlockchainName() == null || req.getBlockchainName().isBlank()
                 || req.getLoginKey() == null || req.getLoginKey().isBlank()
-                || req.getDeviceKey() == null || req.getDeviceKey().isBlank()
-                || req.getLoginId() <= 0
-                || req.getBchId() <= 0) {
+                || req.getDeviceKey() == null || req.getDeviceKey().isBlank()) {
 
             return NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.BAD_REQUEST,
                     "BAD_FIELDS",
-                    "Некорректные поля: login/loginId/bchId/loginKey/deviceKey"
+                    "Некорректные поля: login/blockchainName/loginKey/deviceKey"
             );
         }
 
@@ -47,9 +46,8 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
             SolanaUsersDAO dao = SolanaUsersDAO.getInstance();
 
             SolanaUserEntry user = new SolanaUserEntry(
-                    req.getLoginId(),
                     req.getLogin(),
-                    req.getBchId(),
+                    req.getBlockchainName(),
                     req.getLoginKey(),
                     req.getDeviceKey(),
                     limit
@@ -62,8 +60,8 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
             resp.setRequestId(req.getRequestId());
             resp.setStatus(WireCodes.Status.OK);
 
-            log.info("✅ AddUser ok: login={}, loginId={}, bchId={}, limit={}",
-                    req.getLogin(), req.getLoginId(), req.getBchId(), limit);
+            log.info("✅ AddUser ok: login={}, blockchainName={}, limit={}",
+                    req.getLogin(), req.getBlockchainName(), limit);
 
             return resp;
 

@@ -16,7 +16,7 @@ public final class Net_AddBlock_new_Handler implements JsonMessageHandler {
 
         var r = BlockchainStateService_new.getInstance().addBlockAtomically(
                 req.getLogin(),
-                req.getBlockchainId(),
+                req.getBlockchainName(),
                 req.getGlobalNumber(),
                 req.getPrevGlobalHash(),
                 req.getBlockBytesB64()

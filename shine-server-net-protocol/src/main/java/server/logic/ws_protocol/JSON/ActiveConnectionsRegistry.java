@@ -9,7 +9,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
  *
  * Позволяет:
  *  - получить ConnectionContext по sessionId;
- *  - получить все активные подключения пользователя по loginId;
+ *  - получить все активные подключения пользователя по login;
  *  - удалить подключение при закрытии WebSocket.
  *
  *  найти все подключения пользователя:
@@ -34,27 +34,27 @@ public final class ActiveConnectionsRegistry {
     // sessionId (String) -> ConnectionContext
     private final ConcurrentHashMap<String, ConnectionContext> bySessionId = new ConcurrentHashMap<>();
 
-    // loginId -> множество ConnectionContext для этого пользователя
-    private final ConcurrentHashMap<Long, Set<ConnectionContext>> byLoginId = new ConcurrentHashMap<>();
+    // login (String) -> множество ConnectionContext для этого пользователя
+    private final ConcurrentHashMap<String, Set<ConnectionContext>> byLogin = new ConcurrentHashMap<>();
 
     /**
      * Зарегистрировать авторизованное подключение.
-     * Ожидается, что в ctx уже выставлены loginId и sessionId.
+     * Ожидается, что в ctx уже выставлены login и sessionId.
      */
     public void register(ConnectionContext ctx) {
         if (ctx == null) return;
 
         String sessionId = ctx.getSessionId();
-        Long loginId = ctx.getLoginId();
+        String login = ctx.getLogin();
 
-        if (sessionId == null || loginId == null) {
+        if (sessionId == null || login == null || login.isBlank()) {
             return;
         }
 
         bySessionId.put(sessionId, ctx);
 
-        byLoginId
-                .computeIfAbsent(loginId, id -> new CopyOnWriteArraySet<>())
+        byLogin
+                .computeIfAbsent(login, id -> new CopyOnWriteArraySet<>())
                 .add(ctx);
     }
 
@@ -65,18 +65,18 @@ public final class ActiveConnectionsRegistry {
         if (ctx == null) return;
 
         String sessionId = ctx.getSessionId();
-        Long loginId = ctx.getLoginId();
+        String login = ctx.getLogin();
 
         if (sessionId != null) {
             bySessionId.remove(sessionId);
         }
 
-        if (loginId != null) {
-            Set<ConnectionContext> set = byLoginId.get(loginId);
+        if (login != null) {
+            Set<ConnectionContext> set = byLogin.get(login);
             if (set != null) {
                 set.remove(ctx);
                 if (set.isEmpty()) {
-                    byLoginId.remove(loginId);
+                    byLogin.remove(login);
                 }
             }
         }
@@ -90,13 +90,13 @@ public final class ActiveConnectionsRegistry {
 
         ConnectionContext ctx = bySessionId.remove(sessionId);
         if (ctx != null) {
-            Long loginId = ctx.getLoginId();
-            if (loginId != null) {
-                Set<ConnectionContext> set = byLoginId.get(loginId);
+            String login = ctx.getLogin();
+            if (login != null) {
+                Set<ConnectionContext> set = byLogin.get(login);
                 if (set != null) {
                     set.remove(ctx);
                     if (set.isEmpty()) {
-                        byLoginId.remove(loginId);
+                        byLogin.remove(login);
                     }
                 }
             }
@@ -112,10 +112,11 @@ public final class ActiveConnectionsRegistry {
     }
 
     /**
-     * Получить все активные подключения пользователя по loginId.
+     * Получить все активные подключения пользователя по login.
      */
-    public Set<ConnectionContext> getByLoginId(long loginId) {
-        Set<ConnectionContext> set = byLoginId.get(loginId);
+    public Set<ConnectionContext> getByLogin(String login) {
+        if (login == null) return Set.of();
+        Set<ConnectionContext> set = byLogin.get(login);
         if (set == null) {
             return Set.of();
         }

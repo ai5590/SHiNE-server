@@ -25,52 +25,14 @@ import java.sql.SQLException;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-/**
- * Шаг 2 авторизации: проверка подписи и создание сессии.
- *
- * Клиент присылает в payload:
- *  - storagePwd    (base64 от 32 байт)
- *  - timeMs        (long, мс с 1970-01-01)
- *  - signatureB64  (подпись Ed25519 над строкой:
- *                   "AUTHORIFICATED:" + timeMs + authNonce)
- *  - clientInfo    (опционально, до 50 символов)
- *
- * authNonce клиент получил на шаге 1 (AuthChallenge) и сервер
- * сохранил его в ctx.authNonce.
- *
- * При успехе:
- *  - создаётся запись ActiveSession в БД;
- *  - генерируется sessionId (base64 от 32 случайных байт);
- *  - генерируется sessionPwd (base64 от 32 случайных байт);
- *  - sessionCreatedAtMs и lastAuthirificatedAtMs = текущее время;
- *  - заполняются поля clientIp, clientInfoFromClient, clientInfoFromRequest, userLanguage;
- *  - возвращается sessionId и sessionPwd в ответе.
- *
- * При ошибке авторификации (битые данные, подпись, время и т.п.) —
- * соединение закрывается через WsConnectionUtils.
- */
 public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
     private static final Logger log = LoggerFactory.getLogger(Net_CreateAuthSession__Handler.class);
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    /** Допустимое расхождение времени клиента и сервера (мс). */
     public static final long ALLOWED_SKEW_MS = 30_000L;
 
-    /**
-     * Общая проверка подписи Ed25519 над строкой:
-     * "AUTHORIFICATED:" + timeMs + authNonce.
-     *
-     * Используется и в CreateAuthSession, и в CloseActiveSession (для статуса AUTH_IN_PROGRESS).
-     *
-     * @param user         пользователь (используется deviceKey)
-     * @param authNonce    одноразовый nonce из шага 1
-     * @param timeMs       время на стороне клиента
-     * @param signatureB64 подпись в base64
-     * @return true — подпись корректна; false — подпись не проходит верификацию
-     * @throws IllegalArgumentException при некорректном base64 ключа/подписи
-     */
     public static boolean verifyAuthorificatedSignature(
             SolanaUserEntry user,
             String authNonce,
@@ -92,7 +54,6 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
     public Net_Response handle(Net_Request baseReq, ConnectionContext ctx) throws Exception {
         Net_CreateAuthSession_Request req = (Net_CreateAuthSession_Request) baseReq;
 
-        // --- базовые проверки контекста шага 1 ---
         if (ctx == null
                 || ctx.getSolanaUser() == null
                 || ctx.getAuthNonce() == null
@@ -109,15 +70,15 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         }
 
         SolanaUserEntry user = ctx.getSolanaUser();
-        Long loginId = user.getLoginId();
-        if (loginId == null) {
+        String login = user.getLogin();
+        if (login == null || login.isBlank()) {
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.SERVER_DATA_ERROR,
-                    "NO_LOGIN_ID",
-                    "Для пользователя не задан loginId в БД"
+                    "NO_LOGIN",
+                    "Для пользователя не задан login в БД"
             );
-            WsConnectionUtils.closeConnection(ctx, 4001, "Auth failed: no loginId");
+            WsConnectionUtils.closeConnection(ctx, 4001, "Auth failed: no login");
             return err;
         }
 
@@ -160,13 +121,11 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             return err;
         }
 
-        // Короткая строка clientInfo от клиента (до 50 символов)
         String clientInfoFromClient = req.getClientInfo();
         if (clientInfoFromClient != null && clientInfoFromClient.length() > 50) {
             clientInfoFromClient = clientInfoFromClient.substring(0, 50);
         }
 
-        // --- выбираем публичный ключ pubkey1 ---
         String pubKeyB64 = user.getDeviceKey();
         if (pubKeyB64 == null || pubKeyB64.isBlank()) {
             Net_Response err = NetExceptionResponseFactory.error(
@@ -179,10 +138,8 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             return err;
         }
 
-        // --- authNonce (challenge) мы сохранили в ctx.authNonce на шаге 1 ---
         String authNonce = ctx.getAuthNonce();
 
-        // --- проверяем подпись через общий метод ---
         boolean sigOk;
         try {
             sigOk = verifyAuthorificatedSignature(user, authNonce, timeMs, signatureB64);
@@ -230,10 +187,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
                 }
             }
         }
-
-        if (clientIp == null) {
-            clientIp = "";
-        }
+        if (clientIp == null) clientIp = "";
 
         // --- создаём запись ActiveSession и сохраняем в БД ---
         ActiveSessionsDAO dao = ActiveSessionsDAO.getInstance();
@@ -242,8 +196,8 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         try {
             activeSessionEntry = new ActiveSessionEntry(
                     sessionId,
-                    loginId,
-                    newSessionPwd,           // настоящий секрет сессии
+                    login,
+                    newSessionPwd,
                     storagePwd,
                     now,
                     now,
@@ -258,7 +212,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
             dao.insert(activeSessionEntry);
         } catch (SQLException e) {
-            log.error("Ошибка БД при создании новой сессии для loginId={}", loginId, e);
+            log.error("Ошибка БД при создании новой сессии для login={}", login, e);
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.SERVER_DATA_ERROR,

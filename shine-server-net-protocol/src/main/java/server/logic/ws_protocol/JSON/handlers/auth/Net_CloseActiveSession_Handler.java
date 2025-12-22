@@ -63,7 +63,7 @@ public class Net_CloseActiveSession_Handler implements JsonMessageHandler {
         }
 
         SolanaUserEntry user = ctx.getSolanaUser();
-        long currentLoginId = user.getLoginId();
+        String currentLogin = user.getLogin();
 
         int authStatus = ctx.getAuthenticationStatus();
         if (authStatus != ConnectionContext.AUTH_STATUS_USER
@@ -180,7 +180,7 @@ public class Net_CloseActiveSession_Handler implements JsonMessageHandler {
             );
         }
 
-        if (targetSession.getLoginId() != currentLoginId) {
+        if (currentLogin == null || !currentLogin.equals(targetSession.getLogin())) {
             return NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.UNVERIFIED,
@@ -236,10 +236,7 @@ public class Net_CloseActiveSession_Handler implements JsonMessageHandler {
         if (isCurrentSession && ctxToClose == currentCtx) {
             // Это текущее подключение: закрываем после отправки ответа.
             new Thread(() -> {
-                try {
-                    Thread.sleep(50); // небольшая пауза, чтобы ответ ушёл
-                } catch (InterruptedException ignored) {
-                }
+                try { Thread.sleep(50); } catch (InterruptedException ignored) {}
                 WsConnectionUtils.closeConnection(
                         ctxToClose,
                         4000,

@@ -24,7 +24,8 @@ public class Test_AddBlock_new_NoAuth {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final String TEST_LOGIN = "anya24";
-    private static final long   TEST_BCH_ID = 4222L;
+    // По твоему правилу: blockchainName = login + 4 цифры
+    private static final String TEST_BCH_NAME = TEST_LOGIN + "0001";
 
     private static final byte[] LOGIN_PRIV_KEY;
     private static final byte[] LOGIN_PUB_KEY;
@@ -66,7 +67,7 @@ public class Test_AddBlock_new_NoAuth {
 
                         String json = buildAddBlockJson(
                                 "test-add-header",
-                                TEST_BCH_ID,
+                                TEST_BCH_NAME,
                                 0,
                                 ZERO64,                 // prevGlobalHash для первого блока — нули
                                 base64(headerFull)
@@ -124,7 +125,7 @@ public class Test_AddBlock_new_NoAuth {
 
                                 String json2 = buildAddBlockJson(
                                         "test-add-text",
-                                        TEST_BCH_ID,
+                                        TEST_BCH_NAME,
                                         1,
                                         lastGlobalHashHex,     // prevGlobalHash = хэш header'а из ответа сервера
                                         base64(textFull)
@@ -181,7 +182,7 @@ public class Test_AddBlock_new_NoAuth {
                                                     byte[] prevLineHash32) {
 
         HeaderBody body = new HeaderBody(
-                TEST_BCH_ID,
+                TEST_BCH_NAME,   // было TEST_BCH_ID (long), теперь имя блокчейна (String)
                 TEST_LOGIN,
                 0, 0,
                 (short) 1,
@@ -259,17 +260,17 @@ public class Test_AddBlock_new_NoAuth {
     // =================================================================================
 
     private static String buildAddBlockJson(String requestId,
-                                            long blockchainId,
-                                            int globalNumber,
-                                            String prevGlobalHashHex,
-                                            String blockBytesB64) {
+                                           String blockchainName,
+                                           int globalNumber,
+                                           String prevGlobalHashHex,
+                                           String blockBytesB64) {
         return """
             {
               "op": "AddBlock",
               "requestId": "%s",
               "payload": {
                 "login": "%s",
-                "blockchainId": %d,
+                "blockchainName": "%s",
                 "globalNumber": %d,
                 "prevGlobalHash": "%s",
                 "blockBytesB64": "%s"

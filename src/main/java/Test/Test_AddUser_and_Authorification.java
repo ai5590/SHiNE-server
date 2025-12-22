@@ -57,8 +57,8 @@ public class Test_AddUser_and_Authorification {
 
     // Тестовые данные пользователя
     private static final String TEST_LOGIN = "anya24";
-    private static final long TEST_LOGIN_ID = 1030120L;
-    private static final long TEST_BCH_ID = 4222L;
+    // По твоему правилу: blockchainName = login + 4 цифры
+    private static final String TEST_BCH_NAME = TEST_LOGIN + "0001";
     private static final int TEST_BCH_LIMIT = 1_000_000;
 
     // Краткая строка clientInfo, которую клиент шлёт
@@ -399,13 +399,6 @@ public class Test_AddUser_and_Authorification {
     //                SCENARIO 3 / 5 / 7: ListSessions
     // ==========================================================
 
-    /**
-     * Общий сценарий: AuthChallenge → ListSessions в статусе AUTH_IN_PROGRESS.
-     *
-     * @param title                  заголовок для вывода
-     * @param expectSession1Present  ожидать ли первую сессию в списке
-     * @param expectSession2Present  ожидать ли вторую сессию в списке
-     */
     private static void scenario3_ListSessions_AuthInProgress(
             String title,
             boolean expectSession1Present,
@@ -476,8 +469,8 @@ public class Test_AddUser_and_Authorification {
 
                                 boolean ok =
                                         status == 200
-                                        && (expectSession1Present == has1)
-                                        && (expectSession2Present == has2);
+                                                && (expectSession1Present == has1)
+                                                && (expectSession2Present == has2);
 
                                 printTestResult(
                                         "S-List/ListSessions (ожидаемые сессии)",
@@ -767,8 +760,7 @@ public class Test_AddUser_and_Authorification {
                   "requestId": "test-add-1",
                   "payload": {
                     "login": "%s",
-                    "loginId": %d,
-                    "bchId": %d,
+                    "bchName": "%s",
                     "loginKey": "%s",
                     "deviceKey": "%s",
                     "bchLimit": %d
@@ -776,8 +768,7 @@ public class Test_AddUser_and_Authorification {
                 }
                 """.formatted(
                 TEST_LOGIN,
-                TEST_LOGIN_ID,
-                TEST_BCH_ID,
+                TEST_BCH_NAME,
                 LOGIN_PUBKEY_B64,    // loginKey
                 DEVICE_PUBKEY_B64,   // deviceKey
                 TEST_BCH_LIMIT

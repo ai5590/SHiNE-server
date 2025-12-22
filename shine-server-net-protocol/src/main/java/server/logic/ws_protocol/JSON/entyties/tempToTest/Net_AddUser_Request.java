@@ -12,8 +12,7 @@ import server.logic.ws_protocol.JSON.entyties.Net_Request;
  *   "requestId": "test-add-1",
  *   "payload": {
  *     "login": "anya",
- *     "loginId": 100211,
- *     "bchId": 4222,
+ *     "blockchainName": "anya0001",
  *     "loginKey": "base64-ed25519-public-key-login",
  *     "deviceKey": "base64-ed25519-public-key-device",
  *     "bchLimit": 1000000
@@ -25,57 +24,23 @@ import server.logic.ws_protocol.JSON.entyties.Net_Request;
 public class Net_AddUser_Request extends Net_Request {
 
     private String login;
-    private long loginId;
-    private long bchId;
+    private String blockchainName;
     private String loginKey;
     private String deviceKey;
     private Integer bchLimit;
 
-    public String getLogin() {
-        return login;
-    }
+    public String getLogin() { return login; }
+    public void setLogin(String login) { this.login = login; }
 
-    public void setLogin(String login) {
-        this.login = login;
-    }
+    public String getBlockchainName() { return blockchainName; }
+    public void setBlockchainName(String blockchainName) { this.blockchainName = blockchainName; }
 
-    public long getLoginId() {
-        return loginId;
-    }
+    public String getLoginKey() { return loginKey; }
+    public void setLoginKey(String loginKey) { this.loginKey = loginKey; }
 
-    public void setLoginId(long loginId) {
-        this.loginId = loginId;
-    }
+    public String getDeviceKey() { return deviceKey; }
+    public void setDeviceKey(String deviceKey) { this.deviceKey = deviceKey; }
 
-    public long getBchId() {
-        return bchId;
-    }
-
-    public void setBchId(long bchId) {
-        this.bchId = bchId;
-    }
-
-    public String getLoginKey() {
-        return loginKey;
-    }
-
-    public void setLoginKey(String loginKey) {
-        this.loginKey = loginKey;
-    }
-
-    public String getDeviceKey() {
-        return deviceKey;
-    }
-
-    public void setDeviceKey(String deviceKey) {
-        this.deviceKey = deviceKey;
-    }
-
-    public Integer getBchLimit() {
-        return bchLimit;
-    }
-
-    public void setBchLimit(Integer bchLimit) {
-        this.bchLimit = bchLimit;
-    }
+    public Integer getBchLimit() { return bchLimit; }
+    public void setBchLimit(Integer bchLimit) { this.bchLimit = bchLimit; }
 }
