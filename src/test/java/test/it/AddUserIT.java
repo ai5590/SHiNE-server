@@ -1,6 +1,10 @@
 package test.it;
 
 import org.junit.jupiter.api.Test;
+import test.it.utils.JsonBuilders;
+import test.it.utils.JsonParsers;
+import test.it.utils.TestConfig;
+import test.it.utils.WsTestClient;
 
 import java.time.Duration;
 

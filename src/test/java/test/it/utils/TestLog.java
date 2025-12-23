@@ -1,4 +1,4 @@
-package test.it;
+package test.it.utils;
 
 public final class TestLog {
     private TestLog(){}

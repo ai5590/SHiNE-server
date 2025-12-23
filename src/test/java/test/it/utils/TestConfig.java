@@ -1,4 +1,4 @@
-package test.it;
+package test.it.utils;
 
 import utils.crypto.Ed25519Util;
 
