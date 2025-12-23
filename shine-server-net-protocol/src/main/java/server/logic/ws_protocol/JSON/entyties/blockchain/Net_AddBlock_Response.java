@@ -3,14 +3,16 @@ package server.logic.ws_protocol.JSON.entyties.blockchain;
 import server.logic.ws_protocol.JSON.entyties.Net_Response;
 
 /**
- * Новый укороченный ответ:
+ * Ответ:
  * - reasonCode (null если ok)
  * - serverLastGlobalNumber / serverLastGlobalHash
  */
 public final class Net_AddBlock_Response extends Net_Response {
 
-    private String reasonCode; // null если ok
+    /** null если ok, иначе строка причины (bad_block_base64, user_not_found, и т.п.) */
+    private String reasonCode;
 
+    /** что сервер считает последним по глобальной цепочке */
     private int serverLastGlobalNumber;
     private String serverLastGlobalHash;
 

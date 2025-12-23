@@ -10,6 +10,7 @@ import shine.db.dao.SolanaUsersDAO;
 import shine.db.entities.BlockEntry;
 import shine.db.entities.BlockchainStateEntry;
 import shine.db.entities.SolanaUserEntry;
+import utils.blockchain.BlockchainNameUtil;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -29,14 +30,14 @@ import java.util.Base64;
  */
 public final class BlockchainStateService_new {
 
+    /** Результат атомарного addBlock */
     public static final class AddBlockResult {
-        public final int httpStatus;
+        public final int httpStatus;                  // WireCodes.Status.*
         public final String reasonCode;               // null если ok
-        public final Integer serverLastGlobalNumber;  // может быть null при ошибке
-        public final String serverLastGlobalHash;     // может быть null при ошибке
+        public final int serverLastGlobalNumber;
+        public final String serverLastGlobalHash;
 
-        public AddBlockResult(int httpStatus, String reasonCode,
-                              Integer serverLastGlobalNumber, String serverLastGlobalHash) {
+        public AddBlockResult(int httpStatus, String reasonCode, int serverLastGlobalNumber, String serverLastGlobalHash) {
             this.httpStatus = httpStatus;
             this.reasonCode = reasonCode;
             this.serverLastGlobalNumber = serverLastGlobalNumber;
@@ -70,141 +71,134 @@ public final class BlockchainStateService_new {
             String login,
             String blockchainName,
             int globalNumber,
-            String prevGlobalHashFromClient,
+            String prevGlobalHashHex,
             String blockBytesB64
     ) {
-        byte[] fullBytes;
-        try {
-            fullBytes = decodeBase64(blockBytesB64);
-        } catch (Exception e) {
-            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_base64", null, null);
+
+        // Базовая валидация
+        if (blockchainName == null || blockchainName.isBlank())
+            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "empty_blockchain_name", 0, "");
+
+        // Можно быстро проверить, что login согласован с blockchainName (если хочешь строгость)
+        String loginFromName = BlockchainNameUtil.loginFromBlockchainName(blockchainName);
+        if (loginFromName == null || loginFromName.isBlank())
+            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_blockchain_name", 0, "");
+
+        if (login == null || login.isBlank()) {
+            // раз уж у нас есть loginFromName — можно принимать login пустым,
+            // но ты явно передаёшь login, поэтому пока так:
+            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "empty_login", 0, "");
         }
 
-        if (login == null || login.isBlank())
-            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "empty_login", null, null);
+        // (опционально) сверка
+        if (!loginFromName.equals(login)) {
+            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "login_not_match_blockchain_name", 0, "");
+        }
 
-        if (blockchainName == null || blockchainName.isBlank())
-            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "empty_blockchain_name", null, null);
+        byte[] blockBytes;
+        try {
+            blockBytes = decodeBase64(blockBytesB64);
+        } catch (Exception e) {
+            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_base64", 0, "");
+        }
 
-        if (fullBytes == null || fullBytes.length == 0)
-            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "empty_block_bytes", null, null);
-
-        // Разбор блока (проверит recordSize == fullBytes.length)
         final BchBlockEntry_new block;
         try {
-            block = new BchBlockEntry_new(fullBytes);
+            block = new BchBlockEntry_new(blockBytes);
         } catch (Exception e) {
-            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_format", null, null);
+            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_format", 0, "");
         }
 
-        // Минимальные sanity-checks запроса vs блока
+        // Проверка, что глобальный номер совпадает
         if (block.recordNumber != globalNumber) {
-            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "global_number_mismatch", null, null);
+            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "global_number_mismatch", 0, "");
         }
 
         try (Connection c = db.getConnection()) {
             boolean oldAutoCommit = c.getAutoCommit();
             c.setAutoCommit(false);
             try {
-                // 1) user by login (loginKey нужен для подписи)
+                // 1) пользователь (ключ подписи берём из loginKey)
                 SolanaUserEntry u = solanaUsersDAO.getByLogin(c, login);
                 if (u == null) {
                     c.rollback();
-                    return new AddBlockResult(WireCodes.Status.NOT_FOUND, "user_not_found", null, null);
+                    return new AddBlockResult(WireCodes.Status.NOT_FOUND, "user_not_found", 0, "");
                 }
 
                 byte[] loginKey32 = u.getLoginKeyByte();
                 if (loginKey32 == null || loginKey32.length != 32) {
                     c.rollback();
-                    return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_login_key", null, null);
+                    return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_user_login_key", 0, "");
                 }
 
-                // 2) состояние цепочки по blockchainName
+                // 2) состояние блокчейна
                 BlockchainStateEntry st = stateDAO.getByBlockchainName(c, blockchainName);
                 if (st == null) {
                     c.rollback();
-                    return new AddBlockResult(WireCodes.Status.NOT_FOUND, "blockchain_state_not_found", null, null);
+                    return new AddBlockResult(WireCodes.Status.NOT_FOUND, "blockchain_state_not_found", 0, "");
                 }
 
-                // 3) проверка последовательности globalNumber (по DB, а не по клиенту)
+                // 3) проверяем последовательность глобального номера
                 int expected = st.getLastGlobalNumber() + 1;
                 if (globalNumber != expected) {
                     c.rollback();
-                    return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_global_sequence",
-                            st.getLastGlobalNumber(), st.getLastGlobalHash());
+                    return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_global_number", st.getLastGlobalNumber(), nn(st.getLastGlobalHash()));
                 }
 
-                // 4) prev hashes берём с сервера
-                byte[] prevGlobalHash32 = hexToBytes32(st.getLastGlobalHash());
-                short line = block.line;
-                int lineIndex = normalizeLineIndex(line);
-                byte[] prevLineHash32 = hexToBytes32(st.getLastLineHash(lineIndex));
+                // 4) prev hashes (пока line == global)
+                byte[] prevGlobalHash32 = hexTo32(nn(prevGlobalHashHex));
+                byte[] serverPrevGlobal32 = hexTo32(nn(st.getLastGlobalHash()));
 
-                // (опционально) можно сверить, что клиент прислал то же ожидание:
-                if (prevGlobalHashFromClient != null && !prevGlobalHashFromClient.isBlank()) {
-                    String a = nn(prevGlobalHashFromClient).trim();
-                    String b = nn(st.getLastGlobalHash()).trim();
-                    if (!a.equalsIgnoreCase(b)) {
-                        c.rollback();
-                        return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "prev_global_hash_mismatch",
-                                st.getLastGlobalNumber(), st.getLastGlobalHash());
-                    }
+                // чтобы не принимали «левый prev»:
+                if (!bytesEq(prevGlobalHash32, serverPrevGlobal32)) {
+                    c.rollback();
+                    return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_prev_global_hash", st.getLastGlobalNumber(), nn(st.getLastGlobalHash()));
                 }
 
-                // 5) verify signature
-                byte[] rawBytes = block.getRawBytes();
-                byte[] preimage = BchCryptoVerifier_new.buildPreimage(
+                byte[] prevLineHash32 = prevGlobalHash32; // пока линии не используем
+
+                // 5) крипто-проверка
+                boolean ok = BchCryptoVerifier_new.verifyAll(
                         login,
                         prevGlobalHash32,
                         prevLineHash32,
-                        rawBytes
-                );
-                byte[] computedHash32 = BchCryptoVerifier_new.sha256(preimage);
-
-                // hash, присланный в блоке
-                byte[] blockHash32 = block.getHash32();
-                if (!equals32(computedHash32, blockHash32)) {
-                    c.rollback();
-                    return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_hash",
-                            st.getLastGlobalNumber(), st.getLastGlobalHash());
-                }
-
-                boolean sigOk = BchCryptoVerifier_new.verifySignature(
-                        computedHash32,
+                        block.getRawBytes(),
                         block.getSignature64(),
+                        block.getHash32(),
                         loginKey32
                 );
-                if (!sigOk) {
+
+                if (!ok) {
                     c.rollback();
-                    return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_signature",
-                            st.getLastGlobalNumber(), st.getLastGlobalHash());
+                    return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_signature_or_hash", st.getLastGlobalNumber(), nn(st.getLastGlobalHash()));
                 }
 
-                // 6) вставляем блок в blocks (пока line stuff MVP)
-                insertBlockRow(c, login, blockchainName, globalNumber, st.getLastGlobalHash(), fullBytes, lineIndex, block.lineNumber);
+                // 6) вставка блока
+                insertBlockRow(c, login, blockchainName, globalNumber, prevGlobalHashHex, blockBytes);
 
-                // 7) обновляем агрегатное состояние
+                // 7) обновление состояния — hash теперь = hash32 нового блока (HEX)
+                String newHashHex = toHex(block.getHash32());
                 st.setLastGlobalNumber(globalNumber);
-                st.setLastGlobalHash(toHexLower(computedHash32));
+                st.setLastGlobalHash(newHashHex);
+
+                // линии пока равны глобалу
+                st.setLastLineNumber(0, globalNumber);
+                st.setLastLineHash(0, newHashHex);
+
                 st.setUpdatedAtMs(System.currentTimeMillis());
-
-                // линии (пока минимально)
-                st.setLastLineNumber(lineIndex, block.lineNumber);
-                st.setLastLineHash(lineIndex, toHexLower(computedHash32)); // пока можно тем же, позже разделим
-
                 stateDAO.upsert(c, st);
 
                 c.commit();
-                return new AddBlockResult(WireCodes.Status.OK, null, st.getLastGlobalNumber(), st.getLastGlobalHash());
+                return new AddBlockResult(WireCodes.Status.OK, null, st.getLastGlobalNumber(), nn(st.getLastGlobalHash()));
 
             } catch (Exception e) {
                 try { c.rollback(); } catch (SQLException ignore) {}
-                return new AddBlockResult(WireCodes.Status.INTERNAL_ERROR, "internal_error", null, null);
+                return new AddBlockResult(WireCodes.Status.INTERNAL_ERROR, "internal_error", 0, "");
             } finally {
                 try { c.setAutoCommit(oldAutoCommit); } catch (SQLException ignore) {}
             }
         } catch (Exception e) {
-            return new AddBlockResult(WireCodes.Status.INTERNAL_ERROR, "db_error", null, null);
+            return new AddBlockResult(WireCodes.Status.INTERNAL_ERROR, "db_error", 0, "");
         }
     }
 
@@ -213,10 +207,8 @@ public final class BlockchainStateService_new {
             String login,
             String blockchainName,
             int globalNumber,
-            String prevGlobalHashServer,
-            byte[] blockBytes,
-            int lineIndex,
-            int lineNumber
+            String prevGlobalHashHex,
+            byte[] blockBytes
     ) throws SQLException {
 
         BlockEntry e = new BlockEntry();
@@ -225,16 +217,17 @@ public final class BlockchainStateService_new {
         e.setBchName(blockchainName);
 
         e.setBlockGlobalNumber(globalNumber);
-        e.setBlockGlobalPreHashe(nn(prevGlobalHashServer));
+        e.setBlockGlobalPreHashe(nn(prevGlobalHashHex));
 
-        e.setBlockLineIndex(lineIndex);
-        e.setBlockLineNumber(lineNumber);
-        e.setBlockLinePreHashe(nn("")); // можно потом хранить prevLineHash
+        // линии пока не используем (равны глобалу)
+        e.setBlockLineIndex(0);
+        e.setBlockLineNumber(globalNumber);
+        e.setBlockLinePreHashe(nn(prevGlobalHashHex));
 
         e.setMsgType(0);
         e.setBlockByte(blockBytes);
 
-        // nullable links
+        // nullable ссылки (как ты просил ранее)
         e.setToLogin(null);
         e.setToBchName(null);
         e.setToBlockGlobalNumber(null);
@@ -245,48 +238,45 @@ public final class BlockchainStateService_new {
 
     // -------------------- utils --------------------
 
-    private static String nn(String s) {
-        return s == null ? "" : s;
-    }
+    private static String nn(String s) { return s == null ? "" : s; }
 
     private static byte[] decodeBase64(String s) {
-        if (s == null || s.isBlank()) return null;
+        if (s == null || s.isBlank()) throw new IllegalArgumentException("empty base64");
         return Base64.getDecoder().decode(s);
     }
 
-    private static int normalizeLineIndex(short line) {
-        int v = line & 0xFFFF;
-        // пока поддержим 0..7 как “линии”
-        if (v < 0 || v > 7) return 0;
-        return v;
-    }
-
-    private static boolean equals32(byte[] a, byte[] b) {
-        if (a == null || b == null || a.length != 32 || b.length != 32) return false;
-        int x = 0;
-        for (int i = 0; i < 32; i++) x |= (a[i] ^ b[i]);
-        return x == 0;
-    }
-
-    private static byte[] hexToBytes32(String hex) {
-        if (hex == null) return new byte[32];
-        String s = hex.trim();
-        if (s.isEmpty()) return new byte[32];
-        if (s.length() != 64 || !s.matches("^[0-9a-fA-F]{64}$")) return new byte[32];
-
+    /** hex(64) -> 32 bytes; пустой -> 32 нуля */
+    private static byte[] hexTo32(String hex) {
+        if (hex == null || hex.isBlank()) return new byte[32];
+        String h = hex.trim();
+        if (h.length() != 64) throw new IllegalArgumentException("hex hash must be 64 chars");
         byte[] out = new byte[32];
         for (int i = 0; i < 32; i++) {
-            int hi = Character.digit(s.charAt(i * 2), 16);
-            int lo = Character.digit(s.charAt(i * 2 + 1), 16);
-            out[i] = (byte) ((hi << 4) | lo);
+            int hi = Character.digit(h.charAt(i * 2), 16);
+            int lo = Character.digit(h.charAt(i * 2 + 1), 16);
+            if (hi < 0 || lo < 0) throw new IllegalArgumentException("bad hex");
+            out[i] = (byte)((hi << 4) | lo);
         }
         return out;
     }
 
-    private static String toHexLower(byte[] b32) {
-        if (b32 == null) return "";
-        StringBuilder sb = new StringBuilder(b32.length * 2);
-        for (byte b : b32) sb.append(String.format("%02x", b));
-        return sb.toString();
+    private static boolean bytesEq(byte[] a, byte[] b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        if (a.length != b.length) return false;
+        int x = 0;
+        for (int i = 0; i < a.length; i++) x |= (a[i] ^ b[i]);
+        return x == 0;
+    }
+
+    private static String toHex(byte[] bytes) {
+        char[] HEX = "0123456789abcdef".toCharArray();
+        char[] out = new char[bytes.length * 2];
+        for (int i = 0; i < bytes.length; i++) {
+            int v = bytes[i] & 0xFF;
+            out[i * 2] = HEX[v >>> 4];
+            out[i * 2 + 1] = HEX[v & 0x0F];
+        }
+        return new String(out);
     }
 }

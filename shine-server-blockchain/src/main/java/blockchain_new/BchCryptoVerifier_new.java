@@ -67,21 +67,32 @@ public final class BchCryptoVerifier_new {
 
     /**
      * Проверка подписи Ed25519:
-     * verify(hash32, signature64, publicKey32)
      */
-    public static boolean verifySignature(byte[] hash32,
-                                          byte[] signature64,
-                                          byte[] publicKey32) {
-        Objects.requireNonNull(hash32, "hash32 == null");
+    public static boolean verifyAll(String userLogin,
+                                    byte[] prevGlobalHash32,
+                                    byte[] prevLineHash32,
+                                    byte[] rawBytes,
+                                    byte[] signature64,
+                                    byte[] publicKey32,
+                                    byte[] expectedHash32FromBlock) {
+
         Objects.requireNonNull(signature64, "signature64 == null");
         Objects.requireNonNull(publicKey32, "publicKey32 == null");
+        Objects.requireNonNull(expectedHash32FromBlock, "expectedHash32FromBlock == null");
 
-        if (hash32.length != 32) throw new IllegalArgumentException("hash32 != 32");
         if (signature64.length != 64) throw new IllegalArgumentException("signature64 != 64");
         if (publicKey32.length != 32) throw new IllegalArgumentException("publicKey32 != 32");
+        if (expectedHash32FromBlock.length != 32) throw new IllegalArgumentException("hash32 != 32");
 
-        // ⚠️ Подстрой под твой Ed25519Util:
-        // Идея ровно такая: verify(messageHash, signature, publicKey)
+        byte[] preimage = buildPreimage(userLogin, prevGlobalHash32, prevLineHash32, rawBytes);
+        byte[] hash32 = sha256(preimage);
+
+        // 1) сверяем hash, который лежит в блоке
+        if (!java.util.Arrays.equals(hash32, expectedHash32FromBlock)) {
+            return false;
+        }
+
+        // 2) проверяем подпись (Ed25519 над hash32)
         return Ed25519Util.verify(hash32, signature64, publicKey32);
     }
 }
