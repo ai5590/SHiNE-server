@@ -1,6 +1,5 @@
 package blockchain;
 
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import utils.blockchain.BchInfoEntry;
@@ -24,11 +23,6 @@ public final class BchBlockValidator {
     /**
      * Проверяет, что блок может быть корректно добавлен к цепочке.
      *
-     * Не используется при получении запроса на добавление блока по сети (тк там возвращаются более протоколо осмысленные коды
-     * если блок не подходит по номеру.
-     *
-     * А этот класс может быть использован в будущем для внутренних, повторных проверок существующих цепочек блоков.
-     *
      * @param block   блок (распарсенный из байт)
      * @param chain   информация о цепочке (BchInfoEntry)
      * @param chainId идентификатор цепочки
@@ -50,6 +44,19 @@ public final class BchBlockValidator {
             log.warn("❌ Нарушена последовательность: получен блок {}, ожидался {}", block.recordNumber, expectedNumber);
             return false;
         }
+
+//        // 1.5️⃣ Проверим, что body хотя бы содержит type/ver (первые 4 байта)
+//        try {
+//            short bodyType = block.getBodyType();
+//            short bodyVer  = block.getBodyVer();
+//            // тут специально не валидируем смысл (это делает парсер/логика выше),
+//            // но оставим для диагностики
+//            log.debug("Body type/ver from bodyBytes: type={} ver={} (blockNum={}, chainId={})",
+//                    bodyType, bodyVer, block.recordNumber, chainId);
+//        } catch (Exception e) {
+//            log.warn("❌ Некорректное тело блока: {}", e.getMessage());
+//            return false;
+//        }
 
         // 2️⃣ Проверка публичного ключа
         byte[] publicKey = chain.getPublicKey32();

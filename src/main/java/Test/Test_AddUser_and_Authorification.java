@@ -760,7 +760,7 @@ public class Test_AddUser_and_Authorification {
                   "requestId": "test-add-1",
                   "payload": {
                     "login": "%s",
-                    "bchName": "%s",
+                    "blockchainName": "%s",
                     "loginKey": "%s",
                     "deviceKey": "%s",
                     "bchLimit": %d
