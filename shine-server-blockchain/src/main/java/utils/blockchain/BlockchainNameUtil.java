@@ -3,6 +3,7 @@ package utils.blockchain;
 public final class BlockchainNameUtil {
 
     /** Сколько символов отрезаем с конца blockchainName, чтобы получить login. */
+    /** Теперь новое правило везде использовать только 3 символа номера блокчена в конце его имени */
     public static final int BLOCKCHAIN_NAME_LOGIN_SUFFIX_LEN = 3;
 
     private BlockchainNameUtil() {}
