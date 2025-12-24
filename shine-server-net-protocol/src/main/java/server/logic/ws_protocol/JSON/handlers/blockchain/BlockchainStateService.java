@@ -2,6 +2,7 @@ package server.logic.ws_protocol.JSON.handlers.blockchain;
 
 import blockchain.BchBlockEntry;
 import blockchain.BchCryptoVerifier;
+import blockchain.body.BodyRecordParser;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.SqliteDbController;
 import shine.db.dao.BlockchainStateDAO;
@@ -68,7 +69,6 @@ public final class BlockchainStateService {
     }
 
     public AddBlockResult addBlockAtomically(
-            String login,
             String blockchainName,
             int globalNumber,
             String prevGlobalHashHex,
@@ -84,18 +84,8 @@ public final class BlockchainStateService {
         if (loginFromBlockchainName == null || loginFromBlockchainName.isBlank())
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_blockchain_name", 0, "");
 
-
         //  todo действительно давай прото брать логин из имени блокчена и не передавать его отдельно в запросе!
-        if (login == null || login.isBlank()) {
-            // раз уж у нас есть loginFromName — можно принимать login пустым,
-            // но ты явно передаёшь login, поэтому пока так:
-            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "empty_login", 0, "");
-        }
-
-        // (опционально) сверка
-        if (!loginFromBlockchainName.equals(login)) {
-            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "login_not_match_blockchain_name", 0, "");
-        }
+        String login = loginFromBlockchainName;
 
         byte[] blockBytes;
         try {
@@ -104,13 +94,14 @@ public final class BlockchainStateService {
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_base64", 0, "");
         }
 
-//  todo ну и ещё тут нужно проверить что не только сам формат блока верный, но и запись в этом блоке верная - тоесть что её можно распарсить!
-
-
-
+        //  todo ну и ещё тут нужно проверить что не только сам формат блока верный, но и запись в этом блоке верная - тоесть что её можно распарсить!
         final BchBlockEntry block;
         try {
             block = new BchBlockEntry(blockBytes);
+
+            // проверяем, что body распарсится и валидируется
+            BodyRecordParser.parse(block.bodyBytes).check();
+
         } catch (Exception e) {
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_format", 0, "");
         }
@@ -141,9 +132,20 @@ public final class BlockchainStateService {
                 BlockchainStateEntry st = stateDAO.getByBlockchainName(c, blockchainName);
 
                 //todo тут надо учесть тот случай что если это 0 блок тоесть начало блокчейна то логично что ещё нет самого файла блокчейна и по этому нет и BlockchainStateEntry
+                boolean isGenesis = (globalNumber == 0);
+
                 if (st == null) {
-                    c.rollback();
-                    return new AddBlockResult(WireCodes.Status.NOT_FOUND, "blockchain_state_not_found", 0, "");
+                    if (!isGenesis) {
+                        c.rollback();
+                        return new AddBlockResult(WireCodes.Status.NOT_FOUND, "blockchain_state_not_found", 0, "");
+                    }
+                    st = new BlockchainStateEntry();
+                    st.setBlockchainName(blockchainName);
+                    st.setLogin(login);
+                    st.setLastGlobalNumber(-1);
+                    st.setLastGlobalHash("");
+                    st.setLastLineNumber(0, -1);
+                    st.setLastLineHash(0, "");
                 }
 
                 // 3) проверяем последовательность глобального номера
@@ -175,8 +177,8 @@ public final class BlockchainStateService {
                         prevLineHash32,
                         block.getRawBytes(),
                         block.getSignature64(),
-                        block.getHash32(),
-                        loginKey32
+                        loginKey32,
+                        block.getHash32()
                 );
 
                 if (!ok) {

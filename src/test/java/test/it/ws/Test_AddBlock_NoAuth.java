@@ -19,7 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
 
-public class Test_AddBlock_new_NoAuth {
+public class Test_AddBlock_NoAuth {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -36,7 +36,6 @@ public class Test_AddBlock_new_NoAuth {
                     private int step = 0;
 
                     private String lastGlobalHashHex = ZERO64;
-                    private String lastLineHashHex   = ZERO64;
 
                     @Override
                     public void onOpen(WebSocket ws) {
@@ -54,7 +53,6 @@ public class Test_AddBlock_new_NoAuth {
 
                         String json = buildAddBlockJson(
                                 "test-add-header",
-                                TestConfig.TEST_LOGIN,
                                 TestConfig.TEST_BCH_NAME,
                                 0,
                                 ZERO64,
@@ -82,22 +80,17 @@ public class Test_AddBlock_new_NoAuth {
                                 }
 
                                 String serverLastGlobalHash = extractPayloadString(msg, "serverLastGlobalHash");
-                                String serverLastLineHash   = extractPayloadString(msg, "serverLastLineHash");
 
                                 if (serverLastGlobalHash == null || serverLastGlobalHash.isBlank()) {
                                     System.out.println("❌ No serverLastGlobalHash in response");
                                     ws.sendClose(WebSocket.NORMAL_CLOSURE, "bad-response");
                                     return CompletableFuture.completedFuture(null);
                                 }
-                                if (serverLastLineHash == null || serverLastLineHash.isBlank()) {
-                                    serverLastLineHash = serverLastGlobalHash;
-                                }
 
                                 lastGlobalHashHex = serverLastGlobalHash;
-                                lastLineHashHex   = serverLastLineHash;
 
                                 byte[] prevGlobal32 = hexToBytes32(lastGlobalHashHex);
-                                byte[] prevLine32   = hexToBytes32(lastLineHashHex);
+                                byte[] prevLine32   = prevGlobal32;
 
                                 // 2) TEXT block: global=1, line=0, lineNumber=1
                                 byte[] textFull = buildTextBlockFullBytes(
@@ -111,7 +104,6 @@ public class Test_AddBlock_new_NoAuth {
 
                                 String json2 = buildAddBlockJson(
                                         "test-add-text",
-                                        TestConfig.TEST_LOGIN,
                                         TestConfig.TEST_BCH_NAME,
                                         1,
                                         lastGlobalHashHex,
@@ -238,7 +230,6 @@ public class Test_AddBlock_new_NoAuth {
     // =================================================================================
 
     private static String buildAddBlockJson(String requestId,
-                                            String login,
                                             String blockchainName,
                                             int globalNumber,
                                             String prevGlobalHashHex,
@@ -248,14 +239,13 @@ public class Test_AddBlock_new_NoAuth {
               "op": "AddBlock",
               "requestId": "%s",
               "payload": {
-                "login": "%s",
                 "blockchainName": "%s",
                 "globalNumber": %d,
                 "prevGlobalHash": "%s",
                 "blockBytesB64": "%s"
               }
             }
-            """.formatted(requestId, login, blockchainName, globalNumber, prevGlobalHashHex, blockBytesB64);
+            """.formatted(requestId, blockchainName, globalNumber, prevGlobalHashHex, blockBytesB64);
     }
 
     // =================================================================================

@@ -4,14 +4,10 @@ import server.logic.ws_protocol.JSON.entyties.Net_Request;
 
 public final class Net_AddBlock_Request extends Net_Request {
 
-    private String login;                 // обязателен
     private String blockchainName;        // обязателен
     private int globalNumber;             // обязателен
     private String prevGlobalHash;        // HEX(64) или "" для нулевого
     private String blockBytesB64;         // байты FULL-блока (raw+sig+hash) в Base64
-
-    public String getLogin() { return login; }
-    public void setLogin(String login) { this.login = login; }
 
     public String getBlockchainName() { return blockchainName; }
     public void setBlockchainName(String blockchainName) { this.blockchainName = blockchainName; }
