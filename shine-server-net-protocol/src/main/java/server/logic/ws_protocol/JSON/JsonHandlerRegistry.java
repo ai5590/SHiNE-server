@@ -14,7 +14,7 @@ import server.logic.ws_protocol.JSON.handlers.auth.Net_CreateAuthSession__Handle
 import server.logic.ws_protocol.JSON.handlers.auth.Net_RefreshSession_Handler;
 import server.logic.ws_protocol.JSON.handlers.auth.Net_CloseActiveSession_Handler;
 import server.logic.ws_protocol.JSON.handlers.auth.Net_ListSessions_Handler;
-import server.logic.ws_protocol.JSON.handlers.blockchain.Net_AddBlock_new_Handler;
+import server.logic.ws_protocol.JSON.handlers.blockchain.Net_AddBlock_Handler;
 import server.logic.ws_protocol.JSON.handlers.tempToTest.Net_AddUser_Handler;
 
 import java.util.Map;
@@ -37,7 +37,7 @@ public final class JsonHandlerRegistry {
             "CreateAuthSession",  new Net_CreateAuthSession__Handler(),
             "CloseActiveSession", new Net_CloseActiveSession_Handler(),
             "ListSessions",       new Net_ListSessions_Handler(),
-            "AddBlock",           new Net_AddBlock_new_Handler()
+            "AddBlock",           new Net_AddBlock_Handler()
             // сюда потом добавишь другие операции
     );
 

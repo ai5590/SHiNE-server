@@ -1,12 +1,13 @@
-package Test;
+package test.it.ws;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import utils.crypto.Ed25519Util;
+import blockchain.BchBlockEntry;
+import blockchain.BchCryptoVerifier;
 import blockchain.body.HeaderBody;
 import blockchain.body.TextBody;
-import blockchain.BchCryptoVerifier;
-import blockchain.BchBlockEntry;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import test.it.utils.TestConfig;
+import utils.crypto.Ed25519Util;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -20,56 +21,43 @@ import java.util.concurrent.CountDownLatch;
 
 public class Test_AddBlock_new_NoAuth {
 
-    private static final String WS_URI = "ws://localhost:7070/ws";
     private static final ObjectMapper JSON = new ObjectMapper();
-
-    private static final String TEST_LOGIN = "anya24";
-    // По твоему правилу: blockchainName = login + 4 цифры
-    private static final String TEST_BCH_NAME = TEST_LOGIN + "0001";
-
-    private static final byte[] LOGIN_PRIV_KEY;
-    private static final byte[] LOGIN_PUB_KEY;
-
-    static {
-        LOGIN_PRIV_KEY = Ed25519Util.generatePrivateKeyFromString("test-ed25519-login-11" + TEST_LOGIN);
-        LOGIN_PUB_KEY  = Ed25519Util.derivePublicKey(LOGIN_PRIV_KEY);
-    }
 
     private static final byte[] ZERO32 = new byte[32];
     private static final String ZERO64 = "0".repeat(64);
 
     public static void main(String[] args) throws Exception {
         CountDownLatch latch = new CountDownLatch(1);
-        HttpClient client = HttpClient.newHttpClient();
 
+        HttpClient client = HttpClient.newHttpClient();
         client.newWebSocketBuilder()
-                .buildAsync(URI.create(WS_URI), new WebSocket.Listener() {
+                .buildAsync(URI.create(TestConfig.WS_URI), new WebSocket.Listener() {
 
                     private int step = 0;
 
-                    // Эти значения обновим ПО ОТВЕТУ сервера на header
                     private String lastGlobalHashHex = ZERO64;
                     private String lastLineHashHex   = ZERO64;
 
                     @Override
                     public void onOpen(WebSocket ws) {
-                        System.out.println("✅ WS connected: " + WS_URI);
+                        System.out.println("✅ WS connected: " + TestConfig.WS_URI);
                         ws.request(1);
 
-                        // 1) HEADER (global=0, line=0, lineNumber=0)
+                        // 1) HEADER block: global=0, line=0, lineNumber=0
                         byte[] headerFull = buildHeaderBlockFullBytes(
-                                /*global*/0,
-                                /*lineIndex*/(short)0,
-                                /*lineBlock*/0,
-                                /*prevGlobal*/ZERO32,
-                                /*prevLine*/ZERO32
+                                0,
+                                (short) 0,
+                                0,
+                                ZERO32,
+                                ZERO32
                         );
 
                         String json = buildAddBlockJson(
                                 "test-add-header",
-                                TEST_BCH_NAME,
+                                TestConfig.TEST_LOGIN,
+                                TestConfig.TEST_BCH_NAME,
                                 0,
-                                ZERO64,                 // prevGlobalHash для первого блока — нули
+                                ZERO64,
                                 base64(headerFull)
                         );
 
@@ -93,7 +81,6 @@ public class Test_AddBlock_new_NoAuth {
                                     return CompletableFuture.completedFuture(null);
                                 }
 
-                                // Берём ИМЕННО ТОТ хэш, который сервер сохранил в state
                                 String serverLastGlobalHash = extractPayloadString(msg, "serverLastGlobalHash");
                                 String serverLastLineHash   = extractPayloadString(msg, "serverLastLineHash");
 
@@ -103,7 +90,6 @@ public class Test_AddBlock_new_NoAuth {
                                     return CompletableFuture.completedFuture(null);
                                 }
                                 if (serverLastLineHash == null || serverLastLineHash.isBlank()) {
-                                    // fallback: пусть будет как global (если сервер так хранит)
                                     serverLastLineHash = serverLastGlobalHash;
                                 }
 
@@ -113,11 +99,11 @@ public class Test_AddBlock_new_NoAuth {
                                 byte[] prevGlobal32 = hexToBytes32(lastGlobalHashHex);
                                 byte[] prevLine32   = hexToBytes32(lastLineHashHex);
 
-                                // 2) TEXT (global=1, line=0, lineNumber=1)
+                                // 2) TEXT block: global=1, line=0, lineNumber=1
                                 byte[] textFull = buildTextBlockFullBytes(
-                                        /*global*/1,
-                                        /*lineIndex*/(short)0,
-                                        /*lineBlock*/1,
+                                        1,
+                                        (short) 0,
+                                        1,
                                         prevGlobal32,
                                         prevLine32,
                                         "Hello from test client"
@@ -125,9 +111,10 @@ public class Test_AddBlock_new_NoAuth {
 
                                 String json2 = buildAddBlockJson(
                                         "test-add-text",
-                                        TEST_BCH_NAME,
+                                        TestConfig.TEST_LOGIN,
+                                        TestConfig.TEST_BCH_NAME,
                                         1,
-                                        lastGlobalHashHex,     // prevGlobalHash = хэш header'а из ответа сервера
+                                        lastGlobalHashHex,
                                         base64(textFull)
                                 );
 
@@ -166,6 +153,7 @@ public class Test_AddBlock_new_NoAuth {
                         latch.countDown();
                         return CompletableFuture.completedFuture(null);
                     }
+
                 }).join();
 
         latch.await();
@@ -181,9 +169,9 @@ public class Test_AddBlock_new_NoAuth {
                                                     byte[] prevGlobalHash32,
                                                     byte[] prevLineHash32) {
 
-        HeaderBody body = new HeaderBody(
-                TEST_LOGIN
-        );
+        // В твоём текущем коде HeaderBody формата type=0 ver=1:
+        // [type][ver][tag "SHiNE001"][loginLen][login]
+        HeaderBody body = new HeaderBody(TestConfig.TEST_LOGIN);
         byte[] bodyBytes = body.toBytes();
 
         return buildSignedBlockFullBytes(globalNumber, lineIndex, lineBlockNumber, bodyBytes, prevGlobalHash32, prevLineHash32);
@@ -211,13 +199,10 @@ public class Test_AddBlock_new_NoAuth {
 
         long ts = System.currentTimeMillis() / 1000L;
 
-        int recordSize =
-                BchBlockEntry.RAW_HEADER_SIZE +
-                        bodyBytes.length +
-                        BchBlockEntry.SIGNATURE_LEN +
-                        BchBlockEntry.HASH_LEN;
+        // recordSize = только RAW = header + body
+        int recordSize = BchBlockEntry.RAW_HEADER_SIZE + bodyBytes.length;
 
-        byte[] rawBytes = ByteBuffer.allocate(BchBlockEntry.RAW_HEADER_SIZE + bodyBytes.length)
+        byte[] rawBytes = ByteBuffer.allocate(recordSize)
                 .order(ByteOrder.BIG_ENDIAN)
                 .putInt(recordSize)
                 .putInt(globalNumber)
@@ -228,16 +213,14 @@ public class Test_AddBlock_new_NoAuth {
                 .array();
 
         byte[] preimage = BchCryptoVerifier.buildPreimage(
-                TEST_LOGIN,
+                TestConfig.TEST_LOGIN,
                 prevGlobalHash32,
                 prevLineHash32,
                 rawBytes
         );
 
         byte[] hash32 = BchCryptoVerifier.sha256(preimage);
-
-        // если у тебя подпись должна быть по preimage — меняй тут
-        byte[] signature64 = Ed25519Util.sign(hash32, LOGIN_PRIV_KEY);
+        byte[] signature64 = Ed25519Util.sign(hash32, TestConfig.LOGIN_PRIV_KEY);
 
         return new BchBlockEntry(
                 globalNumber,
@@ -255,10 +238,11 @@ public class Test_AddBlock_new_NoAuth {
     // =================================================================================
 
     private static String buildAddBlockJson(String requestId,
-                                           String blockchainName,
-                                           int globalNumber,
-                                           String prevGlobalHashHex,
-                                           String blockBytesB64) {
+                                            String login,
+                                            String blockchainName,
+                                            int globalNumber,
+                                            String prevGlobalHashHex,
+                                            String blockBytesB64) {
         return """
             {
               "op": "AddBlock",
@@ -271,7 +255,7 @@ public class Test_AddBlock_new_NoAuth {
                 "blockBytesB64": "%s"
               }
             }
-            """.formatted(requestId, TEST_LOGIN, blockchainName, globalNumber, prevGlobalHashHex, blockBytesB64);
+            """.formatted(requestId, login, blockchainName, globalNumber, prevGlobalHashHex, blockBytesB64);
     }
 
     // =================================================================================

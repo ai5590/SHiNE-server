@@ -9,7 +9,7 @@ public final class TestConfig {
 
     public static final String WS_URI = "ws://localhost:7070/ws";
     public static final String TEST_LOGIN = "anya24";
-    public static final String TEST_BCH_NAME = TEST_LOGIN + "0001";
+    public static final String TEST_BCH_NAME = TEST_LOGIN + "001";
     public static final int TEST_BCH_LIMIT = 1_000_000;
     public static final String TEST_CLIENT_INFO = "JavaTestClient/1.0";
 

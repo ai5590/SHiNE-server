@@ -28,7 +28,7 @@ import java.util.Base64;
  *
  * Ответ наружу: только reasonCode + serverLastGlobalNumber/serverLastGlobalHash
  */
-public final class BlockchainStateService_new {
+public final class BlockchainStateService {
 
     /** Результат атомарного addBlock */
     public static final class AddBlockResult {
@@ -49,19 +49,19 @@ public final class BlockchainStateService_new {
         }
     }
 
-    private static volatile BlockchainStateService_new instance;
+    private static volatile BlockchainStateService instance;
 
     private final SqliteDbController db = SqliteDbController.getInstance();
     private final BlocksDAO blocksDAO = BlocksDAO.getInstance();
     private final BlockchainStateDAO stateDAO = BlockchainStateDAO.getInstance();
     private final SolanaUsersDAO solanaUsersDAO = SolanaUsersDAO.getInstance();
 
-    private BlockchainStateService_new() {}
+    private BlockchainStateService() {}
 
-    public static BlockchainStateService_new getInstance() {
+    public static BlockchainStateService getInstance() {
         if (instance == null) {
-            synchronized (BlockchainStateService_new.class) {
-                if (instance == null) instance = new BlockchainStateService_new();
+            synchronized (BlockchainStateService.class) {
+                if (instance == null) instance = new BlockchainStateService();
             }
         }
         return instance;
@@ -80,10 +80,12 @@ public final class BlockchainStateService_new {
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "empty_blockchain_name", 0, "");
 
         // Можно быстро проверить, что login согласован с blockchainName (если хочешь строгость)
-        String loginFromName = BlockchainNameUtil.loginFromBlockchainName(blockchainName);
-        if (loginFromName == null || loginFromName.isBlank())
+        String loginFromBlockchainName = BlockchainNameUtil.loginFromBlockchainName(blockchainName);
+        if (loginFromBlockchainName == null || loginFromBlockchainName.isBlank())
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_blockchain_name", 0, "");
 
+
+        //  todo действительно давай прото брать логин из имени блокчена и не передавать его отдельно в запросе!
         if (login == null || login.isBlank()) {
             // раз уж у нас есть loginFromName — можно принимать login пустым,
             // но ты явно передаёшь login, поэтому пока так:
@@ -91,7 +93,7 @@ public final class BlockchainStateService_new {
         }
 
         // (опционально) сверка
-        if (!loginFromName.equals(login)) {
+        if (!loginFromBlockchainName.equals(login)) {
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "login_not_match_blockchain_name", 0, "");
         }
 
@@ -101,6 +103,10 @@ public final class BlockchainStateService_new {
         } catch (Exception e) {
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_base64", 0, "");
         }
+
+//  todo ну и ещё тут нужно проверить что не только сам формат блока верный, но и запись в этом блоке верная - тоесть что её можно распарсить!
+
+
 
         final BchBlockEntry block;
         try {
@@ -133,6 +139,8 @@ public final class BlockchainStateService_new {
 
                 // 2) состояние блокчейна
                 BlockchainStateEntry st = stateDAO.getByBlockchainName(c, blockchainName);
+
+                //todo тут надо учесть тот случай что если это 0 блок тоесть начало блокчейна то логично что ещё нет самого файла блокчейна и по этому нет и BlockchainStateEntry
                 if (st == null) {
                     c.rollback();
                     return new AddBlockResult(WireCodes.Status.NOT_FOUND, "blockchain_state_not_found", 0, "");
@@ -156,6 +164,9 @@ public final class BlockchainStateService_new {
                 }
 
                 byte[] prevLineHash32 = prevGlobalHash32; // пока линии не используем
+//todo точно так же как и глобальный проверяем преведущий хэш по линии.  он пока не используется, в том плане что у нас везде линия 0 и приведущий хэш по линии по сути равен приведущему глобальному хэшу, но его тоже надо проверять.
+// по сути можно сказать он используется просто пока везде только одна линия с индексом 0
+
 
                 // 5) крипто-проверка
                 boolean ok = BchCryptoVerifier.verifyAll(
@@ -173,6 +184,8 @@ public final class BlockchainStateService_new {
                     return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_signature_or_hash", st.getLastGlobalNumber(), nn(st.getLastGlobalHash()));
                 }
 
+
+                //todo сам код добавление блока вынести в отдельный класс - тк там надо потом усложнить действие
                 // 6) вставка блока
                 insertBlockRow(c, login, blockchainName, globalNumber, prevGlobalHashHex, blockBytes);
 

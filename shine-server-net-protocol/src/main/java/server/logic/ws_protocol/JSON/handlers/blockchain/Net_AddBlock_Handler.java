@@ -8,19 +8,24 @@ import server.logic.ws_protocol.JSON.entyties.blockchain.Net_AddBlock_Response;
 import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
 import server.logic.ws_protocol.WireCodes;
 
-public final class Net_AddBlock_new_Handler implements JsonMessageHandler {
+public final class Net_AddBlock_Handler implements JsonMessageHandler {
 
     @Override
     public Net_Response handle(Net_Request baseReq, ConnectionContext ctx) throws Exception {
+
         Net_AddBlock_Request req = (Net_AddBlock_Request) baseReq;
 
-        var r = BlockchainStateService_new.getInstance().addBlockAtomically(
+        var r = BlockchainStateService.getInstance().addBlockAtomically(
                 req.getLogin(),
                 req.getBlockchainName(),
                 req.getGlobalNumber(),
                 req.getPrevGlobalHash(),
                 req.getBlockBytesB64()
         );
+
+        // todo если пришёл запрос на  добавление то надо блочить работу с этим блокчейном по         req.getBlockchainName(),
+        // с помощью класса BlockchainLocks и разлочивать работу только в конце  завершения работы этого хэндлера, что бы не случилось паралельной работы двух потоков с одним и тем же блокчейном!
+
 
         Net_AddBlock_Response resp = new Net_AddBlock_Response();
         resp.setOp(req.getOp());

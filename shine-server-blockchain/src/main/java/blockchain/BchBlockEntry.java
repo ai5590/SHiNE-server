@@ -12,7 +12,7 @@ import java.util.Objects;
  *   [4]  recordSize        (int)  = размер RAW (включая этот заголовок), БЕЗ signature+hash
  *   [4]  recordNumber      (int)  глобальный номер блока
  *   [8]  timestamp         (long) unix seconds
- *   [2]  line              (short)
+ *   [2]  lineIndex         (short)
  *   [4]  lineNumber        (int)
  *   [N]  bodyBytes         (body, начинается с [type][version])
  *
@@ -32,7 +32,7 @@ public final class BchBlockEntry {
     public final int recordSize;     // только RAW, без signature+hash
     public final int recordNumber;
     public final long timestamp;
-    public final short line;
+    public final short lineIndex;
     public final int lineNumber;
     public final byte[] bodyBytes;
 
@@ -60,7 +60,7 @@ public final class BchBlockEntry {
 
         this.recordNumber = bb.getInt();
         this.timestamp = bb.getLong();
-        this.line = bb.getShort();
+        this.lineIndex = bb.getShort();
         this.lineNumber = bb.getInt();
 
         int bodyLen = recordSize - RAW_HEADER_SIZE;
@@ -85,7 +85,7 @@ public final class BchBlockEntry {
 
     public BchBlockEntry(int recordNumber,
                          long timestamp,
-                         short line,
+                         short lineIndex,
                          int lineNumber,
                          byte[] bodyBytes,
                          byte[] signature64,
@@ -102,7 +102,7 @@ public final class BchBlockEntry {
 
         this.recordNumber = recordNumber;
         this.timestamp = timestamp;
-        this.line = line;
+        this.lineIndex = lineIndex;
         this.lineNumber = lineNumber;
         this.bodyBytes = Arrays.copyOf(bodyBytes, bodyBytes.length);
         this.signature64 = Arrays.copyOf(signature64, SIGNATURE_LEN);
@@ -117,7 +117,7 @@ public final class BchBlockEntry {
         bb.putInt(this.recordSize);
         bb.putInt(recordNumber);
         bb.putLong(timestamp);
-        bb.putShort(line);
+        bb.putShort(lineIndex);
         bb.putInt(lineNumber);
         bb.put(bodyBytes);
         bb.put(this.signature64);
