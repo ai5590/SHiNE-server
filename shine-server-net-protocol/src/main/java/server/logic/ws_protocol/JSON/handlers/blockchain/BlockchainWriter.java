@@ -1,5 +1,6 @@
 package server.logic.ws_protocol.JSON.handlers.blockchain;
 
+import blockchain.BchBlockEntry;
 import shine.db.SqliteDbController;
 import shine.db.dao.BlockchainStateDAO;
 import shine.db.dao.BlocksDAO;
@@ -31,9 +32,8 @@ public final class BlockchainWriter {
     public void appendBlockAndState(
             String login,
             String blockchainName,
-            int globalNumber,
             String prevGlobalHashHex,
-            byte[] blockBytes,
+            BchBlockEntry block,
             BlockchainStateEntry stOrNull,
             String newHashHex
     ) throws SQLException {
@@ -45,10 +45,10 @@ public final class BlockchainWriter {
 
             try {
                 // 1) блок
-                insertBlockRow(c, login, blockchainName, globalNumber, prevGlobalHashHex, blockBytes);
+                insertBlockRow(c, login, blockchainName, prevGlobalHashHex, block);
 
                 // 2) state
-                appendState(c, blockchainName, globalNumber, stOrNull, newHashHex);
+                appendState(c, blockchainName, block.recordNumber, stOrNull, newHashHex);
 
                 // 3) commit
                 c.commit();
@@ -105,9 +105,8 @@ public final class BlockchainWriter {
             Connection c,
             String login,
             String blockchainName,
-            int globalNumber,
             String prevGlobalHashHex,
-            byte[] blockBytes
+            BchBlockEntry block
     ) throws SQLException {
 
         BlockEntry e = new BlockEntry();
@@ -117,19 +116,20 @@ public final class BlockchainWriter {
         e.setBchName(blockchainName);
 
         // Глобальная нумерация
-        e.setBlockGlobalNumber(globalNumber);
+        e.setBlockGlobalNumber(block.recordNumber);
         e.setBlockGlobalPreHashe(prevGlobalHashHex);
 
         // Линии пока не используются: lineIndex=0, lineNumber=globalNumber
         e.setBlockLineIndex(0);
-        e.setBlockLineNumber(globalNumber);
+        e.setBlockLineNumber(block.recordNumber);
         e.setBlockLinePreHashe(prevGlobalHashHex);
 
         // msgType у тебя пока 0 (при желании позже можно ставить по Body/type)
-        e.setMsgType(0);
+        // ✅ Теперь сохраняем тип блока
+        e.setMsgType(block.body.type());
 
         // Сырые байты полного блока
-        e.setBlockByte(blockBytes);
+        e.setBlockByte(block.toBytes());
 
         // Поля "кому" (для сообщений/трансферов) пока пустые
         e.setToLogin(null);

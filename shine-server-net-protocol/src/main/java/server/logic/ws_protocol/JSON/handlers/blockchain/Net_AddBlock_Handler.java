@@ -2,7 +2,6 @@ package server.logic.ws_protocol.JSON.handlers.blockchain;
 
 import blockchain.BchBlockEntry;
 import blockchain.BchCryptoVerifier;
-import blockchain.body.BodyRecordParser;
 import server.logic.ws_protocol.JSON.ConnectionContext;
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
 import server.logic.ws_protocol.JSON.entyties.Net_Response;
@@ -124,9 +123,9 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_format", 0, "");
         }
 
-        // 5) Парсим и валидируем body (type/version + содержимое)
+        // 5) Валидируем body (type/version + содержимое) — теперь body уже распарсен внутри BchBlockEntry
         try {
-            BodyRecordParser.parse(block.bodyBytes).check();
+            block.body.check();
         } catch (Exception e) {
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_body", 0, "");
         }
@@ -221,9 +220,8 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
             dbWriter.appendBlockAndState(
                     login,
                     blockchainName,
-                    globalNumber,
                     nn(prevGlobalHashHex),
-                    blockBytes,
+                    block,           // ✅ передаём целиком объект блока
                     st,
                     newHashHex
             );

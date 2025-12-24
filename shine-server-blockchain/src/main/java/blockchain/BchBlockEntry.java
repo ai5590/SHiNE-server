@@ -1,5 +1,8 @@
 package blockchain;
 
+import blockchain.body.BodyRecord;
+import blockchain.body.BodyRecordParser;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
@@ -36,6 +39,9 @@ public final class BchBlockEntry {
     public final int lineNumber;
     public final byte[] bodyBytes;
 
+    /** Распарсенное тело (создаётся сразу при парсинге блока). */
+    public final BodyRecord body;
+
     // --- TAIL ---
     private final byte[] signature64;
     private final byte[] hash32;
@@ -69,6 +75,9 @@ public final class BchBlockEntry {
 
         this.bodyBytes = new byte[bodyLen];
         bb.get(this.bodyBytes);
+
+        // ✅ Сразу парсим BodyRecord (и если неизвестный type/version — тут же упадём)
+        this.body = BodyRecordParser.parse(this.bodyBytes);
 
         this.signature64 = new byte[SIGNATURE_LEN];
         bb.get(this.signature64);
@@ -105,6 +114,10 @@ public final class BchBlockEntry {
         this.lineIndex = lineIndex;
         this.lineNumber = lineNumber;
         this.bodyBytes = Arrays.copyOf(bodyBytes, bodyBytes.length);
+
+        // ✅ И при сборке — тоже сразу парсим body (чтобы объект был цельным)
+        this.body = BodyRecordParser.parse(this.bodyBytes);
+
         this.signature64 = Arrays.copyOf(signature64, SIGNATURE_LEN);
         this.hash32 = Arrays.copyOf(hash32, HASH_LEN);
 
