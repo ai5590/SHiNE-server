@@ -91,7 +91,7 @@ public final class BlockchainStateDAO {
                 line6_last_number, line6_last_hash,
                 line7_last_number, line7_last_hash
             ) VALUES (
-                ?,?,?,?,?,?,?,?,?,
+                ?,?,?,?,?,?,?,?,
                 ?,?,
                 ?,?,
                 ?,?,
@@ -136,7 +136,6 @@ public final class BlockchainStateDAO {
             ps.setString(i++, nn(e.getLogin()));
             ps.setString(i++, nn(e.getPublicKeyBase64()));
             ps.setInt(i++, e.getSizeLimit());
-            ps.setInt(i++, e.getSizeBytes());
             ps.setLong(i++, e.getFileSizeBytes());
             ps.setInt(i++, e.getLastGlobalNumber());
             ps.setString(i++, nn(e.getLastGlobalHash()));
@@ -159,7 +158,6 @@ public final class BlockchainStateDAO {
         e.setPublicKeyBase64(rs.getString("public_key_base64"));
 
         e.setSizeLimit(rs.getInt("size_limit"));
-        e.setSizeBytes(rs.getInt("size_bytes"));
         e.setFileSizeBytes(rs.getLong("file_size_bytes"));
 
         e.setLastGlobalNumber(rs.getInt("last_global_number"));

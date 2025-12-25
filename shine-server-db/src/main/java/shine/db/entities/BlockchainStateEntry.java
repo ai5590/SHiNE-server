@@ -14,9 +14,7 @@ public final class BlockchainStateEntry {
     private String publicKeyBase64;
 
     private int sizeLimit;
-    private int sizeBytes;
-
-    /** NEW: размер файла блокчейна в байтах (то, что будем сверять/чинить при старте). */
+    /** Размер файла блокчейна в байтах (то, что будем сверять/чинить при старте). */
     private long fileSizeBytes;
 
     private int lastGlobalNumber;
@@ -39,7 +37,6 @@ public final class BlockchainStateEntry {
                                 String login,
                                 String publicKeyBase64,
                                 int sizeLimit,
-                                int sizeBytes,
                                 long fileSizeBytes,
                                 int lastGlobalNumber,
                                 String lastGlobalHash,
@@ -50,7 +47,6 @@ public final class BlockchainStateEntry {
         this.login = login;
         this.publicKeyBase64 = publicKeyBase64;
         this.sizeLimit = sizeLimit;
-        this.sizeBytes = sizeBytes;
         this.fileSizeBytes = fileSizeBytes;
         this.lastGlobalNumber = lastGlobalNumber;
         this.lastGlobalHash = lastGlobalHash == null ? "" : lastGlobalHash;
@@ -80,9 +76,6 @@ public final class BlockchainStateEntry {
 
     public int getSizeLimit() { return sizeLimit; }
     public void setSizeLimit(int sizeLimit) { this.sizeLimit = sizeLimit; }
-
-    public int getSizeBytes() { return sizeBytes; }
-    public void setSizeBytes(int sizeBytes) { this.sizeBytes = sizeBytes; }
 
     public long getFileSizeBytes() { return fileSizeBytes; }
     public void setFileSizeBytes(long fileSizeBytes) { this.fileSizeBytes = fileSizeBytes; }
