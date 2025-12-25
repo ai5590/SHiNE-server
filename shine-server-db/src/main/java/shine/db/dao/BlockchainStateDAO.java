@@ -70,6 +70,13 @@ public final class BlockchainStateDAO {
 
     /** UPSERT с внешним соединением. Соединение НЕ закрывает. */
     public void upsert(Connection c, BlockchainStateEntry e) throws SQLException {
+
+        // ВАЖНО:
+        // Колонок должно быть ровно 24:
+        //  8 основных + (8 линий * 2 поля) = 8 + 16 = 24
+        //
+        // size_bytes УДАЛЁН ИЗ ПРОЕКТА, здесь его быть не должно.
+
         String sql = """
             INSERT INTO blockchain_state (
                 blockchainName,
@@ -89,8 +96,7 @@ public final class BlockchainStateDAO {
                 line6_last_number, line6_last_hash,
                 line7_last_number, line7_last_hash
             ) VALUES (
-                ?,?,?,?,?,
-                ?,?,?,?,
+                ?,?,?,?,?,?,?,?,
                 ?,?,
                 ?,?,
                 ?,?,
@@ -157,7 +163,7 @@ public final class BlockchainStateDAO {
         e.setLogin(rs.getString("login"));
         e.setPublicKeyBase64(rs.getString("public_key_base64"));
 
-        // size_limit теперь long, читаем long
+        // size_limit теперь long
         e.setSizeLimit(rs.getLong("size_limit"));
         e.setFileSizeBytes(rs.getLong("file_size_bytes"));
 
