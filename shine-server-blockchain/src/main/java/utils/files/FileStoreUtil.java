@@ -6,39 +6,28 @@ import java.util.Objects;
 
 /**
  * ===============================================================
- *  FileStoreUtil — синглтон-утилита для записи/дозаписи/чтения файлов.
- *  ---------------------------------------------------------------
- *  Где хранит:
- *    • Все файлы размещаются в внешней папке DATA_DIR = "data" (в корне запуска).
- *      Папка создаётся автоматически при первом обращении.
- *.
- *  Что умеет:
- *    • newFile(String fileName, byte[] data)
- *        - создаёт/переписывает файл с именем fileName и записывает data.
- *    • addDataToFile(String fileName, byte[] data)
- *        - дописывает data в конец файла (создаст файл, если его ещё нет).
- *    • readAllDataFromFile(String fileName)
- *        - читает весь файл целиком и возвращает содержимое в виде byte[].
- *.
- *  Обёртки под «блокчейны»:
- *    • newBlockchain(long blockchainId, byte[] data)
- *    • addDataToBlockchain(long blockchainId, byte[] data)
- *    • readAllDataFromBlockchain(long blockchainId)
- *        - те же операции, но имя файла формируется из blockchainId и расширения ".bch".
- *.
- *  Безопасность имён:
- *    • Внутри утилиты есть простая валидация имени файла: запрещены разделители путей,
- *      чтобы исключить выход из каталога data (path traversal).
- *.
- *  Совместимость: Java 17.
+ *  FileStoreUtil — утилита работы с файлами в папке data/.
+ *
+ *  Теперь поддерживает:
+ *   - основной файл блокчейна:   <blockchainName>.bch
+ *   - временный файл блокчейна:  <blockchainName>.tmp_bch
+ *
+ *  Важное:
+ *   - validateSimpleFileName() запрещает path traversal.
+ *   - atomicReplaceBlockchainFile(): пытается сделать ATOMIC_MOVE (если ФС поддерживает),
+ *     иначе делает обычный REPLACE_EXISTING move.
  * ===============================================================
  */
 public final class FileStoreUtil {
 
     /** Базовая папка для хранения всех файлов (создаётся автоматически). */
     public static final String DATA_DIR_NAME = "data";
-    /** Расширение файлов «блокчейнов». */
+
+    /** Расширение основного файла блокчейна. */
     public static final String BLOCKCHAIN_FILE_EXTENSION = ".bch";
+
+    /** Расширение временного файла (старое+новое). */
+    public static final String BLOCKCHAIN_TMP_EXTENSION = ".tmp_bch";
 
     private static final FileStoreUtil INSTANCE = new FileStoreUtil();
 
@@ -49,56 +38,40 @@ public final class FileStoreUtil {
         ensureDataDirExists();
     }
 
-    /** Получить единственный экземпляр утилиты. */
     public static FileStoreUtil getInstance() {
         return INSTANCE;
     }
 
-    // ===============================================================
-    //                       ОБЩИЕ МЕТОДЫ РАБОТЫ С ФАЙЛОМ
-    // ===============================================================
+    /* ===================================================================== */
+    /* ======================== Базовые операции =========================== */
+    /* ===================================================================== */
 
-    /**
-     * Создать/переписать файл и записать в него массив байт.
-     * @param fileName имя файла (без каталогов)
-     * @param data     содержимое
-     * @throws IllegalArgumentException при неверном имени или null-данных
-     * @throws IllegalStateException при ошибках ввода/вывода
-     */
     public void newFile(String fileName, byte[] data) {
-        Objects.requireNonNull(data, "Данные не должны быть null");
+        Objects.requireNonNull(data, "data == null");
         Path target = resolveSafe(fileName);
         try {
-            Files.write(target, data, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            Files.write(target, data,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE);
         } catch (IOException e) {
             throw new IllegalStateException("Не удалось записать файл: " + target, e);
         }
     }
 
-    /**
-     * Дозаписать массив байт в конец файла (создаст файл, если отсутствует).
-     * @param fileName имя файла (без каталогов)
-     * @param data     добавляемые данные
-     * @throws IllegalArgumentException при неверном имени или null-данных
-     * @throws IllegalStateException при ошибках ввода/вывода
-     */
     public void addDataToFile(String fileName, byte[] data) {
-        Objects.requireNonNull(data, "Данные не должны быть null");
+        Objects.requireNonNull(data, "data == null");
         Path target = resolveSafe(fileName);
         try {
             Files.write(target, data,
-                    StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.APPEND);
         } catch (IOException e) {
             throw new IllegalStateException("Не удалось дописать файл: " + target, e);
         }
     }
 
-    /**
-     * Прочитать весь файл в память и вернуть как byte[].
-     * @param fileName имя файла (без каталогов)
-     * @return содержимое файла
-     * @throws IllegalStateException если файл не существует или ошибка ввода/вывода
-     */
     public byte[] readAllDataFromFile(String fileName) {
         Path target = resolveSafe(fileName);
         if (!Files.exists(target)) {
@@ -111,37 +84,91 @@ public final class FileStoreUtil {
         }
     }
 
-    // ===============================================================
-    //                  ОБЁРТКИ ДЛЯ «БЛОКЧЕЙН-ФАЙЛОВ»
-    // ===============================================================
+    public boolean exists(String fileName) {
+        Path target = resolveSafe(fileName);
+        return Files.exists(target);
+    }
 
-    /**
-     * Обёртка над newFile: имя формируется из blockchainId + ".bch".
-     */
-    public void newBlockchain(long blockchainId, byte[] data) {
-        String fileName = buildBlockchainFileName(blockchainId);
-        newFile(fileName, data);
+    public long size(String fileName) {
+        Path target = resolveSafe(fileName);
+        try {
+            return Files.size(target);
+        } catch (IOException e) {
+            throw new IllegalStateException("Не удалось получить размер файла: " + target, e);
+        }
+    }
+
+    /* ===================================================================== */
+    /* ===================== Блокчейн-файлы по имени ======================= */
+    /* ===================================================================== */
+
+    /** <blockchainName>.bch */
+    public String buildBlockchainFileName(String blockchainName) {
+        validateSimpleFileName(blockchainName);
+        return blockchainName + BLOCKCHAIN_FILE_EXTENSION;
+    }
+
+    /** <blockchainName>.tmp_bch */
+    public String buildBlockchainTmpFileName(String blockchainName) {
+        validateSimpleFileName(blockchainName);
+        return blockchainName + BLOCKCHAIN_TMP_EXTENSION;
+    }
+
+    public Path resolveBlockchainPath(String blockchainName) {
+        return resolveSafe(buildBlockchainFileName(blockchainName));
+    }
+
+    public Path resolveBlockchainTmpPath(String blockchainName) {
+        return resolveSafe(buildBlockchainTmpFileName(blockchainName));
+    }
+
+    public byte[] readBlockchain(String blockchainName) {
+        return readAllDataFromFile(buildBlockchainFileName(blockchainName));
+    }
+
+    public void writeBlockchainTmp(String blockchainName, byte[] data) {
+        newFile(buildBlockchainTmpFileName(blockchainName), data);
     }
 
     /**
-     * Обёртка над addDataToFile: имя формируется из blockchainId + ".bch".
+     * Атомарно заменить основной файл блокчейна временным:
+     *   <name>.tmp_bch  ->  <name>.bch
+     *
+     * Стратегия:
+     *  1) Пытаемся Files.move(..., ATOMIC_MOVE, REPLACE_EXISTING)
+     *  2) Если ATOMIC_MOVE не поддерживается — делаем move с REPLACE_EXISTING без атомарности
+     *
+     * Важный нюанс:
+     *  - атомарность гарантируется только в пределах одной файловой системы.
      */
-    public void addDataToBlockchain(long blockchainId, byte[] data) {
-        String fileName = buildBlockchainFileName(blockchainId);
-        addDataToFile(fileName, data);
+    public void atomicReplaceBlockchainFile(String blockchainName) {
+        Path tmp = resolveBlockchainTmpPath(blockchainName);
+        Path main = resolveBlockchainPath(blockchainName);
+
+        if (!Files.exists(tmp)) {
+            throw new IllegalStateException("TMP-файл не найден: " + tmp);
+        }
+
+        try {
+            // 1) Пытаемся атомарный move
+            Files.move(tmp, main,
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            // 2) Если ФС не поддерживает атомарный move — делаем обычный replace
+            try {
+                Files.move(tmp, main, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException ex) {
+                throw new IllegalStateException("Не удалось заменить файл блокчейна (non-atomic): " + main, ex);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Не удалось заменить файл блокчейна (atomic): " + main, e);
+        }
     }
 
-    /**
-     * Обёртка над readAllDataFromFile: имя формируется из blockchainId + ".bch".
-     */
-    public byte[] readAllDataFromBlockchain(long blockchainId) {
-        String fileName = buildBlockchainFileName(blockchainId);
-        return readAllDataFromFile(fileName);
-    }
-
-    // ===============================================================
-    //                           ВСПОМОГАТЕЛЬНЫЕ
-    // ===============================================================
+    /* ===================================================================== */
+    /* ============================ Helpers ================================= */
+    /* ===================================================================== */
 
     private void ensureDataDirExists() {
         try {
@@ -153,33 +180,26 @@ public final class FileStoreUtil {
         }
     }
 
-    /**
-     * Безопасно собрать путь внутри каталога data, запретив подстановку каталогов в имени файла.
-     */
     private Path resolveSafe(String fileName) {
         validateSimpleFileName(fileName);
         return dataDirPath.resolve(fileName);
     }
 
     /**
-     * Простейшая валидация имени файла:
-     *  • запретить разделители путей и возврат на родительский каталог.
+     * Валидация "простого имени":
+     *  - запрещаем слэши, обратные слэши, ".."
+     *  - запрещаем пустоту
+     *
+     * Важно: сюда у нас попадает и blockchainName (как часть имени файла),
+     * поэтому blockchainName должен быть "простым": без путей.
      */
     private void validateSimpleFileName(String fileName) {
-        Objects.requireNonNull(fileName, "Имя файла не должно быть null");
+        Objects.requireNonNull(fileName, "fileName == null");
         if (fileName.isBlank()) {
             throw new IllegalArgumentException("Имя файла не должно быть пустым");
         }
         if (fileName.contains("/") || fileName.contains("\\") || fileName.contains("..")) {
             throw new IllegalArgumentException("Недопустимое имя файла: " + fileName);
         }
-    }
-
-    /**
-     * Построить имя «блокчейн-файла» из идентификатора и расширения .bch.
-     * Пример:  12345  →  "12345.bch"
-     */
-    private String buildBlockchainFileName(long blockchainId) {
-        return Long.toString(blockchainId) + BLOCKCHAIN_FILE_EXTENSION;
     }
 }
