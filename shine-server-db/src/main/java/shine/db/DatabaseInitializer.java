@@ -158,17 +158,14 @@ public class DatabaseInitializer {
                     blockchainName         TEXT    NOT NULL PRIMARY KEY,
                     login                  TEXT    NOT NULL,
                     public_key_base64      TEXT    NOT NULL,
-
+                
                     size_limit             INTEGER NOT NULL,
-                    size_bytes             INTEGER NOT NULL,
-
                     file_size_bytes        INTEGER NOT NULL,
-
+                
                     last_global_number     INTEGER NOT NULL,
                     last_global_hash       TEXT    NOT NULL,
                     updated_at_ms          INTEGER NOT NULL,
-
-                    -- Линии 0..7 (MVP: максимум 8 линий)
+                
                     line0_last_number      INTEGER NOT NULL,
                     line0_last_hash        TEXT    NOT NULL,
                     line1_last_number      INTEGER NOT NULL,

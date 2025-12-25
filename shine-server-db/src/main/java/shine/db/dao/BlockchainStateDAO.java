@@ -135,7 +135,7 @@ public final class BlockchainStateDAO {
             ps.setString(i++, e.getBlockchainName());
             ps.setString(i++, nn(e.getLogin()));
             ps.setString(i++, nn(e.getPublicKeyBase64()));
-            ps.setInt(i++, e.getSizeLimit());
+            ps.setLong(i++, e.getSizeLimit());
             ps.setLong(i++, e.getFileSizeBytes());
             ps.setInt(i++, e.getLastGlobalNumber());
             ps.setString(i++, nn(e.getLastGlobalHash()));

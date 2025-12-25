@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30">
+
+    <Properties>
+        <!-- Папка логов -->
+        <Property name="LOG_DIR">logs</Property>
+
+        <!-- Имя основного файла -->
+        <Property name="APP_LOG">${LOG_DIR}/server.log</Property>
+
+        <!-- Шаблон для консоли (цветной) -->
+        <Property name="CONSOLE_PATTERN">
+            %d{yyyy-MM-dd HH:mm:ss.SSS} %highlight{%-5level}{FATAL=red blink, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=blue}
+            [%t] %c{1.} - %msg%n%throwable
+        </Property>
+
+        <!-- Шаблон для файла (БЕЗ цветов) -->
+        <Property name="FILE_PATTERN">
+            %d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%t] %c - %msg%n%throwable
+        </Property>
+    </Properties>
+
+    <Appenders>
+
+        <!-- Цветная консоль -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${CONSOLE_PATTERN}" />
+        </Console>
+
+        <!-- Основной лог-файл + ротация по размеру и времени -->
+        <RollingFile name="File"
+                     fileName="${APP_LOG}"
+                     filePattern="${LOG_DIR}/server-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="${FILE_PATTERN}" />
+
+            <Policies>
+                <!-- каждый день новый файл -->
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <!-- и если разросся -->
+                <SizeBasedTriggeringPolicy size="50 MB"/>
+            </Policies>
+
+            <!-- сколько файлов держать -->
+            <DefaultRolloverStrategy max="60">
+                <!-- общий лимит на архивы, чтобы диск не умер -->
+                <Delete basePath="${LOG_DIR}" maxDepth="1">
+                    <IfFileName glob="server-*.log.gz"/>
+                    <IfAccumulatedFileSize exceeds="5 GB"/>
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
+
+        <!-- В консоль ТОЛЬКО ошибки (если захочешь), сейчас НЕ включаю.
+             Если хочешь — скажи, включу отдельным appender-ом.
+        -->
+    </Appenders>
+
+    <Loggers>
+
+        <!-- Чтобы JUL (java.util.logging) реально шёл в log4j2 -->
+        <Logger name="java.util.logging" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="File"/>
+        </Logger>
+
+        <!-- Root: всё пишем в файл, и в консоль тоже -->
+        <Root level="info">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="File"/>
+        </Root>
+
+    </Loggers>
+</Configuration>

@@ -16,8 +16,10 @@ java {
 }
 
 dependencies {
-    // обычно тут пусто, максимум логгер и тесты
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
+
+    implementation "org.slf4j:slf4j-api:2.0.16"          // вызов логгера
+
 }
 
 test {

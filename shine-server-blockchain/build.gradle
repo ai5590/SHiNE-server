@@ -22,8 +22,7 @@ dependencies {
     // JSON (BchInfoManager)
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.1'
 
-    // логгер
-    implementation 'org.slf4j:slf4j-api:2.0.16'
+    implementation "org.slf4j:slf4j-api:2.0.16"          // вызов логгера
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
     implementation project(':shine-server-db')           // модуль для работы с БД содержит и сущности из БД и саму работу с БД

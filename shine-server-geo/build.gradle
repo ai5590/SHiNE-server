@@ -22,8 +22,9 @@ dependencies {
     implementation 'org.eclipse.jetty:jetty-servlet:11.0.20'
     implementation 'org.eclipse.jetty.websocket:websocket-jetty-server:11.0.20'
 
-    implementation project(':shine-server-db')           // модуль для работы с БД содержит и сущности из БД и саму работу с БД
+    implementation "org.slf4j:slf4j-api:2.0.16"          // вызов логгера
 
+    implementation project(':shine-server-db')           // модуль для работы с БД содержит и сущности из БД и саму работу с БД
 
 }
 

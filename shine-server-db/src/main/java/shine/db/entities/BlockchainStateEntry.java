@@ -13,7 +13,9 @@ public final class BlockchainStateEntry {
     private String login;
     private String publicKeyBase64;
 
-    private int sizeLimit;
+    /** Лимит (теперь long). */
+    private long sizeLimit;
+
     /** Размер файла блокчейна в байтах (то, что будем сверять/чинить при старте). */
     private long fileSizeBytes;
 
@@ -28,7 +30,6 @@ public final class BlockchainStateEntry {
     private long updatedAtMs;
 
     public BlockchainStateEntry() {
-        // по умолчанию хэши пустые (как "0")
         for (int i = 0; i < 8; i++) lastLineHashes[i] = "";
         this.lastGlobalHash = "";
     }
@@ -36,7 +37,7 @@ public final class BlockchainStateEntry {
     public BlockchainStateEntry(String blockchainName,
                                 String login,
                                 String publicKeyBase64,
-                                int sizeLimit,
+                                long sizeLimit,
                                 long fileSizeBytes,
                                 int lastGlobalNumber,
                                 String lastGlobalHash,
@@ -74,8 +75,8 @@ public final class BlockchainStateEntry {
     public String getPublicKeyBase64() { return publicKeyBase64; }
     public void setPublicKeyBase64(String publicKeyBase64) { this.publicKeyBase64 = publicKeyBase64; }
 
-    public int getSizeLimit() { return sizeLimit; }
-    public void setSizeLimit(int sizeLimit) { this.sizeLimit = sizeLimit; }
+    public long getSizeLimit() { return sizeLimit; }
+    public void setSizeLimit(long sizeLimit) { this.sizeLimit = sizeLimit; }
 
     public long getFileSizeBytes() { return fileSizeBytes; }
     public void setFileSizeBytes(long fileSizeBytes) { this.fileSizeBytes = fileSizeBytes; }
@@ -106,12 +107,8 @@ public final class BlockchainStateEntry {
         lastLineHashes[line] = value == null ? "" : value;
     }
 
-    public int[] getLastLineNumbersCopy() {
-        return Arrays.copyOf(lastLineNumbers, 8);
-    }
-    public String[] getLastLineHashesCopy() {
-        return Arrays.copyOf(lastLineHashes, 8);
-    }
+    public int[] getLastLineNumbersCopy() { return Arrays.copyOf(lastLineNumbers, 8); }
+    public String[] getLastLineHashesCopy() { return Arrays.copyOf(lastLineHashes, 8); }
 
     public long getUpdatedAtMs() { return updatedAtMs; }
     public void setUpdatedAtMs(long updatedAtMs) { this.updatedAtMs = updatedAtMs; }
