@@ -1,0 +1,27 @@
+plugins {
+    id 'java'
+}
+
+group = 'shine'
+version = '1.0.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+
+    implementation "org.slf4j:slf4j-api:2.0.16"          // вызов логгера
+
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}

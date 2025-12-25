@@ -9,6 +9,7 @@ import shine.db.dao.BlocksDAO;
 import shine.db.entities.BlockEntry;
 import shine.db.entities.BlockchainStateEntry;
 import utils.files.FileStoreUtil;
+import shine.log.BlockchainAdminNotifier;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -26,7 +27,12 @@ import java.sql.SQLException;
  * Важно:
  *  - Шаг (2) — строго атомарный (SQL tx).
  *  - Шаг (3) — атомарный на уровне ФС, если поддерживается ATOMIC_MOVE.
- *  - Если сервер упадёт между (2) и (3), останется tmp — твой recovery при старте починит.
+ *
+ * ДОПОЛНЕНИЕ (КРИТИЧНО):
+ *  - Перед тем как дописывать блок, проверяем:
+ *      реальный размер <name>.bch == st.fileSizeBytes.
+ *    Если не совпадает — считаем это критической внешней порчей файлов,
+ *    шлём уведомление админу и НЕ продолжаем запись.
  */
 public final class BlockchainWriter {
 
@@ -46,6 +52,7 @@ public final class BlockchainWriter {
 
     /**
      * Главный метод:
+     *  - (0) проверяет соответствие размера файла и state (если это не genesis)
      *  - создаёт tmp-файл (старое+новое),
      *  - атомарно коммитит БД (block+state),
      *  - атомарно заменяет основной файл.
@@ -58,6 +65,15 @@ public final class BlockchainWriter {
             BlockchainStateEntry stOrNull,
             String newHashHex
     ) throws SQLException {
+
+        // =====================================================================
+        // ШАГ 0. КРИТИЧЕСКАЯ ПРОВЕРКА КОНСИСТЕНТНОСТИ:
+        //   - если state есть и ожидает ненулевой размер,
+        //     то основной файл должен существовать и иметь точно этот размер.
+        //   - если не так — это почти наверняка внешнее вмешательство/порча,
+        //     и продолжать запись НЕЛЬЗЯ.
+        // =====================================================================
+        verifyMainFileSizeMatchesStateOrAlert(login, blockchainName, block, stOrNull);
 
         // =====================================================================
         // ШАГ 1. Готовим bytes нового блока (включая signature+hash)
@@ -90,19 +106,22 @@ public final class BlockchainWriter {
             try {
                 oldBytes = fs.readBlockchain(blockchainName);
             } catch (Exception e) {
-                // ✅ Добавили подробный лог: это очень важная точка
                 log.error("Ошибка чтения старого файла блокчейна перед записью tmp (login={}, blockchainName={}, oldFileSize={}, blockNumber={})",
                         login, blockchainName, oldFileSize, block.recordNumber, e);
-
-                // Здесь лучше падать: state говорит, что файл есть, а прочитать нельзя.
                 throw new SQLException("Cannot read old blockchain file for: " + blockchainName, e);
             }
 
-            // (на будущее) можно проверять согласованность: oldBytes.length == oldFileSize
-            // но ты всё равно будешь делать recovery при старте — оставим как подсказку.
+            // (в идеале это всегда должно совпадать после verifyMainFileSizeMatchesStateOrAlert)
             if (oldBytes.length != (int) oldFileSize) {
-                log.warn("Несовпадение размера файла блокчейна: state говорит oldFileSize={}, а реально прочитали oldBytes.length={} (login={}, blockchainName={}, blockNumber={})",
-                        oldFileSize, oldBytes.length, login, blockchainName, block.recordNumber);
+                String msg =
+                        "Несовпадение размера файла блокчейна при чтении: " +
+                        "state ожидал oldFileSize=" + oldFileSize +
+                        ", а реально прочитали oldBytes.length=" + oldBytes.length +
+                        " (login=" + login +
+                        ", blockchainName=" + blockchainName +
+                        ", blockNumber=" + block.recordNumber + ").";
+                BlockchainAdminNotifier.critical(msg, null);
+                throw new SQLException(msg);
             }
 
             tmpBytes = concat(oldBytes, newBlockFullBytes);
@@ -113,7 +132,6 @@ public final class BlockchainWriter {
         try {
             fs.writeBlockchainTmp(blockchainName, tmpBytes);
         } catch (Exception e) {
-            // ✅ Добавили подробный лог: это тоже критично
             log.error("Ошибка записи tmp файла блокчейна (login={}, blockchainName={}, tmpBytesLen={}, oldFileSize={}, newFileSize={}, blockNumber={})",
                     login, blockchainName, tmpBytes.length, oldFileSize, newFileSize, block.recordNumber, e);
             throw new SQLException("Cannot write tmp blockchain file for: " + blockchainName, e);
@@ -145,7 +163,6 @@ public final class BlockchainWriter {
             } catch (Exception e) {
                 try { c.rollback(); } catch (SQLException ignore) {}
 
-                // ✅ ВАЖНО: логируем причину отката + контекст
                 log.error("Ошибка транзакции БД при добавлении блока (rollback выполнен) (login={}, blockchainName={}, blockNumber={}, prevHash={}, newHash={}, oldFileSize={}, newFileSize={})",
                         login, blockchainName, block.recordNumber, prevGlobalHashHex, newHashHex, oldFileSize, newFileSize, e);
 
@@ -159,29 +176,87 @@ public final class BlockchainWriter {
             // =================================================================
             // ШАГ 5. После успешного коммита БД — атомарно заменяем файл:
             //    <name>.tmp_bch -> <name>.bch
-            //
-            // Если тут упадём:
-            //   - БД уже обновлена
-            //   - tmp остаётся
-            //   - recovery при старте восстановит консистентность
             // =================================================================
             if (committed) {
                 try {
                     fs.atomicReplaceBlockchainFile(blockchainName);
                 } catch (Exception moveError) {
-                    // ✅ Очень важная ситуация: БД уже committed, а файл не заменился
                     log.error("БД закоммичена, но атомарная замена файла блокчейна не удалась. tmp оставлен для recovery. (login={}, blockchainName={}, blockNumber={}, newHash={}, tmpBytesLen={})",
                             login, blockchainName, block.recordNumber, newHashHex, tmpBytes.length, moveError);
 
-                    // Здесь ВАЖНО: мы уже не можем откатить БД.
-                    // Оставляем tmp и даём наверх ошибку — клиент увидит internal_error,
-                    // а ты при старте починишь файловую часть.
                     throw new SQLException(
                             "DB committed but file replace failed; tmp kept for recovery. blockchainName=" + blockchainName,
                             moveError
                     );
                 }
             }
+        }
+    }
+
+    /**
+     * Проверка: реальный размер <name>.bch должен совпадать с st.fileSizeBytes.
+     * Если нет — это критическая внешняя порча/вмешательство, уведомляем админа и падаем.
+     */
+    private void verifyMainFileSizeMatchesStateOrAlert(
+            String login,
+            String blockchainName,
+            BchBlockEntry block,
+            BlockchainStateEntry stOrNull
+    ) throws SQLException {
+
+        if (stOrNull == null) {
+            // genesis — state ещё нет, проверять нечего
+            return;
+        }
+
+        long expected = stOrNull.getFileSizeBytes();
+        if (expected <= 0) {
+            // state есть, но ожидаемый размер 0 — это либо пустая цепочка, либо старый формат.
+            // Здесь не трогаем (но можно усилить правила позже).
+            return;
+        }
+
+        String mainFileName = fs.buildBlockchainFileName(blockchainName);
+
+        // Если файла нет — это уже очень подозрительно: state говорит “файл есть и размер > 0”
+        if (!fs.exists(mainFileName)) {
+            String msg =
+                    "КРИТИЧЕСКАЯ ОШИБКА КОНСИСТЕНТНОСТИ: state ожидает основной файл, но его нет. " +
+                    "login=" + login +
+                    ", blockchainName=" + blockchainName +
+                    ", expectedSizeFromState=" + expected +
+                    ", blockNumber=" + (block != null ? block.recordNumber : -1) + ".";
+
+            BlockchainAdminNotifier.critical(msg, null);
+            throw new SQLException(msg);
+        }
+
+        long real;
+        try {
+            real = fs.size(mainFileName);
+        } catch (Exception e) {
+            String msg =
+                    "КРИТИЧЕСКАЯ ОШИБКА: не удалось получить размер основного файла блокчейна. " +
+                    "login=" + login +
+                    ", blockchainName=" + blockchainName +
+                    ", expectedSizeFromState=" + expected +
+                    ", blockNumber=" + (block != null ? block.recordNumber : -1) + ".";
+            BlockchainAdminNotifier.critical(msg, e);
+            throw new SQLException(msg, e);
+        }
+
+        if (real != expected) {
+            String msg =
+                    "КРИТИЧЕСКАЯ ОШИБКА КОНСИСТЕНТНОСТИ: размер файла блокчейна НЕ СОВПАДАЕТ с state. " +
+                    "login=" + login +
+                    ", blockchainName=" + blockchainName +
+                    ", expectedSizeFromState=" + expected +
+                    ", realMainFileSize=" + real +
+                    ", blockNumber=" + (block != null ? block.recordNumber : -1) + ". " +
+                    "Похоже на внешнее вмешательство/порчу файла. Запись нового блока остановлена.";
+
+            BlockchainAdminNotifier.critical(msg, null);
+            throw new SQLException(msg);
         }
     }
 
@@ -274,7 +349,6 @@ public final class BlockchainWriter {
     }
 
     private static long safeAdd(long x, long y) {
-        // защита от переполнения long (маловероятно, но пусть будет)
         long r = x + y;
         if (((x ^ r) & (y ^ r)) < 0) {
             throw new IllegalArgumentException("fileSizeBytes overflow: " + x + " + " + y);

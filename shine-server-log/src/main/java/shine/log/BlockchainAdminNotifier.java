@@ -1,4 +1,4 @@
-package server.ws;
+package shine.log;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
  *  - пишет МАКСИМАЛЬНО ЗАМЕТНЫЙ лог
  *
  * TODO:
- *  - отправка уведомления администратору:
+ *  - реальная отправка уведомления администратору:
  *      * Telegram bot / email / SMS / webhook / Sentry / PagerDuty
  *      * желательно с hostname, временем, именем блокчейна, размерами и stacktrace
  * ===============================================================
@@ -23,17 +23,21 @@ public final class BlockchainAdminNotifier {
 
     private BlockchainAdminNotifier() {}
 
+    public static void critical(String message) {
+        critical(message, null);
+    }
+
     public static void critical(String message, Throwable t) {
 
         String bannerTop =
                 "\n" +
                 "=================================================================\n" +
-                "====================  !!! CRITICAL ALERT !!!  ===================\n" +
+                "====================  !!! КРИТИЧЕСКАЯ ОШИБКА !!!  ===============\n" +
                 "=================================================================";
 
         String bannerBottom =
                 "=================================================================\n" +
-                "====================  !!! ACTION REQUIRED !!! ===================\n" +
+                "====================  !!! НУЖНО ВМЕШАТЕЛЬСТВО !!! ===============\n" +
                 "=================================================================\n";
 
         if (t == null) {
@@ -51,6 +55,6 @@ public final class BlockchainAdminNotifier {
             );
         }
 
-        // TODO: Реальная отправка уведомления администратору (telegram/email/webhook/sentry)
+        // TODO: Реальная отправка уведомления администратору (Telegram/email/webhook/Sentry)
     }
 }

@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import shine.db.dao.BlockchainStateDAO;
 import shine.db.entities.BlockchainStateEntry;
 import utils.files.FileStoreUtil;
+import shine.log.BlockchainAdminNotifier;
 
 import java.io.IOException;
 import java.nio.file.*;

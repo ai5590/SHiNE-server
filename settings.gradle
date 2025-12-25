@@ -1,5 +1,6 @@
 rootProject.name = 'shine-server-server'
 
+include 'shine-server-log'
 include 'shine-server-config'
 include 'shine-server-geo'
 include 'shine-server-crypto'
