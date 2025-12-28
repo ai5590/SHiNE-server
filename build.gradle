@@ -51,6 +51,43 @@ dependencies {
     implementation project(':shine-server-net-server')   // Хэндлеры для обработки сетевых запросов
 
 
+
+//
+//
+//    // -------------------- ТЕСТЫ --------------------
+//    testImplementation platform('org.junit:junit-bom:5.11.4')
+//    testImplementation 'org.junit.jupiter:junit-jupiter'
+//    testImplementation 'org.junit.platform:junit-platform-suite-api'
+//    testRuntimeOnly  'org.junit.platform:junit-platform-suite-engine'
+//
+//    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+//
+//    // Suite (чтобы запустить классы в заданном порядке)
+//    testImplementation "org.junit.platform:junit-platform-suite:1.10.2"
+//
+//    // Нужно, чтобы TestExecutionListener (RussianSummaryListener) корректно подхватывался
+//    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+//}
+
+    // -------------------- ТЕСТЫ (JUnit 5) --------------------
+    // Один BOM на всё семейство JUnit (Jupiter + Platform модули)
+    testImplementation platform("org.junit:junit-bom:5.10.2")
+
+    // JUnit Jupiter (Test, BeforeAll, Assertions)
+    testImplementation "org.junit.jupiter:junit-jupiter"
+
+    // JUnit Platform Suite (@Suite, @SelectClasses)
+    testImplementation "org.junit.platform:junit-platform-suite-api"
+    testRuntimeOnly  "org.junit.platform:junit-platform-suite-engine"
+
+    // Нужно для компиляции RussianSummaryListener (org.junit.platform.launcher.*)
+    // и чтобы JUnit мог подхватить listener при запуске
+    testImplementation "org.junit.platform:junit-platform-launcher"
+    testRuntimeOnly  "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+    useJUnitPlatform()
 }
 
 application {
@@ -77,14 +114,5 @@ shadowJar {
         attributes(
                 'Main-Class': 'server.ws.WsServer'
         )
-    }
-}
-
-test {
-    useJUnitPlatform()
-
-    testLogging {
-        events "passed", "skipped", "failed"
-        showStandardStreams = true
     }
 }

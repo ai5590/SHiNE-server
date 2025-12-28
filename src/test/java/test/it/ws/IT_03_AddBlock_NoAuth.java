@@ -1,4 +1,4 @@
-package test.it;
+package test.it.ws;
 
 import blockchain.BchBlockEntry;
 import blockchain.BchCryptoVerifier;
@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * IT_03_AddBlock_NoAuth
  *
  * Интеграционный тест добавления блоков в персональный блокчейн без отдельной авторизации,
- * в формате твоих IT-тестов (ANSI, шаги, WsTestClient, JsonBuilders/JsonParsers).
+ * в формате твоих IT-тестов (ANSI, шаги, WsTestClient).
  *
  * Сценарий:
  *  1) AddBlock: HEADER (global=0, prevGlobalHash=ZERO64) -> ожидаем 200
@@ -31,11 +31,12 @@ import static org.junit.jupiter.api.Assertions.*;
  *  2) AddBlock: TEXT   (global=1, prevGlobalHash=serverLastGlobalHash) -> ожидаем 200
  *
  * Примечание:
- *  - lastLineHash пока равен lastGlobalHash (как ты говорил).
+ *  - lastLineHash пока равен lastGlobalHash.
+ *  - подпись блока делаем ключом логина (loginPrivKey).
  */
 public class IT_03_AddBlock_NoAuth {
 
-    // ANSI цвета (работает в большинстве терминалов)
+    // ANSI цвета
     private static final String R   = "\u001B[0m";
     private static final String G   = "\u001B[32m";
     private static final String Y   = "\u001B[33m";
@@ -61,10 +62,6 @@ public class IT_03_AddBlock_NoAuth {
 
     private static void ok(String s) {
         System.out.println(G + "✅ " + s + R);
-    }
-
-    private static void warn(String s) {
-        System.out.println(Y + "⚠️ " + s + R);
     }
 
     private static void boom(String s) {
@@ -137,21 +134,19 @@ public class IT_03_AddBlock_NoAuth {
 
         try (WsTestClient client = new WsTestClient(TestConfig.WS_URI)) {
 
-            // =================================================================================
-            // ШАГ 1: HEADER (global=0)
-            // =================================================================================
+            // -------------------- ШАГ 1: HEADER (global=0) --------------------
             stepTitle("ШАГ 1: AddBlock HEADER (global=0)");
 
             byte[] headerFull = buildHeaderBlockFullBytes(
-                    0,                  // globalNumber
-                    (short) 0,           // lineIndex
-                    0,                  // lineBlockNumber
-                    ZERO32,             // prevGlobalHash32
-                    ZERO32              // prevLineHash32 (пока равно prevGlobal)
+                    0,
+                    (short) 0,
+                    0,
+                    ZERO32,
+                    ZERO32
             );
 
             String reqId1 = "it03-add-header";
-            String reqJson1 = buildAddBlockJson(reqId1, TestConfig.TEST_BCH_NAME, 0, ZERO64, base64(headerFull));
+            String reqJson1 = buildAddBlockJson(reqId1, TestConfig.TEST_BCH_NAME(), 0, ZERO64, base64(headerFull));
 
             send("AddBlock#HEADER", reqJson1);
             String resp1 = client.request(reqId1, reqJson1, Duration.ofSeconds(8));
@@ -166,25 +161,23 @@ public class IT_03_AddBlock_NoAuth {
 
             ok("HEADER принят. serverLastGlobalHash=" + serverLastGlobalHash);
 
-            // =================================================================================
-            // ШАГ 2: TEXT (global=1)
-            // =================================================================================
+            // -------------------- ШАГ 2: TEXT (global=1) --------------------
             stepTitle("ШАГ 2: AddBlock TEXT (global=1)");
 
             byte[] prevGlobal32 = hexToBytes32(serverLastGlobalHash);
-            byte[] prevLine32   = prevGlobal32; // пока lineHash = globalHash
+            byte[] prevLine32   = prevGlobal32;
 
             byte[] textFull = buildTextBlockFullBytes(
-                    1,                  // globalNumber
-                    (short) 0,           // lineIndex
-                    1,                  // lineBlockNumber
+                    1,
+                    (short) 0,
+                    1,
                     prevGlobal32,
                     prevLine32,
                     "Hello from IT_03 test"
             );
 
             String reqId2 = "it03-add-text";
-            String reqJson2 = buildAddBlockJson(reqId2, TestConfig.TEST_BCH_NAME, 1, serverLastGlobalHash, base64(textFull));
+            String reqJson2 = buildAddBlockJson(reqId2, TestConfig.TEST_BCH_NAME(), 1, serverLastGlobalHash, base64(textFull));
 
             send("AddBlock#TEXT", reqJson2);
             String resp2 = client.request(reqId2, reqJson2, Duration.ofSeconds(8));
@@ -201,7 +194,7 @@ public class IT_03_AddBlock_NoAuth {
     }
 
     // =================================================================================
-    //                                   BUILD BLOCKS
+    // BUILD BLOCKS
     // =================================================================================
 
     private static byte[] buildHeaderBlockFullBytes(int globalNumber,
@@ -210,9 +203,7 @@ public class IT_03_AddBlock_NoAuth {
                                                     byte[] prevGlobalHash32,
                                                     byte[] prevLineHash32) {
 
-        // HeaderBody формата type=0 ver=1:
-        // [type][ver][tag "SHiNE001"][loginLen][login]
-        HeaderBody body = new HeaderBody(TestConfig.TEST_LOGIN);
+        HeaderBody body = new HeaderBody(TestConfig.TEST_LOGIN());
         byte[] bodyBytes = body.toBytes();
 
         return buildSignedBlockFullBytes(globalNumber, lineIndex, lineBlockNumber, bodyBytes, prevGlobalHash32, prevLineHash32);
@@ -240,7 +231,6 @@ public class IT_03_AddBlock_NoAuth {
 
         long ts = System.currentTimeMillis() / 1000L;
 
-        // recordSize = RAW header + body (без подписи/хэша — это внутренняя "raw"-часть записи)
         int recordSize = BchBlockEntry.RAW_HEADER_SIZE + bodyBytes.length;
 
         byte[] rawBytes = ByteBuffer.allocate(recordSize)
@@ -254,7 +244,7 @@ public class IT_03_AddBlock_NoAuth {
                 .array();
 
         byte[] preimage = BchCryptoVerifier.buildPreimage(
-                TestConfig.TEST_LOGIN,
+                TestConfig.TEST_LOGIN(),
                 prevGlobalHash32,
                 prevLineHash32,
                 rawBytes
@@ -262,8 +252,8 @@ public class IT_03_AddBlock_NoAuth {
 
         byte[] hash32 = BchCryptoVerifier.sha256(preimage);
 
-        // В этом тесте подпись делаем ключом логина (как у тебя было)
-        byte[] signature64 = Ed25519Util.sign(hash32, TestConfig.LOGIN_PRIV_KEY);
+        // Подпись делаем ключом логина
+        byte[] signature64 = Ed25519Util.sign(hash32, TestConfig.LOGIN_PRIV_KEY());
 
         return new BchBlockEntry(
                 globalNumber,
@@ -276,15 +266,11 @@ public class IT_03_AddBlock_NoAuth {
         ).toBytes();
     }
 
-    // =================================================================================
-    //                                    JSON BUILD
-    // =================================================================================
-
     private static String buildAddBlockJson(String requestId,
-                                            String blockchainName,
-                                            int globalNumber,
-                                            String prevGlobalHashHex,
-                                            String blockBytesB64) {
+                                           String blockchainName,
+                                           int globalNumber,
+                                           String prevGlobalHashHex,
+                                           String blockBytesB64) {
         return """
             {
               "op": "AddBlock",
@@ -299,14 +285,8 @@ public class IT_03_AddBlock_NoAuth {
             """.formatted(requestId, blockchainName, globalNumber, prevGlobalHashHex, blockBytesB64);
     }
 
-    // =================================================================================
-    //                                    HELPERS
-    // =================================================================================
-
     private static String extractPayloadString(String json, String field) {
         try {
-            // JsonParsers у тебя уже есть, но тут проще и не ломать совместимость:
-            // Если захочешь — можем добавить в JsonParsers отдельный метод payloadString(...)
             com.fasterxml.jackson.databind.JsonNode root =
                     new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
             com.fasterxml.jackson.databind.JsonNode payload = root.get("payload");

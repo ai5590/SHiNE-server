@@ -23,10 +23,10 @@ public final class JsonBuilders {
                 }
                 """.formatted(
                 requestId,
-                TestConfig.TEST_LOGIN,
-                TestConfig.TEST_BCH_NAME,
-                TestConfig.LOGIN_PUBKEY_B64,
-                TestConfig.DEVICE_PUBKEY_B64,
+                TestConfig.TEST_LOGIN(),
+                TestConfig.TEST_BCH_NAME(),
+                TestConfig.LOGIN_PUBKEY_B64(),
+                TestConfig.DEVICE_PUBKEY_B64(),
                 TestConfig.TEST_BCH_LIMIT
         );
     }
@@ -38,7 +38,7 @@ public final class JsonBuilders {
                   "requestId": "%s",
                   "payload": { "login": "%s" }
                 }
-                """.formatted(requestId, TestConfig.TEST_LOGIN);
+                """.formatted(requestId, TestConfig.TEST_LOGIN());
     }
 
     public static String createAuthSession(String requestId, String authNonce, String storagePwd) {
@@ -102,10 +102,15 @@ public final class JsonBuilders {
             """.formatted(requestId, sessionId, timeMs, signatureB64);
     }
 
+    /**
+     * Подпись для режима AUTH_IN_PROGRESS:
+     * preimage = "AUTHORIFICATED:" + timeMs + authNonce
+     * подписываем devicePrivKey (как в твоём протоколе).
+     */
     public static String signAuthorificated(String authNonce, long timeMs) {
         String preimageStr = "AUTHORIFICATED:" + timeMs + authNonce;
         byte[] preimage = preimageStr.getBytes(StandardCharsets.UTF_8);
-        byte[] sig = Ed25519Util.sign(preimage, TestConfig.DEVICE_PRIV_KEY);
+        byte[] sig = Ed25519Util.sign(preimage, TestConfig.DEVICE_PRIV_KEY());
         return Base64.getEncoder().encodeToString(sig);
     }
 }
