@@ -265,7 +265,10 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
                 prevLineHash32 = new byte[32];
                 prevLineHashHex = "";
             } else {
-                prevLineHashHex = nn(st.getLastLineHash(li));
+                // ✅ ВАЖНОЕ ИСПРАВЛЕНИЕ:
+                // Если это первая запись в линии (lastLineNumber==0),
+                // то prevLineHash должен быть hash(genesis), а не пустота.
+                prevLineHashHex = computePrevLineHashHex(st, li);
                 prevLineHash32 = hexTo32(prevLineHashHex);
             }
         } catch (Exception e) {
@@ -314,6 +317,35 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
                 login, blockchainName, globalNumber, li, ln, newHashHex);
 
         return new AddBlockResult(WireCodes.Status.OK, null, globalNumber, newHashHex);
+    }
+
+    /**
+     * ✅ Правило:
+     *  - lineIndex=0 (genesis линия): prevLineHash = 32 нулей (пустая строка => hexTo32 даст 32 нуля)
+     *  - lineIndex>0:
+     *      - если в этой линии ещё нет блоков (lastLineNumber==0) => prevLineHash = hash(genesis) (line0 hash)
+     *      - иначе => prevLineHash = lastLineHash(lineIndex)
+     */
+    private static String computePrevLineHashHex(BlockchainStateEntry st, int lineIndex) {
+        if (lineIndex == 0) {
+            return ""; // -> 32 нуля
+        }
+
+        int lastLn = st.getLastLineNumber(lineIndex);
+        if (lastLn == 0) {
+            // первая запись линии -> от genesis
+            String genesis = nn(st.getLastLineHash(0));
+            if (!genesis.isBlank()) return genesis;
+
+            // fallback: если line0 почему-то не заполнена, но genesis глобально есть
+            String g = nn(st.getLastGlobalHash());
+            if (!g.isBlank()) return g;
+
+            // в крайнем случае вернём пустоту -> 32 нуля (лучше чем NPE), но это уже будет симптомом проблем state
+            return "";
+        }
+
+        return nn(st.getLastLineHash(lineIndex));
     }
 
     private static final class AddBlockResult {
