@@ -5,6 +5,7 @@ import blockchain.BchCryptoVerifier;
 import blockchain.body.HeaderBody;
 import blockchain.body.ReactionBody;
 import blockchain.body.TextBody;
+import test.it.utils.JsonParsers;
 import test.it.utils.TestConfig;
 import utils.crypto.Ed25519Util;
 
@@ -13,31 +14,35 @@ import java.nio.ByteOrder;
 import java.time.Duration;
 import java.util.Base64;
 
-/**
- * AddBlockScenarioRunner
- *
- * Хранит локальное состояние:
- *  - globalLastHashHex / globalLastNumber
- *  - lineLastNumber[line] / lineLastHashHex[line]
- *  - headerHash32 (нужен как prevLineHash для первых блоков линий)
- *
- * Умеет:
- *  - собрать блок (header/text/react)
- *  - отправить AddBlock по сети (каждый запрос = новое WS соединение)
- *  - обновить локальное состояние
- */
-public final class AddBlockScenarioRunner {
+import static org.junit.jupiter.api.Assertions.*;
 
-    // requestId делаем фиксированный (как ты попросил)
-    private static final String FIXED_REQUEST_ID = "it03";
+/**
+ * AddBlockFlow
+ *
+ * Держит локальное состояние цепочки:
+ *  - last globalNumber / last globalHash
+ *  - last lineNum / last lineHash для каждой линии
+ *
+ * И умеет:
+ *  - собрать следующий блок (HEADER / TEXT / REACTION)
+ *  - отправить AddBlock в сервер (через WsJsonOneShot)
+ *  - проверить serverLastGlobalHash == localHash
+ *  - обновить локальное состояние
+ *
+ * Важно:
+ *  - Этот класс НЕ занимается красивыми логами. Только логика + проверки.
+ */
+public final class AddBlockFlow {
 
     private static final byte[] ZERO32 = new byte[32];
     private static final String ZERO64 = "0".repeat(64);
 
-    private final String wsUri;
-    private final String blockchainName;
+    // линии как у тебя
+    public static final short LINE_HEADER = 0;
+    public static final short LINE_TEXT   = 1;
+    public static final short LINE_REACT  = 2;
 
-    // Локальное состояние (как и было в тесте)
+    // локальное состояние
     private final int[] lineLastNumber = new int[8];
     private final String[] lineLastHashHex = new String[8];
 
@@ -46,10 +51,7 @@ public final class AddBlockScenarioRunner {
 
     private byte[] headerHash32 = null;
 
-    public AddBlockScenarioRunner(String wsUri, String blockchainName) {
-        this.wsUri = wsUri;
-        this.blockchainName = blockchainName;
-
+    public AddBlockFlow() {
         for (int i = 0; i < 8; i++) lineLastHashHex[i] = "";
     }
 
@@ -57,90 +59,94 @@ public final class AddBlockScenarioRunner {
     // PUBLIC API
     // =================================================================================
 
-    public String getGlobalLastHashHex() {
-        return globalLastHashHex;
-    }
+    /** Шлём HEADER (global=0, line=0, lineNum=0). Должно быть ПЕРВЫМ. */
+    public void sendHeader0(Duration timeout) {
+        assertEquals(-1, globalLastNumber, "HEADER должен идти первым: globalLastNumber сейчас уже " + globalLastNumber);
 
-    public int getGlobalLastNumber() {
-        return globalLastNumber;
-    }
-
-    public int getLineLastNumber(int lineIndex) {
-        return lineLastNumber[lineIndex];
-    }
-
-    public String getLineLastHashHex(int lineIndex) {
-        return lineLastHashHex[lineIndex];
-    }
-
-    /** Добавить HEADER (global=0, line=0, lineNum=0). */
-    public AddBlockResult addHeader(short lineHeader) {
         BuiltBlock header = buildHeaderBlock(
                 0,
-                lineHeader,
+                LINE_HEADER,
                 0,
                 ZERO32,
                 ZERO32
         );
 
-        String reqJson = buildAddBlockJson(FIXED_REQUEST_ID, blockchainName, 0, ZERO64, base64(header.fullBytes));
-        String resp = WsJsonRoundtripClient.sendOnce(wsUri, reqJson, Duration.ofSeconds(8));
+        String req = buildAddBlockJson(TestConfig.BCH_NAME(), 0, ZERO64, base64(header.fullBytes));
+        String resp = WsJsonOneShot.request(req, timeout);
 
-        // локальный hash
+        assert200("AddBlock(HEADER)", resp);
+
+        String serverLastGlobalHash0 = extractPayloadString(resp, "serverLastGlobalHash");
+        assertNotNull(serverLastGlobalHash0, "HEADER: payload.serverLastGlobalHash must not be null");
+        assertEquals(64, serverLastGlobalHash0.trim().length(), "HEADER: serverLastGlobalHash must be 64 hex chars");
+
         String localHash0 = bytesToHex64(header.hash32);
+        assertEquals(localHash0, serverLastGlobalHash0, "HEADER: serverLastGlobalHash должен совпасть с локальным hash");
 
-        // обновляем состояние (как раньше)
+        // обновляем локальное состояние
         headerHash32 = header.hash32;
         globalLastNumber = 0;
         globalLastHashHex = localHash0;
-        lineLastNumber[0] = 0;
-        lineLastHashHex[0] = localHash0;
 
-        return new AddBlockResult(reqJson, resp, localHash0);
+        lineLastNumber[LINE_HEADER] = 0;
+        lineLastHashHex[LINE_HEADER] = localHash0;
     }
 
-    /** Добавить TEXT в lineText, следующим lineNum, global=globalNumber. */
-    public AddBlockResult addText(int globalNumber, short lineText, String text) {
-        int lineNum = nextLineNum(lineText);
-        byte[] prevLineHash = prevLineHash32(lineText);
+    /** Шлём следующий TEXT блок в line=1. */
+    public BuiltBlock sendNextText(String text, Duration timeout) {
+        assertNotNull(headerHash32, "TEXT нельзя слать до HEADER (headerHash32 == null)");
+
+        int nextGlobal = globalLastNumber + 1;
+        int lineNum = nextLineNum(LINE_TEXT);
+        byte[] prevLineHash = prevLineHash32(LINE_TEXT);
 
         BuiltBlock b = buildTextBlock(
-                globalNumber,
-                lineText,
+                nextGlobal,
+                LINE_TEXT,
                 lineNum,
                 hexToBytes32(globalLastHashHex),
                 prevLineHash,
                 text
         );
 
-        String reqJson = buildAddBlockJson(FIXED_REQUEST_ID, blockchainName, globalNumber, globalLastHashHex, base64(b.fullBytes));
-        String resp = WsJsonRoundtripClient.sendOnce(wsUri, reqJson, Duration.ofSeconds(8));
+        String req = buildAddBlockJson(TestConfig.BCH_NAME(), nextGlobal, globalLastHashHex, base64(b.fullBytes));
+        String resp = WsJsonOneShot.request(req, timeout);
+
+        assert200("AddBlock(TEXT)", resp);
+
+        String serverLastGlobalHash = extractPayloadString(resp, "serverLastGlobalHash");
+        assertNotNull(serverLastGlobalHash, "TEXT: payload.serverLastGlobalHash must not be null");
+        assertEquals(64, serverLastGlobalHash.trim().length(), "TEXT: serverLastGlobalHash must be 64 hex chars");
 
         String localHash = bytesToHex64(b.hash32);
+        assertEquals(localHash, serverLastGlobalHash, "TEXT: serverLastGlobalHash должен совпасть с локальным hash");
 
         // обновляем состояние
-        globalLastNumber = globalNumber;
+        globalLastNumber = nextGlobal;
         globalLastHashHex = localHash;
-        lineLastNumber[lineText] = lineNum;
-        lineLastHashHex[lineText] = localHash;
+        lineLastNumber[LINE_TEXT] = lineNum;
+        lineLastHashHex[LINE_TEXT] = localHash;
 
-        return new AddBlockResult(reqJson, resp, localHash, b.hash32);
+        return b;
     }
 
-    /** Добавить REACT в lineReact, следующим lineNum, global=globalNumber, ссылка на (toGlobal,toHash32). */
-    public AddBlockResult addReaction(int globalNumber,
-                                      short lineReact,
-                                      int reactionCode,
-                                      String toBlockchainName,
-                                      int toBlockGlobalNumber,
-                                      byte[] toBlockHash32) {
+    /** Шлём следующий REACTION блок в line=2, ссылаясь на конкретный блок. */
+    public BuiltBlock sendNextReaction(int reactionCode,
+                                       String toBlockchainName,
+                                       int toBlockGlobalNumber,
+                                       byte[] toBlockHash32,
+                                       Duration timeout) {
+        assertNotNull(headerHash32, "REACTION нельзя слать до HEADER (headerHash32 == null)");
+        assertNotNull(toBlockHash32, "toBlockHash32 is null");
+        assertEquals(32, toBlockHash32.length, "toBlockHash32 must be 32 bytes");
 
-        int lineNum = nextLineNum(lineReact);
-        byte[] prevLineHash = prevLineHash32(lineReact);
+        int nextGlobal = globalLastNumber + 1;
+        int lineNum = nextLineNum(LINE_REACT);
+        byte[] prevLineHash = prevLineHash32(LINE_REACT);
 
         BuiltBlock b = buildReactionBlock(
-                globalNumber,
-                lineReact,
+                nextGlobal,
+                LINE_REACT,
                 lineNum,
                 hexToBytes32(globalLastHashHex),
                 prevLineHash,
@@ -150,51 +156,38 @@ public final class AddBlockScenarioRunner {
                 toBlockHash32
         );
 
-        String reqJson = buildAddBlockJson(FIXED_REQUEST_ID, blockchainName, globalNumber, globalLastHashHex, base64(b.fullBytes));
-        String resp = WsJsonRoundtripClient.sendOnce(wsUri, reqJson, Duration.ofSeconds(8));
+        String req = buildAddBlockJson(TestConfig.BCH_NAME(), nextGlobal, globalLastHashHex, base64(b.fullBytes));
+        String resp = WsJsonOneShot.request(req, timeout);
+
+        assert200("AddBlock(REACT)", resp);
+
+        String serverLastGlobalHash = extractPayloadString(resp, "serverLastGlobalHash");
+        assertNotNull(serverLastGlobalHash, "REACT: payload.serverLastGlobalHash must not be null");
+        assertEquals(64, serverLastGlobalHash.trim().length(), "REACT: serverLastGlobalHash must be 64 hex chars");
 
         String localHash = bytesToHex64(b.hash32);
+        assertEquals(localHash, serverLastGlobalHash, "REACT: serverLastGlobalHash должен совпасть с локальным hash");
 
         // обновляем состояние
-        globalLastNumber = globalNumber;
+        globalLastNumber = nextGlobal;
         globalLastHashHex = localHash;
-        lineLastNumber[lineReact] = lineNum;
-        lineLastHashHex[lineReact] = localHash;
+        lineLastNumber[LINE_REACT] = lineNum;
+        lineLastHashHex[LINE_REACT] = localHash;
 
-        return new AddBlockResult(reqJson, resp, localHash, b.hash32);
+        return b;
     }
 
-    // =================================================================================
-    // RESULT HOLDER
-    // =================================================================================
-
-    public static final class AddBlockResult {
-        public final String requestJson;
-        public final String responseJson;
-
-        /** локально вычисленный hash (HEX64) именно для этого блока */
-        public final String localHashHex;
-
-        /** локальный hash32 (если надо ссылаться на блок дальше) */
-        public final byte[] localHash32;
-
-        public AddBlockResult(String requestJson, String responseJson, String localHashHex) {
-            this(requestJson, responseJson, localHashHex, null);
-        }
-
-        public AddBlockResult(String requestJson, String responseJson, String localHashHex, byte[] localHash32) {
-            this.requestJson = requestJson;
-            this.responseJson = responseJson;
-            this.localHashHex = localHashHex;
-            this.localHash32 = localHash32;
-        }
-    }
+    // getters для итогов/логов (если надо)
+    public int globalLastNumber() { return globalLastNumber; }
+    public String globalLastHashHex() { return globalLastHashHex; }
+    public int lineLastNumber(short line) { return lineLastNumber[line]; }
+    public String lineLastHashHex(short line) { return lineLastHashHex[line]; }
 
     // =================================================================================
-    // LINE HELPERS
+    // INTERNALS: line helpers
     // =================================================================================
 
-    /** Следующий lineNum: если в линии было N блоков, новый будет N+1 (для line>0). Для line0 тут только 0. */
+    /** Следующий lineNum: если в линии было N блоков, новый будет N+1 (для line>0). Для line0 здесь не используется. */
     private int nextLineNum(short lineIndex) {
         if (lineIndex < 0 || lineIndex > 7) throw new IllegalArgumentException("lineIndex must be 0..7");
         if (lineIndex == 0) return 0;
@@ -228,15 +221,15 @@ public final class AddBlockScenarioRunner {
     }
 
     // =================================================================================
-    // BUILD BLOCKS
+    // INTERNALS: build blocks
     // =================================================================================
 
-    /** Небольшой холдер, чтобы сценарий мог использовать hash32 как prevGlobal/prevLine и как toBlockHash. */
-    private static final class BuiltBlock {
-        final byte[] fullBytes;
-        final byte[] hash32;
+    /** Небольшой холдер, чтобы flow мог использовать hash32 как prevGlobal/prevLine и как toBlockHash. */
+    public static final class BuiltBlock {
+        public final byte[] fullBytes;
+        public final byte[] hash32;
 
-        BuiltBlock(byte[] fullBytes, byte[] hash32) {
+        public BuiltBlock(byte[] fullBytes, byte[] hash32) {
             this.fullBytes = fullBytes;
             this.hash32 = hash32;
         }
@@ -264,12 +257,6 @@ public final class AddBlockScenarioRunner {
         TextBody body = new TextBody(text);
         byte[] bodyBytes = body.toBytes();
 
-        // ⚠️ ВАЖНО:
-        // У тебя сервер ругается: "Body is in wrong lineIndex expected=1 actual=0 (type=1 ver=1)".
-        // Это значит, что lineIndex хранится ВНУТРИ bodyBytes.
-        // Ниже — безопасный патч: предполагаем формат "type(1) + ver(1) + lineIndex(2)" и проставляем lineIndex.
-        bodyBytes = patchBodyLineIndexIfPresent(bodyBytes, lineIndex);
-
         return buildSignedBlockFullBytes(globalNumber, lineIndex, lineBlockNumber, bodyBytes, prevGlobalHash32, prevLineHash32);
     }
 
@@ -291,9 +278,6 @@ public final class AddBlockScenarioRunner {
         );
 
         byte[] bodyBytes = body.toBytes();
-
-        // Аналогично TextBody — если внутри есть lineIndex, проставляем.
-        bodyBytes = patchBodyLineIndexIfPresent(bodyBytes, lineIndex);
 
         return buildSignedBlockFullBytes(globalNumber, lineIndex, lineBlockNumber, bodyBytes, prevGlobalHash32, prevLineHash32);
     }
@@ -321,7 +305,7 @@ public final class AddBlockScenarioRunner {
 
         // Ключевой момент: preimage должен совпасть с серверным правилом.
         // Сервер НЕ получает prevLineHash по сети — он берёт его из своего состояния линии.
-        // Поэтому мы обязаны передавать сюда ровно тот же prevLineHash32 (см. prevLineHash32()).
+        // Поэтому в тесте мы обязаны передавать сюда ровно тот же prevLineHash32.
         byte[] preimage = BchCryptoVerifier.buildPreimage(
                 TestConfig.LOGIN(),
                 prevGlobalHash32,
@@ -346,33 +330,11 @@ public final class AddBlockScenarioRunner {
         return new BuiltBlock(full, hash32);
     }
 
-    /**
-     * Патч lineIndex внутри bodyBytes.
-     *
-     * Предположение (по твоей ошибке type=1 ver=1):
-     *  bodyBytes[0] = type
-     *  bodyBytes[1] = ver
-     *  bodyBytes[2..3] = lineIndex (big-endian short)
-     *
-     * Если формат другой — скажешь, поменяю оффсет/проверки.
-     */
-    private static byte[] patchBodyLineIndexIfPresent(byte[] bodyBytes, short lineIndex) {
-        if (bodyBytes == null) return null;
-        if (bodyBytes.length < 4) return bodyBytes;
-
-        // Патчим только для line>0 (для header line=0 и так норм).
-        if (lineIndex <= 0) return bodyBytes;
-
-        ByteBuffer.wrap(bodyBytes).order(ByteOrder.BIG_ENDIAN).putShort(2, lineIndex);
-        return bodyBytes;
-    }
-
     // =================================================================================
-    // JSON HELPERS
+    // INTERNALS: json helpers
     // =================================================================================
 
-    private static String buildAddBlockJson(String requestId,
-                                           String blockchainName,
+    private static String buildAddBlockJson(String blockchainName,
                                            int globalNumber,
                                            String prevGlobalHashHex,
                                            String blockBytesB64) {
@@ -387,7 +349,24 @@ public final class AddBlockScenarioRunner {
                 "blockBytesB64": "%s"
               }
             }
-            """.formatted(requestId, blockchainName, globalNumber, prevGlobalHashHex, blockBytesB64);
+            """.formatted(WsJsonOneShot.FIXED_REQUEST_ID, blockchainName, globalNumber, prevGlobalHashHex, blockBytesB64);
+    }
+
+    private static void assert200(String op, String resp) {
+        int st = JsonParsers.status(resp);
+        assertEquals(200, st, op + ": expected status=200, but got=" + st + ", resp=" + resp);
+    }
+
+    private static String extractPayloadString(String json, String field) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode root =
+                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+            com.fasterxml.jackson.databind.JsonNode payload = root.get("payload");
+            if (payload != null && payload.has(field)) {
+                return payload.get(field).asText();
+            }
+        } catch (Exception ignore) {}
+        return null;
     }
 
     private static String base64(byte[] bytes) {
@@ -395,7 +374,7 @@ public final class AddBlockScenarioRunner {
     }
 
     // =================================================================================
-    // HEX HELPERS
+    // INTERNALS: hex helpers
     // =================================================================================
 
     private static byte[] hexToBytes32(String hex) {

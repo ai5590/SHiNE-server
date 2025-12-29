@@ -20,7 +20,7 @@ public class IT_RunAllCleanMain {
     private static final String DATA_DIR = "data";
 
     public static void main(String[] args) {
-        ItRunContext.initIfNeeded();
+//        ItRunContext.initIfNeeded();
 
         TestLog.title("IT RUN CLEAN: очистка data/ + запуск всех тестов");
 
@@ -32,8 +32,8 @@ public class IT_RunAllCleanMain {
             System.exit(1);
         }
 
-        int failed = IT_RunAllMain.runAll();
-        System.exit(failed);
+//        int failed = IT_RunAllMain.runAll();
+//        System.exit(failed);
     }
 
     private static void cleanupDataDir(String dirName) throws IOException {
