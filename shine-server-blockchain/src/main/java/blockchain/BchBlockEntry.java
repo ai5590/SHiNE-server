@@ -5,6 +5,7 @@ import blockchain.body.BodyRecordParser;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -84,7 +85,7 @@ public final class BchBlockEntry {
         if (this.lineIndex != expectedLine) {
             throw new IllegalArgumentException(
                     "Body is in wrong lineIndex: expected=" + expectedLine + " actual=" + this.lineIndex +
-                    " (type=" + this.body.type() + " ver=" + this.body.version() + ")"
+                            " (type=" + this.body.type() + " ver=" + this.body.version() + ")"
             );
         }
 
@@ -132,7 +133,7 @@ public final class BchBlockEntry {
         if (this.lineIndex != expectedLine) {
             throw new IllegalArgumentException(
                     "Body is in wrong lineIndex: expected=" + expectedLine + " actual=" + this.lineIndex +
-                    " (type=" + this.body.type() + " ver=" + this.body.version() + ")"
+                            " (type=" + this.body.type() + " ver=" + this.body.version() + ")"
             );
         }
 
@@ -174,5 +175,60 @@ public final class BchBlockEntry {
 
     public byte[] toBytes() {
         return Arrays.copyOf(fullBytes, fullBytes.length);
+    }
+
+    @Override
+    public String toString() {
+        String timeIso;
+        try {
+            timeIso = Instant.ofEpochSecond(timestamp).toString();
+        } catch (Exception e) {
+            timeIso = "некорректныйTimestamp";
+        }
+
+        return "BchBlockEntry{"
+                + "RAW{"
+                + "recordSize=" + recordSize
+                + ", recordNumber=" + recordNumber
+                + ", timestamp=" + timestamp + " (" + timeIso + ")"
+                + ", lineIndex=" + lineIndex
+                + ", lineNumber=" + lineNumber
+                + ", bodyLen=" + (bodyBytes == null ? -1 : bodyBytes.length)
+                + ", bodyType=" + (body == null ? "?" : (body.type() & 0xFFFF))
+                + ", bodyVer=" + (body == null ? "?" : (body.version() & 0xFFFF))
+                + "}"
+                + ", TAIL{"
+                + "signature64(hex)=" + toHex(signature64)
+                + ", hash32(hex)=" + toHex(hash32)
+                + "}"
+                + ", FULL{"
+                + "fullLen=" + (fullBytes == null ? -1 : fullBytes.length)
+                + ", rawLen=" + recordSize
+                + "}"
+                + ", body=" + (body == null ? "null" : body.toString())
+                + ", bodyBytesPreview(hex32)=" + toHexPreview(bodyBytes, 32)
+                + "}";
+    }
+
+    private static String toHex(byte[] bytes) {
+        if (bytes == null) return "null";
+        char[] HEX = "0123456789abcdef".toCharArray();
+        char[] out = new char[bytes.length * 2];
+        for (int i = 0; i < bytes.length; i++) {
+            int v = bytes[i] & 0xFF;
+            out[i * 2] = HEX[v >>> 4];
+            out[i * 2 + 1] = HEX[v & 0x0F];
+        }
+        return new String(out);
+    }
+
+    private static String toHexPreview(byte[] bytes, int maxBytes) {
+        if (bytes == null) return "null";
+        if (maxBytes <= 0) return "";
+        int n = Math.min(bytes.length, maxBytes);
+        byte[] cut = Arrays.copyOf(bytes, n);
+        String hex = toHex(cut);
+        if (bytes.length > n) hex += "…(+" + (bytes.length - n) + " байт)";
+        return hex;
     }
 }

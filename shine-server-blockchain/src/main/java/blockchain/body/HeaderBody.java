@@ -100,4 +100,16 @@ public final class HeaderBody implements BodyRecord {
 
         return bb.array();
     }
+
+    @Override
+    public String toString() {
+        return """
+                HeaderBody {
+                  тип записи        : HEADER (type=0, ver=1)
+                  ожидаемая линия   : 0 (genesis)
+                  тег формата       : "%s"
+                  login владельца   : "%s"
+                }
+                """.formatted(tag, login);
+    }
 }

@@ -34,7 +34,6 @@ public final class ReactionBody implements BodyRecord {
     public final int toBlockGlobalNumber;
     public final byte[] toBlockHash32;
 
-    /** Десериализация из полного bodyBytes (включая type/version). */
     public ReactionBody(byte[] bodyBytes) {
         Objects.requireNonNull(bodyBytes, "bodyBytes == null");
         if (bodyBytes.length < 4 + 4 + 1 + 1 + 4 + 32) {
@@ -88,16 +87,10 @@ public final class ReactionBody implements BodyRecord {
     public ReactionBody check() {
         if (toBlockchainName == null || toBlockchainName.isBlank())
             throw new IllegalArgumentException("toBlockchainName is blank");
-        byte[] nameBytes = toBlockchainName.getBytes(StandardCharsets.UTF_8);
-        if (nameBytes.length == 0 || nameBytes.length > 255)
-            throw new IllegalArgumentException("toBlockchainName utf8 len must be 1..255");
-
         if (toBlockGlobalNumber < 0)
             throw new IllegalArgumentException("toBlockGlobalNumber < 0");
-
         if (toBlockHash32 == null || toBlockHash32.length != 32)
             throw new IllegalArgumentException("toBlockHash32 invalid");
-
         return this;
     }
 
@@ -121,16 +114,30 @@ public final class ReactionBody implements BodyRecord {
         return bb.array();
     }
 
-    /** Для записи в БД (toBlockHashe TEXT) удобно хранить hex. */
-    public String toBlockHashHex() {
-        return toHex(toBlockHash32);
+    @Override
+    public String toString() {
+        return """
+                ReactionBody {
+                  тип записи              : REACTION (type=2, ver=1)
+                  ожидаемая линия         : 2
+                  код реакции             : %d
+                  целевой блокчейн        : "%s"
+                  globalNumber цели       : %d
+                  hash цели (hex)         : %s
+                }
+                """.formatted(
+                        reactionCode,
+                        toBlockchainName,
+                        toBlockGlobalNumber,
+                        toBlockHashHex()
+                );
     }
 
-    private static String toHex(byte[] bytes) {
+    public String toBlockHashHex() {
         char[] HEX = "0123456789abcdef".toCharArray();
-        char[] out = new char[bytes.length * 2];
-        for (int i = 0; i < bytes.length; i++) {
-            int v = bytes[i] & 0xFF;
+        char[] out = new char[64];
+        for (int i = 0; i < 32; i++) {
+            int v = toBlockHash32[i] & 0xFF;
             out[i * 2] = HEX[v >>> 4];
             out[i * 2 + 1] = HEX[v & 0x0F];
         }

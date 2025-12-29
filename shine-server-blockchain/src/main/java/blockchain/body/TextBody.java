@@ -88,4 +88,19 @@ public final class TextBody implements BodyRecord {
         bb.put(msg);
         return bb.array();
     }
+
+    @Override
+    public String toString() {
+        return """
+                TextBody {
+                  тип записи        : TEXT (type=1, ver=1)
+                  ожидаемая линия   : 1
+                  длина сообщения   : %d байт
+                  текст сообщения  : "%s"
+                }
+                """.formatted(
+                        message.getBytes(StandardCharsets.UTF_8).length,
+                        message
+                );
+    }
 }
