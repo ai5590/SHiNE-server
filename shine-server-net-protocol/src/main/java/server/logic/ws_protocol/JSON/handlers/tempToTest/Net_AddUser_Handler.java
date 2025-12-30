@@ -90,6 +90,7 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
                 // 3. Создаём пользователя
                 SolanaUserEntry user = new SolanaUserEntry(
                         req.getLogin(),
+                        req.getDeviceKey(),
                         req.getDeviceKey()
                 );
 

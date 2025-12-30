@@ -16,6 +16,7 @@ public class SolanaUserEntry {
 
     private String login;      // TEXT PK
     private String deviceKey;  // TEXT NOT NULL (Base64(32 bytes))
+    private String solanaKey;  // TEXT
 
     public SolanaUserEntry() {}
 
@@ -24,12 +25,21 @@ public class SolanaUserEntry {
         this.deviceKey = deviceKey;
     }
 
+    public SolanaUserEntry(String login, String deviceKey, String solanaKey) {
+        this.login = login;
+        this.deviceKey = deviceKey;
+        this.solanaKey = solanaKey;
+    }
+
     public String getLogin() { return login; }
     public void setLogin(String login) { this.login = login; }
 
     /** Публичный ключ устройства (device key). */
     public String getDeviceKey() { return deviceKey; }
     public void setDeviceKey(String deviceKey) { this.deviceKey = deviceKey; }
+
+    public String getSolanaKey() { return solanaKey; }
+    public void setSolanaKey(String solanaKey) { this.solanaKey = solanaKey; }
 
     /**
      * Device key в байтах (32 байта) или null, если ключ битый/пустой.

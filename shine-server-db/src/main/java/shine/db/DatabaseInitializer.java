@@ -82,7 +82,7 @@ public class DatabaseInitializer {
                 CREATE TABLE IF NOT EXISTS solana_users (
                     login       TEXT    NOT NULL PRIMARY KEY,
                     deviceKey   TEXT    NOT NULL,
-                    solanaKey   TEXT    NULLABLE
+                    solanaKey   TEXT
                 );
                 """);
 

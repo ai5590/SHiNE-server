@@ -56,7 +56,7 @@ public final class UserCreateDAO {
 
             try {
                 // 1) user
-                SolanaUserEntry u = new SolanaUserEntry(login, deviceKey);
+                SolanaUserEntry u = new SolanaUserEntry(login, deviceKey, deviceKey);
                 usersDao.insert(c, u); // если login занят -> constraint
 
                 // 2) blockchain_state

@@ -42,13 +42,14 @@ public final class SolanaUsersDAO {
     /** Вставка с внешним соединением. Соединение НЕ закрывает. */
     public void insert(Connection c, SolanaUserEntry user) throws SQLException {
         String sql = """
-            INSERT INTO solana_users (login, deviceKey)
-            VALUES (?, ?)
+            INSERT INTO solana_users (login, deviceKey, solanaKey)
+            VALUES (?, ?, ?)
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, user.getLogin());
             ps.setString(2, user.getDeviceKey());
+            ps.setString(3, user.getSolanaKey());
             ps.executeUpdate();
         }
     }
@@ -91,7 +92,7 @@ public final class SolanaUsersDAO {
     /** Получить по login (case-insensitive) с внешним соединением. Соединение НЕ закрывает. */
     public SolanaUserEntry getByLogin(Connection c, String login) throws SQLException {
         String sql = """
-            SELECT login, deviceKey
+            SELECT login, deviceKey, solanaKey
             FROM solana_users
             WHERE LOWER(login) = LOWER(?)
             """;
@@ -115,7 +116,7 @@ public final class SolanaUsersDAO {
     /** Поиск по префиксу с внешним соединением. Соединение НЕ закрывает. */
     public List<SolanaUserEntry> searchByLoginPrefix(Connection c, String prefix) throws SQLException {
         String sql = """
-            SELECT login, deviceKey
+            SELECT login, deviceKey, solanaKey
             FROM solana_users
             WHERE LOWER(login) LIKE ?
             ORDER BY login
@@ -144,9 +145,15 @@ public final class SolanaUsersDAO {
     // -------------------- MAPPER --------------------
 
     private SolanaUserEntry mapRow(ResultSet rs) throws SQLException {
-        return new SolanaUserEntry(
+        SolanaUserEntry e = new SolanaUserEntry(
                 rs.getString("login"),
                 rs.getString("deviceKey")
         );
+
+        String solanaKey = rs.getString("solanaKey");
+        if (rs.wasNull()) solanaKey = null;
+        e.setSolanaKey(solanaKey);
+
+        return e;
     }
 }
