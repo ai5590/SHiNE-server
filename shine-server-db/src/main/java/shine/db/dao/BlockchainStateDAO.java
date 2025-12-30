@@ -34,7 +34,7 @@ public final class BlockchainStateDAO {
             SELECT
                 blockchainName,
                 login,
-                public_key_base64,
+                blockchainKey,
                 size_limit,
                 file_size_bytes,
                 last_global_number,
@@ -81,7 +81,7 @@ public final class BlockchainStateDAO {
             INSERT INTO blockchain_state (
                 blockchainName,
                 login,
-                public_key_base64,
+                blockchainKey,
                 size_limit,
                 file_size_bytes,
                 last_global_number,
@@ -109,7 +109,7 @@ public final class BlockchainStateDAO {
             ON CONFLICT(blockchainName)
             DO UPDATE SET
                 login              = excluded.login,
-                public_key_base64  = excluded.public_key_base64,
+                blockchainKey      = excluded.blockchainKey,
                 size_limit         = excluded.size_limit,
                 file_size_bytes    = excluded.file_size_bytes,
                 last_global_number = excluded.last_global_number,
@@ -138,7 +138,7 @@ public final class BlockchainStateDAO {
 
             ps.setString(i++, e.getBlockchainName());
             ps.setString(i++, nn(e.getLogin()));
-            ps.setString(i++, nn(e.getPublicKeyBase64()));
+            ps.setString(i++, nn(e.getBlockchainKey()));
 
             ps.setLong(i++, e.getSizeLimit());
             ps.setLong(i++, e.getFileSizeBytes());
@@ -156,12 +156,55 @@ public final class BlockchainStateDAO {
         }
     }
 
+    /**
+     * Атомарно увеличить file_size_bytes на deltaBytes, но только если НЕ превысим size_limit.
+     *
+     * Возвращает:
+     *  - true  если обновили (лимит не превышен)
+     *  - false если лимит превышается или blockchainName не найден
+     *
+     * ВАЖНО: это именно тот механизм, который надо дергать при добавлении блока.
+     */
+    public boolean tryIncreaseFileSizeWithinLimit(Connection c, String blockchainName, long deltaBytes, long nowMs) throws SQLException {
+        String sql = """
+            UPDATE blockchain_state
+            SET
+                file_size_bytes = file_size_bytes + ?,
+                updated_at_ms   = ?
+            WHERE
+                blockchainName = ?
+                AND (file_size_bytes + ?) <= size_limit
+            """;
+
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, deltaBytes);
+            ps.setLong(2, nowMs);
+            ps.setString(3, blockchainName);
+            ps.setLong(4, deltaBytes);
+            int updated = ps.executeUpdate();
+            return updated > 0;
+        }
+    }
+
+    /** Удобная проверка для HEADER: запись должна быть и last_global_number должен быть -1. */
+    public BlockchainStateEntry requireExistingAtGenesis(Connection c, String blockchainName) throws SQLException {
+        BlockchainStateEntry st = getByBlockchainName(c, blockchainName);
+        if (st == null) {
+            throw new IllegalStateException("Blockchain state not found for blockchainName=" + blockchainName);
+        }
+        if (st.getLastGlobalNumber() != -1) {
+            throw new IllegalStateException("Blockchain state is not at genesis (-1). blockchainName=" + blockchainName +
+                    " last_global_number=" + st.getLastGlobalNumber());
+        }
+        return st;
+    }
+
     private BlockchainStateEntry mapRow(ResultSet rs) throws SQLException {
         BlockchainStateEntry e = new BlockchainStateEntry();
 
         e.setBlockchainName(rs.getString("blockchainName"));
         e.setLogin(rs.getString("login"));
-        e.setPublicKeyBase64(rs.getString("public_key_base64"));
+        e.setBlockchainKey(rs.getString("blockchainKey"));
 
         // size_limit теперь long
         e.setSizeLimit(rs.getLong("size_limit"));

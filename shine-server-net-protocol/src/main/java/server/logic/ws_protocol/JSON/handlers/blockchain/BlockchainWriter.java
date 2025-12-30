@@ -72,6 +72,11 @@ public final class BlockchainWriter {
             String newHashHex
     ) throws SQLException {
 
+        // ✅ ВАЖНО: state теперь ОБЯЗАТЕЛЕН, genesis НЕ создаёт запись, а обновляет существующую
+        if (stOrNull == null) {
+            throw new SQLException("blockchain_state not found for blockchainName=" + blockchainName + " (state обязателен)");
+        }
+
         verifyMainFileSizeMatchesStateOrAlert(login, blockchainName, block, stOrNull);
 
         // =====================================================================
@@ -82,14 +87,14 @@ public final class BlockchainWriter {
         // =====================================================================
         // ШАГ 2. Считаем новый fileSizeBytes
         // =====================================================================
-        final long oldFileSize = (stOrNull == null) ? 0L : stOrNull.getFileSizeBytes();
+        final long oldFileSize = stOrNull.getFileSizeBytes();
         final long newFileSize = safeAdd(oldFileSize, newBlockFullBytes.length);
 
         // =====================================================================
         // ШАГ 3. Создаём новый tmp-файл: tmp = (old file bytes) + (new block bytes)
         // =====================================================================
         final byte[] tmpBytes;
-        if (stOrNull == null || oldFileSize == 0) {
+        if (oldFileSize == 0) {
             tmpBytes = newBlockFullBytes;
         } else {
             byte[] oldBytes;
@@ -246,10 +251,10 @@ public final class BlockchainWriter {
             long newFileSizeBytes
     ) throws SQLException {
 
+        // ✅ state обязателен
         BlockchainStateEntry st = stOrNull;
         if (st == null) {
-            st = new BlockchainStateEntry();
-            st.setBlockchainName(blockchainName);
+            throw new SQLException("blockchain_state not found for blockchainName=" + blockchainName);
         }
 
         // глобальная цепочка всегда растёт по recordNumber

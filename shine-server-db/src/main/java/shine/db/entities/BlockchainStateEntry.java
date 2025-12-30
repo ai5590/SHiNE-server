@@ -1,6 +1,7 @@
 package shine.db.entities;
 
 import java.util.Arrays;
+import java.util.Base64;
 
 /**
  * Агрегатная сущность текущего состояния блокчейна.
@@ -11,7 +12,9 @@ public final class BlockchainStateEntry {
     private String blockchainName;
 
     private String login;
-    private String publicKeyBase64;
+
+    /** Ключ блокчейна (pubkey), которым подписываются блоки. Base64(32 bytes). */
+    private String blockchainKey;
 
     /** Лимит (теперь long). */
     private long sizeLimit;
@@ -36,7 +39,7 @@ public final class BlockchainStateEntry {
 
     public BlockchainStateEntry(String blockchainName,
                                 String login,
-                                String publicKeyBase64,
+                                String blockchainKey,
                                 long sizeLimit,
                                 long fileSizeBytes,
                                 int lastGlobalNumber,
@@ -46,7 +49,7 @@ public final class BlockchainStateEntry {
                                 long updatedAtMs) {
         this.blockchainName = blockchainName;
         this.login = login;
-        this.publicKeyBase64 = publicKeyBase64;
+        this.blockchainKey = blockchainKey;
         this.sizeLimit = sizeLimit;
         this.fileSizeBytes = fileSizeBytes;
         this.lastGlobalNumber = lastGlobalNumber;
@@ -72,8 +75,21 @@ public final class BlockchainStateEntry {
     public String getLogin() { return login; }
     public void setLogin(String login) { this.login = login; }
 
-    public String getPublicKeyBase64() { return publicKeyBase64; }
-    public void setPublicKeyBase64(String publicKeyBase64) { this.publicKeyBase64 = publicKeyBase64; }
+    public String getBlockchainKey() { return blockchainKey; }
+    public void setBlockchainKey(String blockchainKey) { this.blockchainKey = blockchainKey; }
+
+    /** blockchainKey в байтах (32) или null, если битый. */
+    public byte[] getBlockchainKeyBytes() {
+        if (blockchainKey == null) return null;
+        String s = blockchainKey.trim();
+        if (s.isEmpty()) return null;
+        try {
+            byte[] b = Base64.getDecoder().decode(s);
+            return (b != null && b.length == 32) ? b : null;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
 
     public long getSizeLimit() { return sizeLimit; }
     public void setSizeLimit(long sizeLimit) { this.sizeLimit = sizeLimit; }

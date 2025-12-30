@@ -81,10 +81,7 @@ public class DatabaseInitializer {
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS solana_users (
                     login       TEXT    NOT NULL PRIMARY KEY,
-                    bchName     TEXT    NOT NULL,
-                    loginKey    TEXT,
-                    deviceKey   TEXT,
-                    bchLimit    INTEGER
+                    deviceKey   TEXT    NOT NULL
                 );
                 """);
 
@@ -157,7 +154,7 @@ public class DatabaseInitializer {
                 CREATE TABLE IF NOT EXISTS blockchain_state (
                     blockchainName         TEXT    NOT NULL PRIMARY KEY,
                     login                  TEXT    NOT NULL,
-                    public_key_base64      TEXT    NOT NULL,
+                    blockchainKey          TEXT    NOT NULL,
                 
                     size_limit             INTEGER NOT NULL,
                     file_size_bytes        INTEGER NOT NULL,
@@ -181,7 +178,9 @@ public class DatabaseInitializer {
                     line6_last_number      INTEGER NOT NULL,
                     line6_last_hash        TEXT    NOT NULL,
                     line7_last_number      INTEGER NOT NULL,
-                    line7_last_hash        TEXT    NOT NULL
+                    line7_last_hash        TEXT    NOT NULL,
+                    
+                    FOREIGN KEY (login) REFERENCES solana_users(login)
                 );
                 """);
 
@@ -216,7 +215,8 @@ public class DatabaseInitializer {
                     toBlockGlobalNumber  INTEGER,
                     toBlockHashe         TEXT,
 
-                    FOREIGN KEY (login) REFERENCES solana_users(login)
+                    FOREIGN KEY (login) REFERENCES solana_users(login),
+                    FOREIGN KEY (bchName) REFERENCES blockchain_state(blockchainName)
                 );
                 """);
 

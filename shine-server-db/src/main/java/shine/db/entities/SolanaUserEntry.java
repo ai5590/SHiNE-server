@@ -15,52 +15,32 @@ import java.util.Base64;
 public class SolanaUserEntry {
 
     private String login;      // TEXT PK
-    private String bchName;    // TEXT NOT NULL
-    private String loginKey;   // TEXT
-    private String deviceKey;  // TEXT
-    private Integer bchLimit;  // INTEGER nullable
+    private String deviceKey;  // TEXT NOT NULL (Base64(32 bytes))
 
     public SolanaUserEntry() {}
 
-    public SolanaUserEntry(String login,
-                           String bchName,
-                           String loginKey,
-                           String deviceKey,
-                           Integer bchLimit) {
+    public SolanaUserEntry(String login, String deviceKey) {
         this.login = login;
-        this.bchName = bchName;
-        this.loginKey = loginKey;
         this.deviceKey = deviceKey;
-        this.bchLimit = bchLimit;
     }
 
     public String getLogin() { return login; }
     public void setLogin(String login) { this.login = login; }
 
-    public String getBchName() { return bchName; }
-    public void setBchName(String bchName) { this.bchName = bchName; }
-
-    /** Публичный ключ логина (основной ключ пользователя). */
-    public String getLoginKey() { return loginKey; }
-    public void setLoginKey(String loginKey) { this.loginKey = loginKey; }
-
     /** Публичный ключ устройства (device key). */
     public String getDeviceKey() { return deviceKey; }
     public void setDeviceKey(String deviceKey) { this.deviceKey = deviceKey; }
 
-    public Integer getBchLimit() { return bchLimit; }
-    public void setBchLimit(Integer bchLimit) { this.bchLimit = bchLimit; }
-
     /**
-     * Публичный ключ логина в байтах (32 байта) или null, если ключ битый/пустой.
+     * Device key в байтах (32 байта) или null, если ключ битый/пустой.
      *
      * Поддержка форматов:
      *  - Base64 (предпочтительно)
      *  - HEX (ровно 64 hex-символа, без пробелов)
      */
-    public byte[] getLoginKeyByte() {
-        if (loginKey == null) return null;
-        String s = loginKey.trim();
+    public byte[] getDeviceKeyByte() {
+        if (deviceKey == null) return null;
+        String s = deviceKey.trim();
         if (s.isEmpty()) return null;
 
         // 1) пробуем Base64

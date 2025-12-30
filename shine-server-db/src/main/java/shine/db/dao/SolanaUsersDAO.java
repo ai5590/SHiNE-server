@@ -42,19 +42,13 @@ public final class SolanaUsersDAO {
     /** Вставка с внешним соединением. Соединение НЕ закрывает. */
     public void insert(Connection c, SolanaUserEntry user) throws SQLException {
         String sql = """
-            INSERT INTO solana_users (login, bchName, loginKey, deviceKey, bchLimit)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO solana_users (login, deviceKey)
+            VALUES (?, ?)
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, user.getLogin());
-            ps.setString(2, user.getBchName());
-            ps.setString(3, user.getLoginKey());
-            ps.setString(4, user.getDeviceKey());
-
-            if (user.getBchLimit() != null) ps.setInt(5, user.getBchLimit());
-            else ps.setNull(5, Types.INTEGER);
-
+            ps.setString(2, user.getDeviceKey());
             ps.executeUpdate();
         }
     }
@@ -97,7 +91,7 @@ public final class SolanaUsersDAO {
     /** Получить по login (case-insensitive) с внешним соединением. Соединение НЕ закрывает. */
     public SolanaUserEntry getByLogin(Connection c, String login) throws SQLException {
         String sql = """
-            SELECT login, bchName, loginKey, deviceKey, bchLimit
+            SELECT login, deviceKey
             FROM solana_users
             WHERE LOWER(login) = LOWER(?)
             """;
@@ -121,7 +115,7 @@ public final class SolanaUsersDAO {
     /** Поиск по префиксу с внешним соединением. Соединение НЕ закрывает. */
     public List<SolanaUserEntry> searchByLoginPrefix(Connection c, String prefix) throws SQLException {
         String sql = """
-            SELECT login, bchName, loginKey, deviceKey, bchLimit
+            SELECT login, deviceKey
             FROM solana_users
             WHERE LOWER(login) LIKE ?
             ORDER BY login
@@ -152,10 +146,7 @@ public final class SolanaUsersDAO {
     private SolanaUserEntry mapRow(ResultSet rs) throws SQLException {
         return new SolanaUserEntry(
                 rs.getString("login"),
-                rs.getString("bchName"),
-                rs.getString("loginKey"),
-                rs.getString("deviceKey"),
-                rs.getObject("bchLimit") != null ? rs.getInt("bchLimit") : null
+                rs.getString("deviceKey")
         );
     }
 }
