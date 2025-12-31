@@ -18,42 +18,6 @@ public final class HashSHA256Util {
         return out;
     }
 
-    /** Получить loginId из строки логина.
-     * Алгоритм:
-     *  - login -> UTF-8 bytes
-     *  - SHA-256
-     *  - берём последние 8 байт (справа)
-     *  - интерпретируем как signed long (BigEndian)
-     */
-    public static long loginToLoginId(String login) {
-        if (login == null || login.isBlank())
-            throw new IllegalArgumentException("login is null or empty");
-
-        byte[] hash = sha256(login.getBytes(StandardCharsets.UTF_8));
-
-        // последние 8 байт SHA-256
-        return ByteBuffer.wrap(hash, 24, 8)
-                .order(ByteOrder.BIG_ENDIAN)
-                .getLong();
-    }
-
-    /**
-     * loginId = last 8 bytes of sha256(login UTF-8), big-endian.
-     * (берём 8 байт справа и читаем как unsigned long в BE)
-     */
-    public static long loginIdFromLogin(String login) {
-        if (login == null || login.isBlank())
-            throw new IllegalArgumentException("login is blank");
-
-        byte[] h = sha256(login.getBytes(StandardCharsets.UTF_8));
-
-        long v = 0;
-        for (int i = 24; i < 32; i++) {
-            v = (v << 8) | (h[i] & 0xFFL);
-        }
-        return v;
-    }
-
     /** Инкрементальный SHA-256 (если нужно будет кормить по кускам). */
     public static final class Sha256 {
         private final SHA256Digest d = new SHA256Digest();

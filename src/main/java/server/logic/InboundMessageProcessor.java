@@ -18,7 +18,7 @@ public final class InboundMessageProcessor {
     private static final Logger log = LoggerFactory.getLogger(InboundMessageProcessor.class);
 
     private static final Map<Integer, MessageHandler> HANDLERS = Map.of(
-            WireCodes.Op.PING,          new PingHandler()
+//            WireCodes.Op.PING,          new PingHandler()
 //            WireCodes.Op.ADD_BLOCK,     new AddBlockHandler(),
 //            WireCodes.Op.GET_BLOCKCHAIN,new GetBlockchainHandler()
 //            WireCodes.Op.SEARCH_USERS,  new SearchUsersHandler(),

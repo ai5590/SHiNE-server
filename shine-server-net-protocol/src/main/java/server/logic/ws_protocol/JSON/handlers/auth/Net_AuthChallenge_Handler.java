@@ -2,8 +2,7 @@ package server.logic.ws_protocol.JSON.handlers.auth;
 
 import server.logic.ws_protocol.JSON.ConnectionContext;
 import server.logic.ws_protocol.JSON.entyties.*;
-import server.logic.ws_protocol.JSON.entyties.Auth.Net_AuthChallenge_Request;
-import server.logic.ws_protocol.JSON.entyties.Auth.Net_AuthChallenge_Response;
+import server.logic.ws_protocol.JSON.handlers.auth.entyties.*;
 import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;

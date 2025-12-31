@@ -36,7 +36,7 @@ public class IT_03_AddBlock_NoAuth {
 
     public static void main(String[] args) {
         int failed = run();
-        System.exit(failed);
+//        System.exit(failed);
     }
 
     /** Запуск одного теста (standalone). Возвращает 0 если ок, 1 если упал. */

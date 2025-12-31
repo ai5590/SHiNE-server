@@ -3,13 +3,12 @@ package server.logic.ws_protocol.JSON.handlers.auth;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.logic.ws_protocol.JSON.ConnectionContext;
-import server.logic.ws_protocol.JSON.entyties.Auth.Net_ListSessions_Request;
-import server.logic.ws_protocol.JSON.entyties.Auth.Net_ListSessions_Response;
-import server.logic.ws_protocol.JSON.entyties.Auth.Net_ListSessions_Response.SessionInfo;
+import server.logic.ws_protocol.JSON.handlers.auth.entyties.*;
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
 import server.logic.ws_protocol.JSON.entyties.Net_Response;
 import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
+import server.logic.ws_protocol.JSON.handlers.auth.entyties.Net_ListSessions_Response.SessionInfo;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.dao.ActiveSessionsDAO;
 import shine.db.entities.ActiveSessionEntry;
@@ -144,7 +143,7 @@ public class Net_ListSessions_Handler implements JsonMessageHandler {
         // 4) Собираем DTO с геолокацией
         List<SessionInfo> resultList = new ArrayList<>();
         for (ActiveSessionEntry s : sessions) {
-            SessionInfo info = new SessionInfo();
+            SessionInfo info = new Net_ListSessions_Response.SessionInfo();
             info.setSessionId(s.getSessionId());
             info.setClientInfoFromClient(s.getClientInfoFromClient());
             info.setClientInfoFromRequest(s.getClientInfoFromRequest());

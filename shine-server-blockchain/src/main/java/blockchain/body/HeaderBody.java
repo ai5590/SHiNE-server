@@ -11,7 +11,7 @@ import java.util.Objects;
  * Полный bodyBytes:
  *   [2] type=0
  *   [2] version=1
- *   [8] tag ASCII "SHiNE001"
+ *   [8] tag ASCII "SHiNE"
  *   [1] loginLength=N (uint8)
  *   [N] login UTF-8
  *
@@ -23,9 +23,9 @@ public final class HeaderBody implements BodyRecord {
     public static final short TYPE = 0;
     public static final short VER  = 1;
 
-    public static final String TAG = "SHiNE001";
+    public static final String TAG = "SHiNE";
 
-    public final String tag;   // "SHiNE001"
+    public final String tag;   // "SHiNE"
     public final String login;
 
     /** Десериализация из полного bodyBytes (включая type/version). */
@@ -42,7 +42,7 @@ public final class HeaderBody implements BodyRecord {
         if (bb.remaining() < 8 + 1)
             throw new IllegalArgumentException("Header payload too short");
 
-        byte[] tagBytes = new byte[8];
+        byte[] tagBytes = new byte[5];
         bb.get(tagBytes);
         String t = new String(tagBytes, StandardCharsets.US_ASCII);
         if (!TAG.equals(t)) throw new IllegalArgumentException("Bad tag: " + t);
