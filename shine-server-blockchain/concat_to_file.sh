@@ -12,5 +12,9 @@ find . -type f -name "*.java" | sort | while read -r f; do
   echo >> "$OUTFILE"    # пустая строка-разделитель
 done
 
-echo "Готово! Все .java файлы собраны в $OUTFILE"
+# скопировать весь файл в буфер обмена (Wayland)
+wl-copy < "$OUTFILE"
 
+echo "Готово!"
+echo "Все .java файлы собраны в $OUTFILE"
+echo "Содержимое скопировано в буфер обмена (Wayland)"

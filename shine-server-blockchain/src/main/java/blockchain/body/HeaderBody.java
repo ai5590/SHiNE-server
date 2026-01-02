@@ -28,6 +28,8 @@ public final class HeaderBody implements BodyRecord {
     public static final short TYPE = 0;
     public static final short VER  = 1;
 
+    public static final int KEY = ((TYPE & 0xFFFF) << 16) | (VER & 0xFFFF);
+
     /** Для header всегда 0 (служебная совместимость). */
     public static final short SUBTYPE_COMPAT = 0;
 

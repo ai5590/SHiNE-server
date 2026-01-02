@@ -44,6 +44,8 @@ public final class TextBody implements BodyRecord {
     public static final short TYPE = 1;
     public static final short VER  = 1;
 
+    public static final int KEY = ((TYPE & 0xFFFF) << 16) | (VER & 0xFFFF);
+
     // subType:
     public static final short SUB_NEW    = 1;
     public static final short SUB_REPLY  = 2;
