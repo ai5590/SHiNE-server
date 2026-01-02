@@ -1,5 +1,5 @@
 package test.it.addBlockUtils;
-
+// старый класс
 import blockchain.BchBlockEntry;
 import blockchain.BchCryptoVerifier;
 import blockchain.body.HeaderBody;
