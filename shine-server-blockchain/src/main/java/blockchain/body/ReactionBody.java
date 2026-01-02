@@ -9,34 +9,46 @@ import java.util.Objects;
 /**
  * ReactionBody — type=2, version=1.
  *
- * Сериализация bodyBytes:
+ * Формат bodyBytes (BigEndian):
  *   [2] type=2
  *   [2] ver=1
- *   [4] reactionCode (int32)
+ *
+ *   [2] subType (uint16) — подтип реакции (раньше это был reactionCode int32)
+ *       1 = LIKE (лайк)
+ *       (в будущем: 2=DISLIKE, 3=LAUGH, 4=WOW ... если захочешь)
+ *
  *   [1] toBlockchainNameLen (uint8)
  *   [N] toBlockchainName UTF-8
  *   [4] toBlockGlobalNumber (int32)
- *   [32] toBlockHash (raw 32 bytes)
+ *   [32] toBlockHash32 (raw 32 bytes)
  *
  * ЛИНИЯ:
  *  - строго lineIndex=2
  *
- * ВАЖНО:
- *  - Здесь мы НЕ проверяем, существует ли цель реакции (MVP правило).
+ * ВАЖНО (MVP):
+ *  - Здесь мы НЕ проверяем, существует ли цель реакции.
+ *  - Мы проверяем только корректность формата и целостность полей.
  */
 public final class ReactionBody implements BodyRecord {
 
     public static final short TYPE = 2;
     public static final short VER  = 1;
 
-    public final int reactionCode;
+    // subType:
+    public static final short SUB_LIKE = 1;
+
+    public final short subType;
+
     public final String toBlockchainName;
     public final int toBlockGlobalNumber;
     public final byte[] toBlockHash32;
 
+    /** Десериализация из полного bodyBytes (включая type/version/subType). */
     public ReactionBody(byte[] bodyBytes) {
         Objects.requireNonNull(bodyBytes, "bodyBytes == null");
-        if (bodyBytes.length < 4 + 4 + 1 + 1 + 4 + 32) {
+
+        // минимум: type[2]+ver[2]+subType[2]+nameLen[1]+name[1]+global[4]+hash[32]
+        if (bodyBytes.length < 2 + 2 + 2 + 1 + 1 + 4 + 32) {
             throw new IllegalArgumentException("ReactionBody too short");
         }
 
@@ -47,11 +59,15 @@ public final class ReactionBody implements BodyRecord {
         if (type != TYPE || ver != VER)
             throw new IllegalArgumentException("Not ReactionBody: type=" + type + " ver=" + ver);
 
-        this.reactionCode = bb.getInt();
+        this.subType = bb.getShort();
+        if (this.subType != SUB_LIKE) {
+            throw new IllegalArgumentException("Bad reaction subType: " + (this.subType & 0xFFFF));
+        }
 
         int nameLen = Byte.toUnsignedInt(bb.get());
         if (nameLen <= 0) throw new IllegalArgumentException("toBlockchainNameLen is 0");
-        if (bb.remaining() < nameLen + 4 + 32) throw new IllegalArgumentException("ReactionBody payload too short");
+        if (bb.remaining() < nameLen + 4 + 32)
+            throw new IllegalArgumentException("ReactionBody payload too short");
 
         byte[] nameBytes = new byte[nameLen];
         bb.get(nameBytes);
@@ -61,15 +77,30 @@ public final class ReactionBody implements BodyRecord {
 
         this.toBlockHash32 = new byte[32];
         bb.get(this.toBlockHash32);
+
+        // запрет мусора в конце
+        if (bb.remaining() != 0) {
+            throw new IllegalArgumentException("Unexpected tail bytes, remaining=" + bb.remaining());
+        }
     }
 
-    public ReactionBody(int reactionCode, String toBlockchainName, int toBlockGlobalNumber, byte[] toBlockHash32) {
+    /** Создание “вручную”. */
+    public ReactionBody(short subType,
+                        String toBlockchainName,
+                        int toBlockGlobalNumber,
+                        byte[] toBlockHash32) {
+
         Objects.requireNonNull(toBlockchainName, "toBlockchainName == null");
         Objects.requireNonNull(toBlockHash32, "toBlockHash32 == null");
+
+        if (subType != SUB_LIKE)
+            throw new IllegalArgumentException("Unknown reaction subType: " + (subType & 0xFFFF));
+
         if (toBlockchainName.isBlank()) throw new IllegalArgumentException("toBlockchainName is blank");
+        if (toBlockGlobalNumber < 0) throw new IllegalArgumentException("toBlockGlobalNumber < 0");
         if (toBlockHash32.length != 32) throw new IllegalArgumentException("toBlockHash32 != 32");
 
-        this.reactionCode = reactionCode;
+        this.subType = subType;
         this.toBlockchainName = toBlockchainName;
         this.toBlockGlobalNumber = toBlockGlobalNumber;
         this.toBlockHash32 = Arrays.copyOf(toBlockHash32, 32);
@@ -77,6 +108,7 @@ public final class ReactionBody implements BodyRecord {
 
     @Override public short type() { return TYPE; }
     @Override public short version() { return VER; }
+    @Override public short subType() { return subType; }
 
     @Override
     public short expectedLineIndex() {
@@ -85,12 +117,16 @@ public final class ReactionBody implements BodyRecord {
 
     @Override
     public ReactionBody check() {
+        if (subType != SUB_LIKE)
+            throw new IllegalArgumentException("Bad reaction subType: " + (subType & 0xFFFF));
+
         if (toBlockchainName == null || toBlockchainName.isBlank())
             throw new IllegalArgumentException("toBlockchainName is blank");
         if (toBlockGlobalNumber < 0)
             throw new IllegalArgumentException("toBlockGlobalNumber < 0");
         if (toBlockHash32 == null || toBlockHash32.length != 32)
             throw new IllegalArgumentException("toBlockHash32 invalid");
+
         return this;
     }
 
@@ -100,12 +136,16 @@ public final class ReactionBody implements BodyRecord {
         if (nameBytes.length == 0 || nameBytes.length > 255)
             throw new IllegalArgumentException("toBlockchainName utf8 len must be 1..255");
 
-        int cap = 4 + 4 + 1 + nameBytes.length + 4 + 32;
+        // type[2]+ver[2]+subType[2] + nameLen[1]+name[N] + global[4] + hash[32]
+        int cap = 2 + 2 + 2 + 1 + nameBytes.length + 4 + 32;
 
         ByteBuffer bb = ByteBuffer.allocate(cap).order(ByteOrder.BIG_ENDIAN);
+
         bb.putShort(TYPE);
         bb.putShort(VER);
-        bb.putInt(reactionCode);
+
+        bb.putShort(subType);
+
         bb.put((byte) nameBytes.length);
         bb.put(nameBytes);
         bb.putInt(toBlockGlobalNumber);
@@ -116,17 +156,19 @@ public final class ReactionBody implements BodyRecord {
 
     @Override
     public String toString() {
+        String st = (subType == SUB_LIKE) ? "LIKE (1)" : "UNKNOWN";
+
         return """
                 ReactionBody {
                   тип записи              : REACTION (type=2, ver=1)
                   ожидаемая линия         : 2
-                  код реакции             : %d
+                  subType                 : %s
                   целевой блокчейн        : "%s"
                   globalNumber цели       : %d
                   hash цели (hex)         : %s
                 }
                 """.formatted(
-                        reactionCode,
+                        st,
                         toBlockchainName,
                         toBlockGlobalNumber,
                         toBlockHashHex()

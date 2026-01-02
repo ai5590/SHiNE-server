@@ -22,6 +22,12 @@ package blockchain.body;
  * ДОПОЛНЕНИЕ (ЛИНИИ):
  *  - Каждый тип body знает, в какой lineIndex он ДОЛЖЕН находиться.
  *    Это проверяется в валидаторе блока (уровень B).
+ *
+ * ДОПОЛНЕНИЕ (SUBTYPE):
+ *  - У каждого body есть subType (uint16).
+ *  - Для HeaderBody он всегда 0 (служебная совместимость).
+ *  - Для TextBody это тип сообщения (NEW/REPLY/REPOST).
+ *  - Для ReactionBody это тип реакции (LIKE и т.п.).
  */
 public interface BodyRecord {
 
@@ -31,6 +37,11 @@ public interface BodyRecord {
     /** Версия формата записи (совпадает с version в bodyBytes). */
     short version();
 
+    /**
+     * Подтип записи (uint16).
+     */
+    short subType();
+
     /** Ожидаемый индекс линии для этого body. */
     short expectedLineIndex();
 
@@ -39,7 +50,7 @@ public interface BodyRecord {
 
     /**
      * Сериализовать тело записи в байты (ровно то, что кладётся в block.body).
-     * Важно: включает type/version.
+     * Важно: включает type/version/subType и весь payload.
      */
     byte[] toBytes();
 }

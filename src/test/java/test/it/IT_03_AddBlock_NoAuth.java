@@ -107,7 +107,7 @@ public class IT_03_AddBlock_NoAuth {
         // =========================================================
         if (TestConfig.DEBUG()) TestLog.stepTitle("ШАГ 4: AddBlock REACT#1 (line=2) -> на TEXT#1 (global=1)");
         flow.sendNextReaction(
-                1,                       // reactionCode (пример: 1 = like)
+                (short) 1,                // reactionCode (пример: 1 = like)
                 TestConfig.BCH_NAME(),    // toBlockchainName
                 1,                        // toBlockGlobalNumber = 1 (TEXT#1)
                 text1.hash32,             // toBlockHash32 = hash(TEXT#1)

@@ -160,7 +160,7 @@ public final class AddBlockFlow {
     }
 
     /** Шлём следующий REACTION блок в line=2, ссылаясь на конкретный блок. */
-    public BuiltBlock sendNextReaction(int reactionCode,
+    public BuiltBlock sendNextReaction(short reactionCode,
                                        String toBlockchainName,
                                        int toBlockGlobalNumber,
                                        byte[] toBlockHash32,
@@ -305,7 +305,7 @@ public final class AddBlockFlow {
                                                  int lineBlockNumber,
                                                  byte[] prevGlobalHash32,
                                                  byte[] prevLineHash32,
-                                                 int reactionCode,
+                                                 short reactionCode,
                                                  String toBlockchainName,
                                                  int toBlockGlobalNumber,
                                                  byte[] toBlockHash32) {
