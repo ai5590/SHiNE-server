@@ -21,32 +21,22 @@ import utils.crypto.Ed25519Util;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Base64;
 
 /**
  * Net_UpsertUserParam_Handler
  *
- * Делает:
- *  1) Проверяет, что пользователь существует и что device_key действительно его.
- *  2) Проверяет, что нет "более нового" значения этого param (time_ms монотонно растёт).
- *  3) Проверяет подпись Ed25519 по device_key.
- *  4) Пишет в БД только если time_ms строго больше текущего сохранённого.
+ * Делает (MVP, без "сессий"):
+ *  1) Проверка входных полей.
+ *  2) Проверка подписи Ed25519 по device_key.
+ *  3) Проверка, что пользователь существует и что device_key принадлежит этому login.
+ *  4) Атомарная запись в БД "только если time_ms новее" (UPSERT + WHERE).
  *
- * БОЛЬШОЙ КОММЕНТ ПРО АВТОРИЗАЦИЮ НА БУДУЩЕЕ:
- * ---------------------------------------------------------------------------------
- * Сейчас (MVP) этот эндпоинт намеренно не делает полноценную "сессию/авторизацию",
- * потому что целостность обеспечивается криптографией: сервер проверяет подпись
- * и то, что device_key принадлежит login.
- *
- * В будущем, если понадобится "ограничить кто может писать параметры", можно добавить:
- *  - проверку активной сессии (active_sessions) и соответствие login в сессии;
- *  - rate-limit на пользователя;
- *  - отдельные права на запись конкретных param.
- *
- * Но возможно это вообще не потребуется, если модель безопасности строится
- * строго на подписи и владении device_key (как сейчас).
- * ---------------------------------------------------------------------------------
+ * ВАЖНО:
+ *  - НИКАКИХ ручных транзакций / BEGIN здесь нет.
+ *  - autoCommit=true, каждый statement завершённый сам по себе.
+ *  - Гонки не страшны: если за время проверок кто-то записал более новый time_ms,
+ *    наш финальный UPSERT просто вернёт 0 обновлённых строк.
  */
 public class Net_UpsertUserParam_Handler implements JsonMessageHandler {
 
@@ -79,6 +69,7 @@ public class Net_UpsertUserParam_Handler implements JsonMessageHandler {
         final String signatureB64 = req.getSignature().trim();
 
         try {
+            // ---------------- Base64 decode ----------------
             byte[] pubKey32;
             byte[] sig64;
             try {
@@ -110,6 +101,7 @@ public class Net_UpsertUserParam_Handler implements JsonMessageHandler {
                 );
             }
 
+            // ---------------- Signature verify ----------------
             String signText = ShineSignatureConstants.USER_PARAMETER_PREFIX
                     + login
                     + param
@@ -128,108 +120,68 @@ public class Net_UpsertUserParam_Handler implements JsonMessageHandler {
                 );
             }
 
+            // ---------------- DB checks + upsert ----------------
             SqliteDbController db = SqliteDbController.getInstance();
             SolanaUsersDAO usersDAO = SolanaUsersDAO.getInstance();
             UserParamsDAO paramsDAO = UserParamsDAO.getInstance();
 
             try (Connection c = db.getConnection()) {
-                boolean oldAuto = c.getAutoCommit();
-                c.setAutoCommit(false);
-
-                try (Statement st = c.createStatement()) {
-                    st.execute("BEGIN IMMEDIATE");
-                }
-
-                try {
-                    SolanaUserEntry user = usersDAO.getByLogin(c, login);
-                    if (user == null) {
-                        c.rollback();
-                        return NetExceptionResponseFactory.error(
-                                req,
-                                404,
-                                "USER_NOT_FOUND",
-                                "Пользователь не найден"
-                        );
-                    }
-
-                    String userDeviceKey = user.getDeviceKey();
-                    if (userDeviceKey == null || userDeviceKey.isBlank()) {
-                        c.rollback();
-                        return NetExceptionResponseFactory.error(
-                                req,
-                                WireCodes.Status.SERVER_DATA_ERROR,
-                                "USER_DEVICE_KEY_EMPTY",
-                                "У пользователя не задан deviceKey в БД"
-                        );
-                    }
-
-                    if (!userDeviceKey.trim().equals(deviceKeyB64)) {
-                        c.rollback();
-                        return NetExceptionResponseFactory.error(
-                                req,
-                                403,
-                                "DEVICE_KEY_MISMATCH",
-                                "device_key не соответствует пользователю"
-                        );
-                    }
-
-                    UserParamEntry existing = paramsDAO.getByLoginAndParam(c, login, param);
-
-                    // если есть более новое — запрет
-                    if (existing != null && existing.getTimeMs() > timeMs) {
-                        c.rollback();
-                        return NetExceptionResponseFactory.error(
-                                req,
-                                409,
-                                "PARAM_NEWER_EXISTS",
-                                "Уже есть более новое значение этого параметра (time_ms больше)"
-                        );
-                    }
-
-                    // если time_ms равен — ничего не делаем (твой кейс)
-                    if (existing != null && existing.getTimeMs() == timeMs) {
-                        c.commit();
-                        c.setAutoCommit(oldAuto);
-
-                        Net_UpsertUserParam_Response resp = new Net_UpsertUserParam_Response();
-                        resp.setOp(req.getOp());
-                        resp.setRequestId(req.getRequestId());
-                        resp.setStatus(WireCodes.Status.OK);
-
-                        log.info("ℹ️ UpsertUserParam noop (same time_ms): login={}, param={}, time_ms={}",
-                                login, param, timeMs);
-                        return resp;
-                    }
-
-                    // иначе existing==null или existingTime < timeMs -> пишем
-                    UserParamEntry e = new UserParamEntry(
-                            login,
-                            param,
-                            timeMs,
-                            value,
-                            deviceKeyB64,
-                            signatureB64
+                // 1) user exists
+                SolanaUserEntry user = usersDAO.getByLogin(c, login);
+                if (user == null) {
+                    return NetExceptionResponseFactory.error(
+                            req,
+                            404,
+                            "USER_NOT_FOUND",
+                            "Пользователь не найден"
                     );
-
-                    paramsDAO.upsert(c, e);
-
-                    c.commit();
-                    c.setAutoCommit(oldAuto);
-
-                    Net_UpsertUserParam_Response resp = new Net_UpsertUserParam_Response();
-                    resp.setOp(req.getOp());
-                    resp.setRequestId(req.getRequestId());
-                    resp.setStatus(WireCodes.Status.OK);
-
-                    log.info("✅ UpsertUserParam ok: login={}, param={}, time_ms={}", login, param, timeMs);
-                    return resp;
-
-                } catch (SQLException ex) {
-                    c.rollback();
-                    throw ex;
-                } finally {
-                    c.setAutoCommit(oldAuto);
                 }
+
+                // 2) device key must match the user's stored deviceKey
+                String userDeviceKey = user.getDeviceKey();
+                if (userDeviceKey == null || userDeviceKey.isBlank()) {
+                    return NetExceptionResponseFactory.error(
+                            req,
+                            WireCodes.Status.SERVER_DATA_ERROR,
+                            "USER_DEVICE_KEY_EMPTY",
+                            "У пользователя не задан deviceKey в БД"
+                    );
+                }
+
+                if (!userDeviceKey.trim().equals(deviceKeyB64)) {
+                    return NetExceptionResponseFactory.error(
+                            req,
+                            403,
+                            "DEVICE_KEY_MISMATCH",
+                            "device_key не соответствует пользователю"
+                    );
+                }
+
+                // 3) atomic upsert-if-newer
+                UserParamEntry e = new UserParamEntry(
+                        login,
+                        param,
+                        timeMs,
+                        value,
+                        deviceKeyB64,
+                        signatureB64
+                );
+
+                int changed = paramsDAO.upsertIfNewer(c, e);
+
+                Net_UpsertUserParam_Response resp = new Net_UpsertUserParam_Response();
+                resp.setOp(req.getOp());
+                resp.setRequestId(req.getRequestId());
+                resp.setStatus(WireCodes.Status.OK);
+
+                if (changed == 1) {
+                    log.info("✅ UpsertUserParam applied: login={}, param={}, time_ms={}", login, param, timeMs);
+                } else {
+                    // 0 строк — значит в БД уже есть time_ms >= incoming
+                    log.info("ℹ️ UpsertUserParam ignored (not newer): login={}, param={}, time_ms={}", login, param, timeMs);
+                }
+
+                return resp;
             }
 
         } catch (SQLException e) {

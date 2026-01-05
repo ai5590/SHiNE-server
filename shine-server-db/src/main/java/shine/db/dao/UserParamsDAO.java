@@ -14,9 +14,14 @@ import java.util.List;
  * - методы с Connection НЕ закрывают соединение
  * - методы без Connection сами открывают и закрывают соединение
  *
- * ВАЖНО по логике времени:
- * - сам DAO делает "технический upsert"
- * - правила "не принимать более старый time_ms" должны проверяться в handler-е, в транзакции.
+ * ЛОГИКА time_ms:
+ * - БД принимает запись только если она "новее" (time_ms строго больше текущего).
+ * - Реализовано атомарно одним SQL: UPSERT + WHERE users_params.time_ms < excluded.time_ms
+ *
+ * Возврат результата:
+ * - upsertIfNewer(...) возвращает количество изменённых строк:
+ *     1 = вставили/обновили
+ *     0 = проигнорировали (запись уже новее или равная)
  */
 public final class UserParamsDAO {
 
@@ -34,10 +39,14 @@ public final class UserParamsDAO {
         return instance;
     }
 
-    // -------------------- UPSERT --------------------
+    // -------------------- UPSERT (IF NEWER) --------------------
 
-    /** UPSERT с внешним соединением. Соединение НЕ закрывает. */
-    public void upsert(Connection c, UserParamEntry e) throws SQLException {
+    /**
+     * Атомарный UPSERT "только если новее".
+     *
+     * @return 1 если вставили/обновили; 0 если запись не тронули (existing.time_ms >= incoming.time_ms).
+     */
+    public int upsertIfNewer(Connection c, UserParamEntry e) throws SQLException {
         String sql = """
             INSERT INTO users_params (
                 login,
@@ -53,6 +62,7 @@ public final class UserParamsDAO {
                 value      = excluded.value,
                 device_key = excluded.device_key,
                 signature  = excluded.signature
+            WHERE users_params.time_ms < excluded.time_ms
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
@@ -67,14 +77,14 @@ public final class UserParamsDAO {
             if (e.getSignature() != null) ps.setString(6, e.getSignature());
             else ps.setNull(6, Types.VARCHAR);
 
-            ps.executeUpdate();
+            return ps.executeUpdate(); // 1 или 0
         }
     }
 
-    /** UPSERT без внешнего соединения. Сам открывает/закрывает. */
-    public void upsert(UserParamEntry e) throws SQLException {
+    /** То же самое, но сам открывает/закрывает соединение. */
+    public int upsertIfNewer(UserParamEntry e) throws SQLException {
         try (Connection c = db.getConnection()) {
-            upsert(c, e);
+            return upsertIfNewer(c, e);
         }
     }
 
