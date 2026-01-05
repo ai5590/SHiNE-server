@@ -11,7 +11,6 @@ import test.it.addBlockUtils.ChainState;
 import test.it.utils.*;
 import utils.crypto.Ed25519Util;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 
@@ -98,7 +97,7 @@ public class IT_03_AddBlock_NoAuth {
         );
 
         // =========================================================
-        // 3) USER1 блоки (как было раньше в IT_03)
+        // 3) USER1 блоки (под message_stats)
         // =========================================================
         if (TestConfig.DEBUG()) {
             TestLog.titleBlock("""
@@ -122,21 +121,25 @@ public class IT_03_AddBlock_NoAuth {
         sender1.send(new HeaderBody(TestConfig.LOGIN()), t);
         assertTrue(st1.hasHeader());
 
-        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: TEXT#1 (NEW)");
+        // 3 NEW
+        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: TEXT#1 (NEW)  <- будет LIKE + REPLY");
         sender1.send(new TextBody(TextBody.SUB_NEW, "Hello #1 (NEW) from IT_03 test"), t);
 
-        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: TEXT#2 (NEW)");
+        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: TEXT#2 (NEW)  <- будет ONLY LIKE");
         sender1.send(new TextBody(TextBody.SUB_NEW, "Hello #2 (NEW) from IT_03 test"), t);
 
-        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: TEXT#3 (NEW)");
+        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: TEXT#3 (NEW)  <- будет ONLY REPLY");
         sender1.send(new TextBody(TextBody.SUB_NEW, "Hello #3 (NEW) from IT_03 test"), t);
 
         byte[] text1Hash = st1.getGlobalHash32(1);
         byte[] text2Hash = st1.getGlobalHash32(2);
+        byte[] text3Hash = st1.getGlobalHash32(3);
         assertNotNull(text1Hash);
         assertNotNull(text2Hash);
+        assertNotNull(text3Hash);
 
-        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: TEXT#4 (REPLY -> TEXT#1)");
+        // 2 REPLY
+        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: TEXT#4 (REPLY -> TEXT#1)  (делает TEXT#1: replies+1)");
         sender1.send(new TextBody(
                 TextBody.SUB_REPLY,
                 "Reply to TEXT#1",
@@ -145,19 +148,17 @@ public class IT_03_AddBlock_NoAuth {
                 text1Hash
         ), t);
 
-        byte[] reply1Hash = st1.getGlobalHash32(4);
-        assertNotNull(reply1Hash);
-
-        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: TEXT#5 (REPLY -> TEXT#4)");
+        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: TEXT#5 (REPLY -> TEXT#3)  (делает TEXT#3: replies+1)");
         sender1.send(new TextBody(
                 TextBody.SUB_REPLY,
-                "Reply to REPLY (TEXT#4)",
+                "Reply to TEXT#3",
                 TestConfig.BCH_NAME(),
-                4,
-                reply1Hash
+                3,
+                text3Hash
         ), t);
 
-        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: REACT#1 (LIKE -> TEXT#1)");
+        // 2 LIKE
+        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: REACT#1 (LIKE -> TEXT#1)  (делает TEXT#1: likes+1)");
         sender1.send(new ReactionBody(
                 ReactionBody.SUB_LIKE,
                 TestConfig.BCH_NAME(),
@@ -165,12 +166,12 @@ public class IT_03_AddBlock_NoAuth {
                 text1Hash
         ), t);
 
-        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: REACT#2 (LIKE -> TEXT#4)");
+        if (TestConfig.DEBUG()) TestLog.stepTitle("USER1: REACT#2 (LIKE -> TEXT#2)  (делает TEXT#2: likes+1)");
         sender1.send(new ReactionBody(
                 ReactionBody.SUB_LIKE,
                 TestConfig.BCH_NAME(),
-                4,
-                reply1Hash
+                2,
+                text2Hash
         ), t);
 
         assertEquals(7, st1.globalLastNumber(), "USER1: должно быть 8 блоков: globalLastNumber=7");

@@ -22,7 +22,7 @@ import java.sql.Statement;
  *  - blockchain_state
  *  - blocks
  *  - connections_state   (текущее состояние связей)
- *
+ *  - message_stats       (счётчики лайков/ответов на сообщения)
  */
 public class DatabaseInitializer {
 
@@ -247,7 +247,6 @@ public class DatabaseInitializer {
 
                     FOREIGN KEY (login) REFERENCES solana_users(login),
 
-                    -- состояние уникально по пользователю, типу связи и цели
                     UNIQUE (login, relType, to_login)
                 );
                 """);
@@ -269,15 +268,6 @@ public class DatabaseInitializer {
 
             // =====================================================================
             // 8) Trigger: при вставке connection-блоков в blocks — обновлять connections_state
-            //
-            // Правило:
-            //  - msgType=3 (ConnectionBody)
-            //  - subType 10/20/30  => добавить/обновить запись состояния
-            //  - subType 11/21/31  => удалить запись состояния (без ошибок, даже если её нет)
-            //
-            // Примечание:
-            //  - "повторное добавление" не должно падать => используем UPSERT (DO UPDATE)
-            //  - "удаление того, чего нет" не падает => обычный DELETE
             // =====================================================================
             st.executeUpdate("""
                 CREATE TRIGGER IF NOT EXISTS trg_blocks_connection_state_ai
@@ -285,7 +275,6 @@ public class DatabaseInitializer {
                 WHEN NEW.msgType = 3
                 BEGIN
 
-                    -- ADD / UPDATE: 10/20/30
                     INSERT INTO connections_state (
                         login, relType, to_login, toBchName, toBlockGlobalNumber, toBlockHashe
                     )
@@ -305,7 +294,6 @@ public class DatabaseInitializer {
                         toBlockGlobalNumber = excluded.toBlockGlobalNumber,
                         toBlockHashe = excluded.toBlockHashe;
 
-                    -- DELETE: 11/21/31 => удалить соответствующую "положительную" связь (10/20/30)
                     DELETE FROM connections_state
                     WHERE login = NEW.login
                       AND to_login = NEW.to_login
@@ -317,6 +305,111 @@ public class DatabaseInitializer {
                       END
                       AND NEW.msgSubType IN (11, 21, 31);
 
+                END;
+                """);
+
+            // =====================================================================
+            // 9) message_stats — счётчики лайков/ответов на конкретный блок-цель
+            //
+            // Правило системы:
+            //  - to_login берём из toBchName: отрезаем последние 3 символа
+            // =====================================================================
+            st.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS message_stats (
+                    to_login               TEXT    NOT NULL,
+                    to_bch_name            TEXT    NOT NULL,
+                    to_block_global_number INTEGER NOT NULL,
+                    to_block_hash          TEXT    NOT NULL,
+
+                    likes_count            INTEGER NOT NULL DEFAULT 0,
+                    replies_count          INTEGER NOT NULL DEFAULT 0,
+
+                    UNIQUE (
+                        to_login,
+                        to_bch_name,
+                        to_block_global_number,
+                        to_block_hash
+                    )
+                );
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_message_stats_target
+                ON message_stats (to_bch_name, to_block_global_number, to_block_hash);
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_message_stats_login
+                ON message_stats (to_login);
+                """);
+
+            // =====================================================================
+            // 10) Trigger: LIKE (Reaction)
+            //  - msgType=2 (REACTION)
+            //  - msgSubType=1 (LIKE)
+            // =====================================================================
+            st.executeUpdate("""
+                CREATE TRIGGER IF NOT EXISTS trg_blocks_message_stats_like_ai
+                AFTER INSERT ON blocks
+                WHEN NEW.msgType = 2 AND NEW.msgSubType = 1
+                BEGIN
+                    INSERT INTO message_stats (
+                        to_login,
+                        to_bch_name,
+                        to_block_global_number,
+                        to_block_hash,
+                        likes_count,
+                        replies_count
+                    )
+                    SELECT
+                        substr(NEW.toBchName, 1, length(NEW.toBchName) - 3),
+                        NEW.toBchName,
+                        NEW.toBlockGlobalNumber,
+                        NEW.toBlockHashe,
+                        1,
+                        0
+                    WHERE NEW.toBchName IS NOT NULL
+                      AND length(NEW.toBchName) > 3
+                      AND NEW.toBlockGlobalNumber IS NOT NULL
+                      AND NEW.toBlockHashe IS NOT NULL
+                    ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)
+                    DO UPDATE SET
+                        likes_count = message_stats.likes_count + 1;
+                END;
+                """);
+
+            // =====================================================================
+            // 11) Trigger: REPLY (Text)
+            //  - msgType=1 (TEXT)
+            //  - msgSubType=2 (REPLY)
+            // =====================================================================
+            st.executeUpdate("""
+                CREATE TRIGGER IF NOT EXISTS trg_blocks_message_stats_reply_ai
+                AFTER INSERT ON blocks
+                WHEN NEW.msgType = 1 AND NEW.msgSubType = 2
+                BEGIN
+                    INSERT INTO message_stats (
+                        to_login,
+                        to_bch_name,
+                        to_block_global_number,
+                        to_block_hash,
+                        likes_count,
+                        replies_count
+                    )
+                    SELECT
+                        substr(NEW.toBchName, 1, length(NEW.toBchName) - 3),
+                        NEW.toBchName,
+                        NEW.toBlockGlobalNumber,
+                        NEW.toBlockHashe,
+                        0,
+                        1
+                    WHERE NEW.toBchName IS NOT NULL
+                      AND length(NEW.toBchName) > 3
+                      AND NEW.toBlockGlobalNumber IS NOT NULL
+                      AND NEW.toBlockHashe IS NOT NULL
+                    ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)
+                    DO UPDATE SET
+                        replies_count = message_stats.replies_count + 1;
                 END;
                 """);
         }
