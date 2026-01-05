@@ -36,19 +36,19 @@ public final class ActiveSessionsDAO {
     public void insert(Connection c, ActiveSessionEntry session) throws SQLException {
         String sql = """
             INSERT INTO active_sessions (
-                sessionId,
+                session_id,
                 login,
-                sessionPwd,
-                storagePwd,
-                sessionCreatedAtMs,
-                lastAuthirificatedAtMs,
-                pushEndpoint,
-                pushP256dhKey,
-                pushAuthKey,
-                clientIp,
-                clientInfoFromClient,
-                clientInfoFromRequest,
-                userLanguage
+                session_pwd,
+                storage_pwd,
+                session_created_at_ms,
+                last_authirificated_at_ms,
+                push_endpoint,
+                push_p256dh_key,
+                push_auth_key,
+                client_ip,
+                client_info_from_client,
+                client_info_from_request,
+                user_language
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
@@ -83,21 +83,21 @@ public final class ActiveSessionsDAO {
     public ActiveSessionEntry getBySessionId(Connection c, String sessionId) throws SQLException {
         String sql = """
             SELECT
-                sessionId,
+                session_id,
                 login,
-                sessionPwd,
-                storagePwd,
-                sessionCreatedAtMs,
-                lastAuthirificatedAtMs,
-                pushEndpoint,
-                pushP256dhKey,
-                pushAuthKey,
-                clientIp,
-                clientInfoFromClient,
-                clientInfoFromRequest,
-                userLanguage
+                session_pwd,
+                storage_pwd,
+                session_created_at_ms,
+                last_authirificated_at_ms,
+                push_endpoint,
+                push_p256dh_key,
+                push_auth_key,
+                client_ip,
+                client_info_from_client,
+                client_info_from_request,
+                user_language
             FROM active_sessions
-            WHERE sessionId = ?
+            WHERE session_id = ?
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
@@ -120,19 +120,19 @@ public final class ActiveSessionsDAO {
     public List<ActiveSessionEntry> getByLogin(Connection c, String login) throws SQLException {
         String sql = """
             SELECT
-                sessionId,
+                session_id,
                 login,
-                sessionPwd,
-                storagePwd,
-                sessionCreatedAtMs,
-                lastAuthirificatedAtMs,
-                pushEndpoint,
-                pushP256dhKey,
-                pushAuthKey,
-                clientIp,
-                clientInfoFromClient,
-                clientInfoFromRequest,
-                userLanguage
+                session_pwd,
+                storage_pwd,
+                session_created_at_ms,
+                last_authirificated_at_ms,
+                push_endpoint,
+                push_p256dh_key,
+                push_auth_key,
+                client_ip,
+                client_info_from_client,
+                client_info_from_request,
+                user_language
             FROM active_sessions
             WHERE login = ?
             """;
@@ -162,8 +162,8 @@ public final class ActiveSessionsDAO {
     public void updateLastAuthirificatedAtMs(Connection c, String sessionId, long lastAuthMs) throws SQLException {
         String sql = """
             UPDATE active_sessions
-            SET lastAuthirificatedAtMs = ?
-            WHERE sessionId = ?
+            SET last_authirificated_at_ms = ?
+            WHERE session_id = ?
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
@@ -194,12 +194,12 @@ public final class ActiveSessionsDAO {
         String sql = """
             UPDATE active_sessions
             SET
-                lastAuthirificatedAtMs = ?,
-                clientIp               = ?,
-                clientInfoFromClient   = ?,
-                clientInfoFromRequest  = ?,
-                userLanguage           = ?
-            WHERE sessionId = ?
+                last_authirificated_at_ms = ?,
+                client_ip                = ?,
+                client_info_from_client  = ?,
+                client_info_from_request = ?,
+                user_language            = ?
+            WHERE session_id = ?
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
@@ -231,7 +231,7 @@ public final class ActiveSessionsDAO {
 
     /** Удалить по sessionId с внешним соединением. Соединение НЕ закрывает. */
     public void deleteBySessionId(Connection c, String sessionId) throws SQLException {
-        String sql = "DELETE FROM active_sessions WHERE sessionId = ?";
+        String sql = "DELETE FROM active_sessions WHERE session_id = ?";
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, sessionId);
@@ -249,19 +249,19 @@ public final class ActiveSessionsDAO {
     // -------------------- MAPPER --------------------
 
     private ActiveSessionEntry mapRow(ResultSet rs) throws SQLException {
-        String sessionId              = rs.getString("sessionId");
+        String sessionId              = rs.getString("session_id");
         String login                  = rs.getString("login");
-        String sessionPwd             = rs.getString("sessionPwd");
-        String storagePwd             = rs.getString("storagePwd");
-        long   sessionCreatedAtMs     = rs.getLong("sessionCreatedAtMs");
-        long   lastAuthirificatedAtMs = rs.getLong("lastAuthirificatedAtMs");
-        String pushEndpoint           = rs.getString("pushEndpoint");
-        String pushP256dhKey          = rs.getString("pushP256dhKey");
-        String pushAuthKey            = rs.getString("pushAuthKey");
-        String clientIp               = rs.getString("clientIp");
-        String clientInfoFromClient   = rs.getString("clientInfoFromClient");
-        String clientInfoFromRequest  = rs.getString("clientInfoFromRequest");
-        String userLanguage           = rs.getString("userLanguage");
+        String sessionPwd             = rs.getString("session_pwd");
+        String storagePwd             = rs.getString("storage_pwd");
+        long   sessionCreatedAtMs     = rs.getLong("session_created_at_ms");
+        long   lastAuthirificatedAtMs = rs.getLong("last_authirificated_at_ms");
+        String pushEndpoint           = rs.getString("push_endpoint");
+        String pushP256dhKey          = rs.getString("push_p256dh_key");
+        String pushAuthKey            = rs.getString("push_auth_key");
+        String clientIp               = rs.getString("client_ip");
+        String clientInfoFromClient   = rs.getString("client_info_from_client");
+        String clientInfoFromRequest  = rs.getString("client_info_from_request");
+        String userLanguage           = rs.getString("user_language");
 
         return new ActiveSessionEntry(
                 sessionId,

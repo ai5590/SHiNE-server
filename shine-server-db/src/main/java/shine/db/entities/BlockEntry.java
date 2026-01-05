@@ -2,41 +2,28 @@ package shine.db.entities;
 
 /**
  * Запись блока (таблица blocks).
- *
- * Теперь:
- *  - login       TEXT NOT NULL
- *  - bchName     TEXT NOT NULL (идёт сразу после login)
- *  - to_login    TEXT nullable
- *  - toBchName   TEXT nullable
- *  - toBlockGlobalNumber INTEGER nullable
- *  - toBlockHashe TEXT nullable
- *
- * ДОБАВЛЕНО:
- *  - msgSubType  INTEGER (uint16 по смыслу, храним как int)
- *
- * PRIMARY KEY пока убран вообще.
  */
 public class BlockEntry {
 
-    private String login;                 // TEXT
-    private String bchName;               // TEXT
+    private String login;
+    private String bchName;
 
-    private int  blockGlobalNumber;       // int32
-    private String blockGlobalPreHashe;   // TEXT
+    private int  blockGlobalNumber;
+    private String blockGlobalPreHashe;
 
-    private int  blockLineIndex;          // int16 (храним как int)
-    private int  blockLineNumber;         // int32
-    private String blockLinePreHashe;     // TEXT
+    private int  blockLineIndex;
+    private int  blockLineNumber;
+    private String blockLinePreHashe;
 
-    private int  msgType;                 // int16 (храним как int)
-    private int  msgSubType;              // int16 (храним как int)
+    private int  msgType;
+    private int  msgSubType;
 
-    private byte[] blockByte;             // BLOB
+    private byte[] blockByte;
 
-    private String toLogin;               // TEXT nullable
-    private String toBchName;             // TEXT nullable
-    private Integer toBlockGlobalNumber;  // INTEGER nullable
-    private String toBlockHashe;          // TEXT nullable
+    private String toLogin;
+    private String toBchName;
+    private Integer toBlockGlobalNumber;
+    private String toBlockHashe;
 
     public BlockEntry() {}
 

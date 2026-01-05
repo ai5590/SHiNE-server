@@ -32,9 +32,9 @@ public final class BlockchainStateDAO {
     public BlockchainStateEntry getByBlockchainName(Connection c, String blockchainName) throws SQLException {
         String sql = """
             SELECT
-                blockchainName,
+                blockchain_name,
                 login,
-                blockchainKey,
+                blockchain_key,
                 size_limit,
                 file_size_bytes,
                 last_global_number,
@@ -49,7 +49,7 @@ public final class BlockchainStateDAO {
                 line6_last_number, line6_last_hash,
                 line7_last_number, line7_last_hash
             FROM blockchain_state
-            WHERE blockchainName = ?
+            WHERE blockchain_name = ?
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
@@ -79,9 +79,9 @@ public final class BlockchainStateDAO {
 
         String sql = """
             INSERT INTO blockchain_state (
-                blockchainName,
+                blockchain_name,
                 login,
-                blockchainKey,
+                blockchain_key,
                 size_limit,
                 file_size_bytes,
                 last_global_number,
@@ -106,10 +106,10 @@ public final class BlockchainStateDAO {
                 ?,?,
                 ?,?
             )
-            ON CONFLICT(blockchainName)
+            ON CONFLICT(blockchain_name)
             DO UPDATE SET
                 login              = excluded.login,
-                blockchainKey      = excluded.blockchainKey,
+                blockchain_key     = excluded.blockchain_key,
                 size_limit         = excluded.size_limit,
                 file_size_bytes    = excluded.file_size_bytes,
                 last_global_number = excluded.last_global_number,
@@ -158,12 +158,6 @@ public final class BlockchainStateDAO {
 
     /**
      * Атомарно увеличить file_size_bytes на deltaBytes, но только если НЕ превысим size_limit.
-     *
-     * Возвращает:
-     *  - true  если обновили (лимит не превышен)
-     *  - false если лимит превышается или blockchainName не найден
-     *
-     * ВАЖНО: это именно тот механизм, который надо дергать при добавлении блока.
      */
     public boolean tryIncreaseFileSizeWithinLimit(Connection c, String blockchainName, long deltaBytes, long nowMs) throws SQLException {
         String sql = """
@@ -172,7 +166,7 @@ public final class BlockchainStateDAO {
                 file_size_bytes = file_size_bytes + ?,
                 updated_at_ms   = ?
             WHERE
-                blockchainName = ?
+                blockchain_name = ?
                 AND (file_size_bytes + ?) <= size_limit
             """;
 
@@ -202,11 +196,10 @@ public final class BlockchainStateDAO {
     private BlockchainStateEntry mapRow(ResultSet rs) throws SQLException {
         BlockchainStateEntry e = new BlockchainStateEntry();
 
-        e.setBlockchainName(rs.getString("blockchainName"));
+        e.setBlockchainName(rs.getString("blockchain_name"));
         e.setLogin(rs.getString("login"));
-        e.setBlockchainKey(rs.getString("blockchainKey"));
+        e.setBlockchainKey(rs.getString("blockchain_key"));
 
-        // size_limit теперь long
         e.setSizeLimit(rs.getLong("size_limit"));
         e.setFileSizeBytes(rs.getLong("file_size_bytes"));
 

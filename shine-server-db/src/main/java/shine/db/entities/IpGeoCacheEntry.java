@@ -2,11 +2,6 @@ package shine.db.entities;
 
 /**
  * Запись в таблице ip_geo_cache.
- *
- * Храним:
- *  - ip            — строка IP-адреса (PRIMARY KEY)
- *  - geo           — строка "Country, City" или любое текстовое описание
- *  - updatedAtMs   — время последнего обновления (Unix time в мс)
  */
 public class IpGeoCacheEntry {
 

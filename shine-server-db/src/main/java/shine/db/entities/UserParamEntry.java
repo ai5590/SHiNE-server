@@ -10,12 +10,6 @@ package shine.db.entities;
  *  - value      TEXT    NOT NULL
  *  - device_key TEXT    NULL
  *  - signature  TEXT    NULL
- *
- * UNIQUE(login, param)
- *
- * Смысл:
- *  - в таблице всегда хранится "последнее" значение параметра по времени.
- *  - time_ms монотонно растёт для каждого (login,param) — сервер не принимает более старые обновления.
  */
 public class UserParamEntry {
 
@@ -24,8 +18,8 @@ public class UserParamEntry {
     private long timeMs;
     private String value;
 
-    private String deviceKey;   // base64(32) — можно хранить как "каким ключом подписано"
-    private String signature;   // base64(64)
+    private String deviceKey;
+    private String signature;
 
     public UserParamEntry() {}
 

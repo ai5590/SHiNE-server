@@ -21,8 +21,8 @@ import java.sql.Statement;
  *  - ip_geo_cache
  *  - blockchain_state
  *  - blocks
- *  - connections_state   (текущее состояние связей)
- *  - message_stats       (счётчики лайков/ответов на сообщения)
+ *  - connections_state
+ *  - message_stats
  */
 public class DatabaseInitializer {
 
@@ -83,8 +83,8 @@ public class DatabaseInitializer {
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS solana_users (
                     login       TEXT    NOT NULL PRIMARY KEY,
-                    deviceKey   TEXT    NOT NULL,
-                    solanaKey   TEXT
+                    device_key  TEXT    NOT NULL,
+                    solana_key  TEXT
                 );
                 """);
 
@@ -96,19 +96,19 @@ public class DatabaseInitializer {
             // 2. active_sessions
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS active_sessions (
-                    sessionId                TEXT    NOT NULL PRIMARY KEY,
-                    login                    TEXT    NOT NULL,
-                    sessionPwd               TEXT    NOT NULL,
-                    storagePwd               TEXT    NOT NULL,
-                    sessionCreatedAtMs       INTEGER NOT NULL,
-                    lastAuthirificatedAtMs   INTEGER NOT NULL,
-                    pushEndpoint             TEXT,
-                    pushP256dhKey            TEXT,
-                    pushAuthKey              TEXT,
-                    clientIp                 TEXT,
-                    clientInfoFromClient     TEXT,
-                    clientInfoFromRequest    TEXT,
-                    userLanguage             TEXT,
+                    session_id                 TEXT    NOT NULL PRIMARY KEY,
+                    login                      TEXT    NOT NULL,
+                    session_pwd                TEXT    NOT NULL,
+                    storage_pwd                TEXT    NOT NULL,
+                    session_created_at_ms      INTEGER NOT NULL,
+                    last_authirificated_at_ms  INTEGER NOT NULL,
+                    push_endpoint              TEXT,
+                    push_p256dh_key            TEXT,
+                    push_auth_key              TEXT,
+                    client_ip                  TEXT,
+                    client_info_from_client    TEXT,
+                    client_info_from_request   TEXT,
+                    user_language              TEXT,
                     FOREIGN KEY (login) REFERENCES solana_users(login)
                 );
                 """);
@@ -154,33 +154,33 @@ public class DatabaseInitializer {
             // 5. blockchain_state
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS blockchain_state (
-                    blockchainName         TEXT    NOT NULL PRIMARY KEY,
-                    login                  TEXT    NOT NULL,
-                    blockchainKey          TEXT    NOT NULL,
+                    blockchain_name       TEXT    NOT NULL PRIMARY KEY,
+                    login                 TEXT    NOT NULL,
+                    blockchain_key        TEXT    NOT NULL,
                 
-                    size_limit             INTEGER NOT NULL,
-                    file_size_bytes        INTEGER NOT NULL,
+                    size_limit            INTEGER NOT NULL,
+                    file_size_bytes       INTEGER NOT NULL,
                 
-                    last_global_number     INTEGER NOT NULL,
-                    last_global_hash       TEXT    NOT NULL,
-                    updated_at_ms          INTEGER NOT NULL,
+                    last_global_number    INTEGER NOT NULL,
+                    last_global_hash      TEXT    NOT NULL,
+                    updated_at_ms         INTEGER NOT NULL,
                 
-                    line0_last_number      INTEGER NOT NULL,
-                    line0_last_hash        TEXT    NOT NULL,
-                    line1_last_number      INTEGER NOT NULL,
-                    line1_last_hash        TEXT    NOT NULL,
-                    line2_last_number      INTEGER NOT NULL,
-                    line2_last_hash        TEXT    NOT NULL,
-                    line3_last_number      INTEGER NOT NULL,
-                    line3_last_hash        TEXT    NOT NULL,
-                    line4_last_number      INTEGER NOT NULL,
-                    line4_last_hash        TEXT    NOT NULL,
-                    line5_last_number      INTEGER NOT NULL,
-                    line5_last_hash        TEXT    NOT NULL,
-                    line6_last_number      INTEGER NOT NULL,
-                    line6_last_hash        TEXT    NOT NULL,
-                    line7_last_number      INTEGER NOT NULL,
-                    line7_last_hash        TEXT    NOT NULL,
+                    line0_last_number     INTEGER NOT NULL,
+                    line0_last_hash       TEXT    NOT NULL,
+                    line1_last_number     INTEGER NOT NULL,
+                    line1_last_hash       TEXT    NOT NULL,
+                    line2_last_number     INTEGER NOT NULL,
+                    line2_last_hash       TEXT    NOT NULL,
+                    line3_last_number     INTEGER NOT NULL,
+                    line3_last_hash       TEXT    NOT NULL,
+                    line4_last_number     INTEGER NOT NULL,
+                    line4_last_hash       TEXT    NOT NULL,
+                    line5_last_number     INTEGER NOT NULL,
+                    line5_last_hash       TEXT    NOT NULL,
+                    line6_last_number     INTEGER NOT NULL,
+                    line6_last_hash       TEXT    NOT NULL,
+                    line7_last_number     INTEGER NOT NULL,
+                    line7_last_hash       TEXT    NOT NULL,
                     
                     FOREIGN KEY (login) REFERENCES solana_users(login)
                 );
@@ -199,55 +199,53 @@ public class DatabaseInitializer {
             // 6. blocks
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS blocks (
-                    login                TEXT    NOT NULL,
-                    bchName              TEXT    NOT NULL,
-                    blockGlobalNumber    INTEGER NOT NULL,
-                    blockGlobalPreHashe  TEXT    NOT NULL,
+                    login                     TEXT    NOT NULL,
+                    bch_name                  TEXT    NOT NULL,
+                    block_global_number       INTEGER NOT NULL,
+                    block_global_pre_hashe    TEXT    NOT NULL,
 
-                    blockLineIndex       INTEGER NOT NULL,
-                    blockLineNumber      INTEGER NOT NULL,
-                    blockLinePreHashe    TEXT    NOT NULL,
+                    block_line_index          INTEGER NOT NULL,
+                    block_line_number         INTEGER NOT NULL,
+                    block_line_pre_hashe      TEXT    NOT NULL,
 
-                    msgType              INTEGER NOT NULL,
-                    msgSubType           INTEGER NOT NULL,
+                    msg_type                  INTEGER NOT NULL,
+                    msg_sub_type              INTEGER NOT NULL,
 
-                    blockByte            BLOB,
+                    block_byte                BLOB,
 
-                    to_login             TEXT,
-                    toBchName            TEXT,
-                    toBlockGlobalNumber  INTEGER,
-                    toBlockHashe         TEXT,
+                    to_login                  TEXT,
+                    to_bch_name               TEXT,
+                    to_block_global_number    INTEGER,
+                    to_block_hashe            TEXT,
 
                     FOREIGN KEY (login) REFERENCES solana_users(login),
-                    FOREIGN KEY (bchName) REFERENCES blockchain_state(blockchainName)
+                    FOREIGN KEY (bch_name) REFERENCES blockchain_state(blockchain_name)
                 );
                 """);
 
             st.executeUpdate("""
                 CREATE INDEX IF NOT EXISTS idx_blocks_chain_global
-                ON blocks (login, bchName, blockGlobalNumber);
+                ON blocks (login, bch_name, block_global_number);
                 """);
 
             st.executeUpdate("""
                 CREATE INDEX IF NOT EXISTS idx_blocks_to_target
-                ON blocks (to_login, toBchName, toBlockGlobalNumber);
+                ON blocks (to_login, to_bch_name, to_block_global_number);
                 """);
 
-            // =====================================================================
-            // 7) connections_state — текущее состояние "кто с кем и какая связь"
-            // =====================================================================
+            // 7) connections_state
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS connections_state (
-                    login               TEXT    NOT NULL,
-                    relType             INTEGER NOT NULL,   -- 10/20/30 (FRIEND/CONTACT/FOLLOW)
-                    to_login            TEXT    NOT NULL,
-                    toBchName           TEXT    NOT NULL,
-                    toBlockGlobalNumber INTEGER,
-                    toBlockHashe        TEXT,
+                    login                  TEXT    NOT NULL,
+                    rel_type               INTEGER NOT NULL,
+                    to_login               TEXT    NOT NULL,
+                    to_bch_name            TEXT    NOT NULL,
+                    to_block_global_number INTEGER,
+                    to_block_hashe         TEXT,
 
                     FOREIGN KEY (login) REFERENCES solana_users(login),
 
-                    UNIQUE (login, relType, to_login)
+                    UNIQUE (login, rel_type, to_login)
                 );
                 """);
 
@@ -266,54 +264,47 @@ public class DatabaseInitializer {
                 ON connections_state (login, to_login);
                 """);
 
-            // =====================================================================
-            // 8) Trigger: при вставке connection-блоков в blocks — обновлять connections_state
-            // =====================================================================
+            // 8) Trigger: connection state
             st.executeUpdate("""
                 CREATE TRIGGER IF NOT EXISTS trg_blocks_connection_state_ai
                 AFTER INSERT ON blocks
-                WHEN NEW.msgType = 3
+                WHEN NEW.msg_type = 3
                 BEGIN
 
                     INSERT INTO connections_state (
-                        login, relType, to_login, toBchName, toBlockGlobalNumber, toBlockHashe
+                        login, rel_type, to_login, to_bch_name, to_block_global_number, to_block_hashe
                     )
                     SELECT
                         NEW.login,
-                        NEW.msgSubType,
+                        NEW.msg_sub_type,
                         NEW.to_login,
-                        NEW.toBchName,
-                        NEW.toBlockGlobalNumber,
-                        NEW.toBlockHashe
-                    WHERE NEW.msgSubType IN (10, 20, 30)
+                        NEW.to_bch_name,
+                        NEW.to_block_global_number,
+                        NEW.to_block_hashe
+                    WHERE NEW.msg_sub_type IN (10, 20, 30)
                       AND NEW.to_login IS NOT NULL
-                      AND NEW.toBchName IS NOT NULL
-                    ON CONFLICT(login, relType, to_login)
+                      AND NEW.to_bch_name IS NOT NULL
+                    ON CONFLICT(login, rel_type, to_login)
                     DO UPDATE SET
-                        toBchName = excluded.toBchName,
-                        toBlockGlobalNumber = excluded.toBlockGlobalNumber,
-                        toBlockHashe = excluded.toBlockHashe;
+                        to_bch_name = excluded.to_bch_name,
+                        to_block_global_number = excluded.to_block_global_number,
+                        to_block_hashe = excluded.to_block_hashe;
 
                     DELETE FROM connections_state
                     WHERE login = NEW.login
                       AND to_login = NEW.to_login
-                      AND relType = CASE NEW.msgSubType
+                      AND rel_type = CASE NEW.msg_sub_type
                           WHEN 11 THEN 10
                           WHEN 21 THEN 20
                           WHEN 31 THEN 30
-                          ELSE relType
+                          ELSE rel_type
                       END
-                      AND NEW.msgSubType IN (11, 21, 31);
+                      AND NEW.msg_sub_type IN (11, 21, 31);
 
                 END;
                 """);
 
-            // =====================================================================
-            // 9) message_stats — счётчики лайков/ответов на конкретный блок-цель
-            //
-            // Правило системы:
-            //  - to_login берём из toBchName: отрезаем последние 3 символа
-            // =====================================================================
+            // 9) message_stats
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS message_stats (
                     to_login               TEXT    NOT NULL,
@@ -343,15 +334,11 @@ public class DatabaseInitializer {
                 ON message_stats (to_login);
                 """);
 
-            // =====================================================================
-            // 10) Trigger: LIKE (Reaction)
-            //  - msgType=2 (REACTION)
-            //  - msgSubType=1 (LIKE)
-            // =====================================================================
+            // 10) Trigger: LIKE
             st.executeUpdate("""
                 CREATE TRIGGER IF NOT EXISTS trg_blocks_message_stats_like_ai
                 AFTER INSERT ON blocks
-                WHEN NEW.msgType = 2 AND NEW.msgSubType = 1
+                WHEN NEW.msg_type = 2 AND NEW.msg_sub_type = 1
                 BEGIN
                     INSERT INTO message_stats (
                         to_login,
@@ -362,31 +349,27 @@ public class DatabaseInitializer {
                         replies_count
                     )
                     SELECT
-                        substr(NEW.toBchName, 1, length(NEW.toBchName) - 3),
-                        NEW.toBchName,
-                        NEW.toBlockGlobalNumber,
-                        NEW.toBlockHashe,
+                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 3),
+                        NEW.to_bch_name,
+                        NEW.to_block_global_number,
+                        NEW.to_block_hashe,
                         1,
                         0
-                    WHERE NEW.toBchName IS NOT NULL
-                      AND length(NEW.toBchName) > 3
-                      AND NEW.toBlockGlobalNumber IS NOT NULL
-                      AND NEW.toBlockHashe IS NOT NULL
+                    WHERE NEW.to_bch_name IS NOT NULL
+                      AND length(NEW.to_bch_name) > 3
+                      AND NEW.to_block_global_number IS NOT NULL
+                      AND NEW.to_block_hashe IS NOT NULL
                     ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)
                     DO UPDATE SET
                         likes_count = message_stats.likes_count + 1;
                 END;
                 """);
 
-            // =====================================================================
-            // 11) Trigger: REPLY (Text)
-            //  - msgType=1 (TEXT)
-            //  - msgSubType=2 (REPLY)
-            // =====================================================================
+            // 11) Trigger: REPLY
             st.executeUpdate("""
                 CREATE TRIGGER IF NOT EXISTS trg_blocks_message_stats_reply_ai
                 AFTER INSERT ON blocks
-                WHEN NEW.msgType = 1 AND NEW.msgSubType = 2
+                WHEN NEW.msg_type = 1 AND NEW.msg_sub_type = 2
                 BEGIN
                     INSERT INTO message_stats (
                         to_login,
@@ -397,16 +380,16 @@ public class DatabaseInitializer {
                         replies_count
                     )
                     SELECT
-                        substr(NEW.toBchName, 1, length(NEW.toBchName) - 3),
-                        NEW.toBchName,
-                        NEW.toBlockGlobalNumber,
-                        NEW.toBlockHashe,
+                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 3),
+                        NEW.to_bch_name,
+                        NEW.to_block_global_number,
+                        NEW.to_block_hashe,
                         0,
                         1
-                    WHERE NEW.toBchName IS NOT NULL
-                      AND length(NEW.toBchName) > 3
-                      AND NEW.toBlockGlobalNumber IS NOT NULL
-                      AND NEW.toBlockHashe IS NOT NULL
+                    WHERE NEW.to_bch_name IS NOT NULL
+                      AND length(NEW.to_bch_name) > 3
+                      AND NEW.to_block_global_number IS NOT NULL
+                      AND NEW.to_block_hashe IS NOT NULL
                     ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)
                     DO UPDATE SET
                         replies_count = message_stats.replies_count + 1;

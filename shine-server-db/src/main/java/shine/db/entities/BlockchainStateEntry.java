@@ -5,29 +5,22 @@ import java.util.Base64;
 
 /**
  * Агрегатная сущность текущего состояния блокчейна.
- * 1 строка = 1 blockchainName, плюс состояние линий 0..7.
+ * 1 строка = 1 blockchain_name, плюс состояние линий 0..7.
  */
 public final class BlockchainStateEntry {
 
     private String blockchainName;
-
     private String login;
 
-    /** Ключ блокчейна (pubkey), которым подписываются блоки. Base64(32 bytes). */
     private String blockchainKey;
 
-    /** Лимит (теперь long). */
     private long sizeLimit;
-
-    /** Размер файла блокчейна в байтах (то, что будем сверять/чинить при старте). */
     private long fileSizeBytes;
 
     private int lastGlobalNumber;
-    private String lastGlobalHash; // HEX(64) либо пустая строка для "нулевого"
+    private String lastGlobalHash;
 
-    /** line 0..7 */
     private final int[] lastLineNumbers = new int[8];
-    /** line 0..7 */
     private final String[] lastLineHashes = new String[8];
 
     private long updatedAtMs;
@@ -78,7 +71,6 @@ public final class BlockchainStateEntry {
     public String getBlockchainKey() { return blockchainKey; }
     public void setBlockchainKey(String blockchainKey) { this.blockchainKey = blockchainKey; }
 
-    /** blockchainKey в байтах (32) или null, если битый. */
     public byte[] getBlockchainKeyBytes() {
         if (blockchainKey == null) return null;
         String s = blockchainKey.trim();
@@ -103,7 +95,6 @@ public final class BlockchainStateEntry {
     public String getLastGlobalHash() { return lastGlobalHash; }
     public void setLastGlobalHash(String lastGlobalHash) { this.lastGlobalHash = lastGlobalHash == null ? "" : lastGlobalHash; }
 
-    /** line in [0..7] */
     public int getLastLineNumber(int line) {
         checkLine(line);
         return lastLineNumbers[line];
@@ -113,7 +104,6 @@ public final class BlockchainStateEntry {
         lastLineNumbers[line] = value;
     }
 
-    /** line in [0..7] */
     public String getLastLineHash(int line) {
         checkLine(line);
         return lastLineHashes[line];

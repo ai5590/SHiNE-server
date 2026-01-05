@@ -50,10 +50,6 @@ public final class SqliteDbController {
         return instance;
     }
 
-    /**
-     * Каждый вызов возвращает НОВОЕ соединение.
-     * Закрывать обязан вызывающий код (try-with-resources).
-     */
     public Connection getConnection() throws SQLException {
         Connection conn = DriverManager.getConnection(jdbcUrl);
         conn.setAutoCommit(true);
@@ -68,7 +64,6 @@ public final class SqliteDbController {
         return conn;
     }
 
-    /** Теперь close() не нужен. */
     public void close() {
         // no-op
     }

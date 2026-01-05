@@ -2,27 +2,23 @@ package shine.db.entities;
 
 /**
  * Модель активной сессии (таблица active_sessions).
- *
- * Теперь вместо loginId:
- *  - login TEXT NOT NULL (FK -> solana_users(login))
  */
 public class ActiveSessionEntry {
 
-    private String sessionId;               // TEXT base64(32 bytes)
-    private String login;                   // TEXT NOT NULL
-    private String sessionPwd;              // TEXT
-    private String storagePwd;              // TEXT
-    private long   sessionCreatedAtMs;      // INTEGER
-    private long   lastAuthirificatedAtMs;  // INTEGER
-    private String pushEndpoint;            // TEXT (nullable)
-    private String pushP256dhKey;           // TEXT (nullable)
-    private String pushAuthKey;             // TEXT (nullable)
+    private String sessionId;
+    private String login;
+    private String sessionPwd;
+    private String storagePwd;
+    private long   sessionCreatedAtMs;
+    private long   lastAuthirificatedAtMs;
+    private String pushEndpoint;
+    private String pushP256dhKey;
+    private String pushAuthKey;
 
-    // Новые поля
-    private String clientIp;                // IP клиента при auth/refresh
-    private String clientInfoFromClient;    // строка от клиента (PWA)
-    private String clientInfoFromRequest;   // строка, собранная на сервере
-    private String userLanguage;            // prefer-language (например, "ru-RU")
+    private String clientIp;
+    private String clientInfoFromClient;
+    private String clientInfoFromRequest;
+    private String userLanguage;
 
     public ActiveSessionEntry() {
     }

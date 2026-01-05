@@ -14,18 +14,8 @@ import java.util.List;
  *
  * Колонки:
  *  - login      TEXT PRIMARY KEY
- *      Уникальный логин пользователя (case-insensitive используется на уровне запросов).
- *
- *  - deviceKey  TEXT NOT NULL
- *      Публичный ключ устройства пользователя.
- *      Хранится в Base64(32 bytes) или HEX(64 chars).
- *
- *  - solanaKey  TEXT NULLABLE
- *      Публичный ключ Solana-аккаунта пользователя (если есть).
- *
- * Назначение таблицы:
- *  - локальное сопоставление login → deviceKey / solanaKey
- *  - используется для аутентификации, валидации подписей и связки с блокчейном
+ *  - device_key TEXT NOT NULL
+ *  - solana_key TEXT NULLABLE
  *
  * Правило работы с соединениями:
  *  - методы с Connection НЕ закрывают соединение
@@ -52,7 +42,7 @@ public final class SolanaUsersDAO {
     /** Вставка с внешним соединением. Соединение НЕ закрывает. */
     public void insert(Connection c, SolanaUserEntry user) throws SQLException {
         String sql = """
-            INSERT INTO solana_users (login, deviceKey, solanaKey)
+            INSERT INTO solana_users (login, device_key, solana_key)
             VALUES (?, ?, ?)
             """;
 
@@ -102,7 +92,7 @@ public final class SolanaUsersDAO {
     /** Получить по login (case-insensitive) с внешним соединением. Соединение НЕ закрывает. */
     public SolanaUserEntry getByLogin(Connection c, String login) throws SQLException {
         String sql = """
-            SELECT login, deviceKey, solanaKey
+            SELECT login, device_key, solana_key
             FROM solana_users
             WHERE LOWER(login) = LOWER(?)
             """;
@@ -126,7 +116,7 @@ public final class SolanaUsersDAO {
     /** Поиск по префиксу с внешним соединением. Соединение НЕ закрывает. */
     public List<SolanaUserEntry> searchByLoginPrefix(Connection c, String prefix) throws SQLException {
         String sql = """
-            SELECT login, deviceKey, solanaKey
+            SELECT login, device_key, solana_key
             FROM solana_users
             WHERE LOWER(login) LIKE ?
             ORDER BY login
@@ -157,10 +147,10 @@ public final class SolanaUsersDAO {
     private SolanaUserEntry mapRow(ResultSet rs) throws SQLException {
         SolanaUserEntry e = new SolanaUserEntry(
                 rs.getString("login"),
-                rs.getString("deviceKey")
+                rs.getString("device_key")
         );
 
-        String solanaKey = rs.getString("solanaKey");
+        String solanaKey = rs.getString("solana_key");
         if (rs.wasNull()) solanaKey = null;
         e.setSolanaKey(solanaKey);
 

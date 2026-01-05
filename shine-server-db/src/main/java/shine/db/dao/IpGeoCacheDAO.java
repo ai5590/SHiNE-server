@@ -8,10 +8,10 @@ import java.sql.*;
 /**
  * DAO для таблицы ip_geo_cache.
  *
- *  * Таблица:
- *  *  - ip            TEXT PRIMARY KEY
- *  *  - geo           TEXT
- *  *  - updated_at_ms INTEGER NOT NULL
+ * Таблица:
+ *  - ip            TEXT PRIMARY KEY
+ *  - geo           TEXT
+ *  - updated_at_ms INTEGER NOT NULL
  *
  * Правило:
  * - методы с Connection НЕ закрывают соединение

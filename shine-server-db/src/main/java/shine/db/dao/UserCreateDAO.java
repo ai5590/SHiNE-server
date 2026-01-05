@@ -8,8 +8,8 @@ import java.sql.*;
 
 /**
  * UserCreateDAO — атомарное добавление пользователя:
- *  - solana_users (login, deviceKey)
- *  - blockchain_state (blockchainName, login, blockchainKey, size_limit, ... last_global_number=-1 ...)
+ *  - solana_users (login, device_key)
+ *  - blockchain_state (blockchain_name, login, blockchain_key, size_limit, ... last_global_number=-1 ...)
  *
  * ВАЖНО:
  *  - только INSERT
@@ -86,8 +86,6 @@ public final class UserCreateDAO {
             } catch (SQLException e) {
                 c.rollback();
 
-                // SQLITE_CONSTRAINT -> "уже существует"
-                // Мы не делаем UPDATE, только insert.
                 String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
                 if (msg.contains("constraint")) {
                     return false;

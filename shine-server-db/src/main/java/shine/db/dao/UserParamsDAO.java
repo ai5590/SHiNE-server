@@ -17,11 +17,6 @@ import java.util.List;
  * ЛОГИКА time_ms:
  * - БД принимает запись только если она "новее" (time_ms строго больше текущего).
  * - Реализовано атомарно одним SQL: UPSERT + WHERE users_params.time_ms < excluded.time_ms
- *
- * Возврат результата:
- * - upsertIfNewer(...) возвращает количество изменённых строк:
- *     1 = вставили/обновили
- *     0 = проигнорировали (запись уже новее или равная)
  */
 public final class UserParamsDAO {
 
@@ -41,11 +36,6 @@ public final class UserParamsDAO {
 
     // -------------------- UPSERT (IF NEWER) --------------------
 
-    /**
-     * Атомарный UPSERT "только если новее".
-     *
-     * @return 1 если вставили/обновили; 0 если запись не тронули (existing.time_ms >= incoming.time_ms).
-     */
     public int upsertIfNewer(Connection c, UserParamEntry e) throws SQLException {
         String sql = """
             INSERT INTO users_params (
@@ -77,11 +67,10 @@ public final class UserParamsDAO {
             if (e.getSignature() != null) ps.setString(6, e.getSignature());
             else ps.setNull(6, Types.VARCHAR);
 
-            return ps.executeUpdate(); // 1 или 0
+            return ps.executeUpdate();
         }
     }
 
-    /** То же самое, но сам открывает/закрывает соединение. */
     public int upsertIfNewer(UserParamEntry e) throws SQLException {
         try (Connection c = db.getConnection()) {
             return upsertIfNewer(c, e);
@@ -90,7 +79,6 @@ public final class UserParamsDAO {
 
     // -------------------- SELECT --------------------
 
-    /** Получить параметр по (login,param) с внешним соединением. Соединение НЕ закрывает. */
     public UserParamEntry getByLoginAndParam(Connection c, String login, String param) throws SQLException {
         String sql = """
             SELECT
@@ -116,14 +104,12 @@ public final class UserParamsDAO {
         }
     }
 
-    /** Получить параметр по (login,param) без внешнего соединения. Сам открывает/закрывает. */
     public UserParamEntry getByLoginAndParam(String login, String param) throws SQLException {
         try (Connection c = db.getConnection()) {
             return getByLoginAndParam(c, login, param);
         }
     }
 
-    /** Получить все параметры пользователя с внешним соединением. */
     public List<UserParamEntry> getByLogin(Connection c, String login) throws SQLException {
         String sql = """
             SELECT
@@ -148,7 +134,6 @@ public final class UserParamsDAO {
         return list;
     }
 
-    /** Получить все параметры пользователя без внешнего соединения. */
     public List<UserParamEntry> getByLogin(String login) throws SQLException {
         try (Connection c = db.getConnection()) {
             return getByLogin(c, login);
