@@ -17,7 +17,7 @@ public class IT_RunAllMain {
 
     public static int runAll() {
 
-        final int total = 3;
+        final int total = 4; // было 3
         int failed = 0;
         int passed = 0;
 
@@ -34,6 +34,10 @@ public class IT_RunAllMain {
         TestLog.stepTitle("RUN: IT_03_AddBlock_NoAuth (combined 3+4)");
         int f3 = IT_03_AddBlock_NoAuth.run();
         failed += f3; passed += (f3 == 0 ? 1 : 0);
+
+        TestLog.stepTitle("RUN: IT_04_UserParams_NoAuth");
+        int f4 = IT_04_UserParams_NoAuth.run();
+        failed += f4; passed += (f4 == 0 ? 1 : 0);
 
         TestLog.titleBlock("""
                 IT RUN RESULT
