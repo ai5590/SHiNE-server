@@ -1,5 +1,6 @@
 package blockchain;
 
+import utils.config.ShineSignatureConstants;
 import utils.crypto.Ed25519Util;
 
 import java.nio.ByteBuffer;
@@ -10,13 +11,16 @@ import java.util.Objects;
 
 public final class BchCryptoVerifier {
 
-    private static final byte[] DOMAIN = "SHiNE".getBytes(StandardCharsets.US_ASCII);
-
     private BchCryptoVerifier() {}
+
+    // ✅ строка — из констант; байты/длина — локально, “на месте”
+    private static final String DOMAIN_STR = ShineSignatureConstants.BLOCK_HASH_DOMAIN;
+    private static final byte[] DOMAIN = DOMAIN_STR.getBytes(StandardCharsets.US_ASCII);
+    private static final int DOMAIN_LEN = DOMAIN.length;
 
     /**
      * preimage =
-     *   "SHiNE" +
+     *   DOMAIN +
      *   [1] loginLen + loginBytes +
      *   prevGlobalHash32 +
      *   prevLineHash32 +
@@ -40,7 +44,7 @@ public final class BchCryptoVerifier {
             throw new IllegalArgumentException("login >255 bytes");
 
         ByteBuffer bb = ByteBuffer.allocate(
-                DOMAIN.length +
+                DOMAIN_LEN +
                         1 + loginBytes.length +
                         32 + 32 +
                         rawBytes.length

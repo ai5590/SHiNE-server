@@ -1,6 +1,7 @@
 package blockchain.body;
 
 import blockchain.LineIndex;
+import utils.config.ShineSignatureConstants;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -15,10 +16,8 @@ import java.util.Objects;
  *   [2] version=1
  *
  *   [2] subType (uint16) = 0
- *       (служебное поле для совместимости с единым форматом body,
- *        чтобы ВСЕ body имели subType одинаковым способом)
  *
- *   [5] tag ASCII "SHiNE"
+ *   [TAG_LEN] tag ASCII "SHiNE"
  *   [1] loginLength=N (uint8)
  *   [N] login UTF-8
  *
@@ -35,7 +34,12 @@ public final class HeaderBody implements BodyRecord {
     /** Для header всегда 0 (служебная совместимость). */
     public static final short SUBTYPE_COMPAT = 0;
 
-    public static final String TAG = "SHiNE";
+    /** TAG формата (ASCII). Значение берём из общих строковых констант. */
+    public static final String TAG = ShineSignatureConstants.BLOCKCHAIN_HEADER_TAG;
+
+    // ✅ производные значения считаем "на месте", а не в константах
+    private static final byte[] TAG_ASCII = TAG.getBytes(StandardCharsets.US_ASCII);
+    private static final int TAG_LEN = TAG_ASCII.length;
 
     public final short subType; // всегда 0
     public final String tag;    // "SHiNE"
@@ -57,11 +61,11 @@ public final class HeaderBody implements BodyRecord {
         if (this.subType != SUBTYPE_COMPAT)
             throw new IllegalArgumentException("HeaderBody subType must be 0, got=" + (this.subType & 0xFFFF));
 
-        // дальше: tag[5] + loginLen[1] минимум
-        if (bb.remaining() < 5 + 1)
+        // дальше: tag[TAG_LEN] + loginLen[1] минимум
+        if (bb.remaining() < TAG_LEN + 1)
             throw new IllegalArgumentException("Header payload too short");
 
-        byte[] tagBytes = new byte[5];
+        byte[] tagBytes = new byte[TAG_LEN];
         bb.get(tagBytes);
         String t = new String(tagBytes, StandardCharsets.US_ASCII);
         if (!TAG.equals(t)) throw new IllegalArgumentException("Bad tag: " + t);
@@ -75,7 +79,6 @@ public final class HeaderBody implements BodyRecord {
         bb.get(loginBytes);
         this.login = new String(loginBytes, StandardCharsets.UTF_8);
 
-        // запрещаем мусор в конце
         if (bb.remaining() != 0) {
             throw new IllegalArgumentException("Unexpected tail bytes, remaining=" + bb.remaining());
         }
@@ -95,7 +98,8 @@ public final class HeaderBody implements BodyRecord {
 
     @Override
     public short expectedLineIndex() {
-        return LineIndex.HEADER;    }
+        return LineIndex.HEADER;
+    }
 
     @Override
     public HeaderBody check() {
@@ -115,8 +119,8 @@ public final class HeaderBody implements BodyRecord {
         if (loginUtf8.length > 255)
             throw new IllegalArgumentException("Login too long (>255 bytes)");
 
-        // type[2] + ver[2] + subType[2] + tag[5] + loginLen[1] + login[N]
-        int cap = 2 + 2 + 2 + 5 + 1 + loginUtf8.length;
+        // type[2] + ver[2] + subType[2] + tag[TAG_LEN] + loginLen[1] + login[N]
+        int cap = 2 + 2 + 2 + TAG_LEN + 1 + loginUtf8.length;
 
         ByteBuffer bb = ByteBuffer.allocate(cap).order(ByteOrder.BIG_ENDIAN);
 
@@ -125,9 +129,9 @@ public final class HeaderBody implements BodyRecord {
 
         bb.putShort(SUBTYPE_COMPAT);
 
-        bb.put(TAG.getBytes(StandardCharsets.US_ASCII)); // [5]
-        bb.put((byte) loginUtf8.length);                 // [1]
-        bb.put(loginUtf8);                               // [N]
+        bb.put(TAG_ASCII);                 // [TAG_LEN]
+        bb.put((byte) loginUtf8.length);   // [1]
+        bb.put(loginUtf8);                 // [N]
 
         return bb.array();
     }

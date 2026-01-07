@@ -26,6 +26,7 @@ dependencies {
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
 
+    implementation project(':shine-server-config')  // модуль с настройками
     implementation project(":shine-server-log")          // модуль логирования и уведомления админов
     implementation project(':shine-server-db')           // модуль для работы с БД содержит и сущности из БД и саму работу с БД
 
