@@ -325,7 +325,7 @@ public class DatabaseInitializer {
                     (int) MsgSubType.CONNECTION_UNBLOCK
                 ));
 
-            // 9) message_stats (to_block_hash -> BLOB)
+            // 9) message_stats (to_block_hash -> BLOB) + edits_count
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS message_stats (
                     to_login               TEXT    NOT NULL,
@@ -335,6 +335,7 @@ public class DatabaseInitializer {
 
                     likes_count            INTEGER NOT NULL DEFAULT 0,
                     replies_count          INTEGER NOT NULL DEFAULT 0,
+                    edits_count            INTEGER NOT NULL DEFAULT 0,
 
                     UNIQUE (
                         to_login,
@@ -417,17 +418,44 @@ public class DatabaseInitializer {
                 END;
                 """.formatted((int) MsgSubType.TEXT_REPLY));
 
-            // 12) Trigger: EDIT — пометить исходный блок
+            // 12) Trigger: EDIT — пометить исходный блок + увеличить edits_count
             st.executeUpdate("""
                 CREATE TRIGGER IF NOT EXISTS trg_blocks_edit_apply_ai
                 AFTER INSERT ON blocks
                 WHEN NEW.msg_type = 1 AND NEW.msg_sub_type = %d
                 BEGIN
+                    -- 1) Как раньше: помечаем исходный блок, что его изменили последним edit'ом
                     UPDATE blocks
                     SET edited_by_block_global_number = NEW.block_global_number
                     WHERE login = NEW.login
                       AND bch_name = NEW.bch_name
                       AND block_global_number = NEW.to_block_global_number;
+
+                    -- 2) Счётчик edits_count +1 в message_stats (upsert)
+                    INSERT INTO message_stats (
+                        to_login,
+                        to_bch_name,
+                        to_block_global_number,
+                        to_block_hash,
+                        likes_count,
+                        replies_count,
+                        edits_count
+                    )
+                    SELECT
+                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 3),
+                        NEW.to_bch_name,
+                        NEW.to_block_global_number,
+                        NEW.to_block_hashe,
+                        0,
+                        0,
+                        1
+                    WHERE NEW.to_bch_name IS NOT NULL
+                      AND length(NEW.to_bch_name) > 3
+                      AND NEW.to_block_global_number IS NOT NULL
+                      AND NEW.to_block_hashe IS NOT NULL
+                    ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)
+                    DO UPDATE SET
+                        edits_count = message_stats.edits_count + 1;
                 END;
                 """.formatted((int) MsgSubType.TEXT_EDIT));
         }
