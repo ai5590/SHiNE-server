@@ -26,6 +26,46 @@ import java.sql.Statement;
  */
 public class DatabaseInitializer {
 
+
+    /* ===================== TEXT (msg_type=1) ===================== */
+
+    /** Новое сообщение (начало ветки). */
+    public static final short TEXT_NEW = 1;
+
+    /** Ответ на сообщение (reply). */
+    public static final short TEXT_REPLY = 2;
+
+    /** Репост (repost). */
+    public static final short TEXT_REPOST = 3;
+
+    /** Редактирование (edit). ВАЖНО: серверное значение = 10. */
+    public static final short TEXT_EDIT = 10;
+
+    /* ===================== REACTION (msg_type=2) ===================== */
+
+    /** Лайк (LIKE). */
+    public static final short REACTION_LIKE = 1;
+
+    /* ===================== CONNECTION (msg_type=3) ===================== */
+
+    /** Добавить в друзья. */
+    public static final short CONNECTION_FRIEND = 10;
+
+    /** Удалить из друзей. */
+    public static final short CONNECTION_UNFRIEND = 11;
+
+    /** Подписаться (follow). */
+    public static final short CONNECTION_FOLLOW = 20;
+
+    /** Отписаться (unfollow). */
+    public static final short CONNECTION_UNFOLLOW = 21;
+
+    /** Заблокировать. */
+    public static final short CONNECTION_BLOCK = 30;
+
+    /** Разблокировать. */
+    public static final short CONNECTION_UNBLOCK = 31;
+
     public static void createNewDB(String[] args) {
         AppConfig config = AppConfig.getInstance();
         String dbPath = config.getParam("db.path");
@@ -311,18 +351,18 @@ public class DatabaseInitializer {
 
                 END;
                 """.formatted(
-                    (int) MsgSubType.CONNECTION_FRIEND,
-                    (int) MsgSubType.CONNECTION_FOLLOW,
-                    (int) MsgSubType.CONNECTION_BLOCK,
+                    (int) CONNECTION_FRIEND,
+                    (int) CONNECTION_FOLLOW,
+                    (int) CONNECTION_BLOCK,
 
-                    (int) MsgSubType.CONNECTION_UNFRIEND, (int) MsgSubType.CONNECTION_FRIEND,
-                    (int) MsgSubType.CONNECTION_UNFOLLOW, (int) MsgSubType.CONNECTION_FOLLOW,
-                    (int) MsgSubType.CONNECTION_UNBLOCK,  (int) MsgSubType.CONNECTION_BLOCK,
+                    (int) CONNECTION_UNFRIEND, (int) CONNECTION_FRIEND,
+                    (int) CONNECTION_UNFOLLOW, (int) CONNECTION_FOLLOW,
+                    (int) CONNECTION_UNBLOCK,  (int) CONNECTION_BLOCK,
 
-                    (int) MsgSubType.CONNECTION_UNFRIEND,
-                    (int) MsgSubType.CONNECTION_UNFOLLOW,
-                    (int) MsgSubType.CONNECTION_UNBLOCK
-                ));
+                    (int) CONNECTION_UNFRIEND,
+                    (int) CONNECTION_UNFOLLOW,
+                    (int) CONNECTION_UNBLOCK
+            ));
 
             // 9) message_stats (to_block_hash -> BLOB) + edits_count
             st.executeUpdate("""
@@ -384,7 +424,7 @@ public class DatabaseInitializer {
                     DO UPDATE SET
                         likes_count = message_stats.likes_count + 1;
                 END;
-                """.formatted((int) MsgSubType.REACTION_LIKE));
+                """.formatted((int) REACTION_LIKE));
 
             // 11) Trigger: REPLY
             st.executeUpdate("""
@@ -415,7 +455,7 @@ public class DatabaseInitializer {
                     DO UPDATE SET
                         replies_count = message_stats.replies_count + 1;
                 END;
-                """.formatted((int) MsgSubType.TEXT_REPLY));
+                """.formatted((int) TEXT_REPLY));
 
             // 12) Trigger: EDIT — пометить исходный блок + увеличить edits_count
             st.executeUpdate("""
@@ -456,7 +496,7 @@ public class DatabaseInitializer {
                     DO UPDATE SET
                         edits_count = message_stats.edits_count + 1;
                 END;
-                """.formatted((int) MsgSubType.TEXT_EDIT));
+                """.formatted((int) TEXT_EDIT));
         }
     }
 }
