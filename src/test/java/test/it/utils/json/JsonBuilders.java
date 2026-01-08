@@ -16,8 +16,11 @@ public final class JsonBuilders {
     public static String addUser(String login) {
         String requestId = TestIds.next("adduser");
         String blockchainName = TestConfig.getBlockchainName(login);
-        String solanaKeyB64 = TestConfig.blockchainPublicKeyB64(login); // solanaKey = blockchain pub
+
+        String solanaKeyB64 = TestConfig.solanaPublicKeyB64(login);
+        String blockchainKeyB64 = TestConfig.blockchainPublicKeyB64(login);
         String deviceKeyB64 = TestConfig.devicePublicKeyB64(login);
+
         return """
                 {
                   "op": "AddUser",
@@ -26,11 +29,20 @@ public final class JsonBuilders {
                     "login": "%s",
                     "blockchainName": "%s",
                     "solanaKey": "%s",
+                    "blockchainKey": "%s",
                     "deviceKey": "%s",
                     "bchLimit": %d
                   }
                 }
-                """.formatted(requestId, login, blockchainName, solanaKeyB64, deviceKeyB64, TestConfig.TEST_BCH_LIMIT);
+                """.formatted(
+                requestId,
+                login,
+                blockchainName,
+                solanaKeyB64,
+                blockchainKeyB64,
+                deviceKeyB64,
+                TestConfig.TEST_BCH_LIMIT
+        );
     }
 
     // ---------------- AuthChallenge ----------------

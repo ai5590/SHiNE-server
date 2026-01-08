@@ -5,9 +5,9 @@ import org.slf4j.LoggerFactory;
 import server.logic.ws_protocol.JSON.ConnectionContext;
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
 import server.logic.ws_protocol.JSON.entyties.Net_Response;
+import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
 import server.logic.ws_protocol.JSON.handlers.tempToTest.entyties.Net_AddUser_Request;
 import server.logic.ws_protocol.JSON.handlers.tempToTest.entyties.Net_AddUser_Response;
-import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.SqliteDbController;
@@ -15,6 +15,7 @@ import shine.db.dao.BlockchainStateDAO;
 import shine.db.dao.SolanaUsersDAO;
 import shine.db.entities.BlockchainStateEntry;
 import shine.db.entities.SolanaUserEntry;
+import utils.blockchain.BlockchainNameUtil;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -34,13 +35,24 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
         if (req.getLogin() == null || req.getLogin().isBlank()
                 || req.getBlockchainName() == null || req.getBlockchainName().isBlank()
                 || req.getSolanaKey() == null || req.getSolanaKey().isBlank()
+                || req.getBlockchainKey() == null || req.getBlockchainKey().isBlank()
                 || req.getDeviceKey() == null || req.getDeviceKey().isBlank()) {
 
             return NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.BAD_REQUEST,
                     "BAD_FIELDS",
-                    "Некорректные поля: login/blockchainName/solanaKey/deviceKey"
+                    "Некорректные поля: login/blockchainName/solanaKey/blockchainKey/deviceKey"
+            );
+        }
+
+        // blockchainName должен быть вида: <login>-NNN
+        if (!BlockchainNameUtil.isBlockchainNameMatchesLogin(req.getBlockchainName(), req.getLogin())) {
+            return NetExceptionResponseFactory.error(
+                    req,
+                    WireCodes.Status.BAD_REQUEST,
+                    "BAD_BLOCKCHAIN_NAME",
+                    "blockchainName должен быть вида <login>-NNN (пример: anya-001)"
             );
         }
 
@@ -49,13 +61,13 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
                 : req.getBchLimit();
 
         try {
-            byte[] blockchainKey32 = Base64.getDecoder().decode(req.getSolanaKey());
+            byte[] blockchainKey32 = Base64.getDecoder().decode(req.getBlockchainKey());
             if (blockchainKey32.length != 32) {
                 return NetExceptionResponseFactory.error(
                         req,
                         WireCodes.Status.BAD_REQUEST,
                         "BAD_BLOCKCHAIN_KEY",
-                        "solanaKey должен быть Base64(32 bytes)"
+                        "blockchainKey должен быть Base64(32 bytes)"
                 );
             }
 
@@ -87,20 +99,20 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
                     );
                 }
 
-                // 3. Создаём пользователя
+                // 3. Создаём пользователя (solanaKey + deviceKey)
                 SolanaUserEntry user = new SolanaUserEntry(
                         req.getLogin(),
-                        req.getDeviceKey(),
+                        req.getSolanaKey(),
                         req.getDeviceKey()
                 );
 
                 usersDAO.insert(c, user);
 
-                // 4. Создаём INITIAL blockchain_state
+                // 4. Создаём INITIAL blockchain_state (blockchainKey)
                 BlockchainStateEntry st = new BlockchainStateEntry();
                 st.setBlockchainName(req.getBlockchainName());
                 st.setLogin(req.getLogin());
-                st.setBlockchainKey(req.getSolanaKey()); // Base64(32)
+                st.setBlockchainKey(req.getBlockchainKey()); // Base64(32)
                 st.setLastGlobalNumber(-1);
                 st.setLastGlobalHash(new byte[32]);
                 st.setFileSizeBytes(0);

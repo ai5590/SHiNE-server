@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * TestConfig — конфиг IT тестов:
  *  - 3 пользователя (TestUser1/2/3)
  *  - ключи по login через map (device/solana/blockchain)
- *  - blockchainName = login + "001"
+ *  - blockchainName = login + "-" + "001"
  *
  * Важно:
  *  - privateKey = Ed25519Util.generatePrivateKeyFromString(login) (sha256, 32 bytes)
@@ -45,7 +45,7 @@ public final class TestConfig {
 
     public static String getBlockchainName(String login) {
         if (login == null) throw new IllegalArgumentException("login is null");
-        return login + BCH_SUFFIX_3();
+        return login + "-" + BCH_SUFFIX_3();
     }
 
     // ============ key maps ============
@@ -92,6 +92,7 @@ public final class TestConfig {
 
     // ============ base64 helpers ============
     public static String devicePublicKeyB64(String login) { return Base64.getEncoder().encodeToString(getDevicePublicKey(login)); }
+    public static String solanaPublicKeyB64(String login) { return Base64.getEncoder().encodeToString(getSolanaPublicKey(login)); }
     public static String blockchainPublicKeyB64(String login) { return Base64.getEncoder().encodeToString(getBlockchainPublicKey(login)); }
 
     // ============ backward-compatible helpers for "user1" ============
@@ -99,10 +100,15 @@ public final class TestConfig {
     public static String BCH_NAME2() { return getBlockchainName(LOGIN2()); }
     public static String BCH_NAME3() { return getBlockchainName(LOGIN3()); }
 
-    /** solanaKey для AddUser: по твоему решению = blockchain pubkey. */
-    public static String LOGIN_PUBKEY_B64() { return blockchainPublicKeyB64(LOGIN()); }
-    public static String LOGIN2_PUBKEY_B64() { return blockchainPublicKeyB64(LOGIN2()); }
-    public static String LOGIN3_PUBKEY_B64() { return blockchainPublicKeyB64(LOGIN3()); }
+    /** solanaKey для AddUser: публичный ключ Solana-пользователя */
+    public static String SOLANA_PUBKEY_B64() { return solanaPublicKeyB64(LOGIN()); }
+    public static String SOLANA2_PUBKEY_B64() { return solanaPublicKeyB64(LOGIN2()); }
+    public static String SOLANA3_PUBKEY_B64() { return solanaPublicKeyB64(LOGIN3()); }
+
+    /** blockchainKey для AddUser: публичный ключ блокчейна */
+    public static String BLOCKCHAIN_PUBKEY_B64() { return blockchainPublicKeyB64(LOGIN()); }
+    public static String BLOCKCHAIN2_PUBKEY_B64() { return blockchainPublicKeyB64(LOGIN2()); }
+    public static String BLOCKCHAIN3_PUBKEY_B64() { return blockchainPublicKeyB64(LOGIN3()); }
 
     public static String DEVICE_PUBKEY_B64() { return devicePublicKeyB64(LOGIN()); }
     public static String DEVICE2_PUBKEY_B64() { return devicePublicKeyB64(LOGIN2()); }
