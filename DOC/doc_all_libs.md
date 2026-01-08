@@ -5,7 +5,6 @@ shine-server-log
 
 shine-server-config
 Минимальный конфиг-лоадер, который один раз читает application.properties и даёт доступ к параметрам.
-Внешние настройки (2): server.1port=7070, db.path=data/shine.sqlite.
 
 shine-server-geo
 Утилиты, которые вытаскивают IP/язык/UA из Jetty WebSocket и (опционально) резолвят гео по IP с кэшем в БД.
