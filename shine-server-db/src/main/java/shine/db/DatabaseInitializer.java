@@ -1,7 +1,6 @@
 package shine.db;
 
 import utils.config.AppConfig;
-import utils.config.MsgSubType;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -371,14 +370,14 @@ public class DatabaseInitializer {
                         replies_count
                     )
                     SELECT
-                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 3),
+                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4),
                         NEW.to_bch_name,
                         NEW.to_block_global_number,
                         NEW.to_block_hashe,
                         1,
                         0
                     WHERE NEW.to_bch_name IS NOT NULL
-                      AND length(NEW.to_bch_name) > 3
+                      AND length(NEW.to_bch_name) > 4
                       AND NEW.to_block_global_number IS NOT NULL
                       AND NEW.to_block_hashe IS NOT NULL
                     ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)
@@ -402,14 +401,14 @@ public class DatabaseInitializer {
                         replies_count
                     )
                     SELECT
-                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 3),
+                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4),
                         NEW.to_bch_name,
                         NEW.to_block_global_number,
                         NEW.to_block_hashe,
                         0,
                         1
                     WHERE NEW.to_bch_name IS NOT NULL
-                      AND length(NEW.to_bch_name) > 3
+                      AND length(NEW.to_bch_name) > 4
                       AND NEW.to_block_global_number IS NOT NULL
                       AND NEW.to_block_hashe IS NOT NULL
                     ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)
@@ -442,7 +441,7 @@ public class DatabaseInitializer {
                         edits_count
                     )
                     SELECT
-                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 3),
+                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4),
                         NEW.to_bch_name,
                         NEW.to_block_global_number,
                         NEW.to_block_hashe,
@@ -450,7 +449,7 @@ public class DatabaseInitializer {
                         0,
                         1
                     WHERE NEW.to_bch_name IS NOT NULL
-                      AND length(NEW.to_bch_name) > 3
+                      AND length(NEW.to_bch_name) > 4
                       AND NEW.to_block_global_number IS NOT NULL
                       AND NEW.to_block_hashe IS NOT NULL
                     ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)

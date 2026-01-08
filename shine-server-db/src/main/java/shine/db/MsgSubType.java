@@ -1,7 +1,7 @@
-package utils.config;
+package shine.db;
 
 /**
- * MsgSubType — единое место для ВСЕХ subType сообщений (msg_sub_type).
+ * shine.db.MsgSubType — единое место для ВСЕХ subType сообщений (msg_sub_type).
  *
  * Правило:
  *  - НИКАКИХ "магических чисел" subType по проекту.

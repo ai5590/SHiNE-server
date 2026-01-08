@@ -12,7 +12,7 @@ import server.logic.ws_protocol.JSON.entyties.Net_Request;
  *   "requestId": "test-add-1",
  *   "payload": {
  *     "login": "anya",
- *     "blockchainName": "anya0001",
+ *     "blockchainName": "anya-001",
  *     "solanaKey": "base64-ed25519-public-key-login",
  *     "blockchainKey": "base64-ed25519-public-key-blockchain",
  *     "deviceKey": "base64-ed25519-public-key-device",
