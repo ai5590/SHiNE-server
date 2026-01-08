@@ -35,7 +35,7 @@
 
 1. Добавление пользователя (AddUser)
 
-Назначение: создать локальную запись пользователя с двумя ключами — loginKey и deviceKey.
+Назначение: создать локальную запись пользователя с двумя ключами — solanaKey и deviceKey.
 
 📤 Запрос клиента
 {
@@ -45,7 +45,7 @@
 "login": "anya4",
 "loginId": 100212,
 "bchId": 4222,
-"loginKey": "BASE64_LOGIN_KEY",
+"solanaKey": "BASE64_LOGIN_KEY",
 "deviceKey": "BASE64_DEVICE_KEY",
 "bchLimit": 1000000
 }
@@ -61,7 +61,7 @@ CREATE TABLE solana_users (
 login TEXT NOT NULL,
 loginId INTEGER PRIMARY KEY,
 bchId INTEGER NOT NULL,
-loginKey TEXT,
+solanaKey TEXT,
 deviceKey TEXT,
 bchLimit INTEGER
 );

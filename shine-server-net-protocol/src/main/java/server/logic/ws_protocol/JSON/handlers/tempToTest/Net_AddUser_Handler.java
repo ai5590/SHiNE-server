@@ -33,14 +33,14 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
 
         if (req.getLogin() == null || req.getLogin().isBlank()
                 || req.getBlockchainName() == null || req.getBlockchainName().isBlank()
-                || req.getLoginKey() == null || req.getLoginKey().isBlank()
+                || req.getSolanaKey() == null || req.getSolanaKey().isBlank()
                 || req.getDeviceKey() == null || req.getDeviceKey().isBlank()) {
 
             return NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.BAD_REQUEST,
                     "BAD_FIELDS",
-                    "Некорректные поля: login/blockchainName/loginKey/deviceKey"
+                    "Некорректные поля: login/blockchainName/solanaKey/deviceKey"
             );
         }
 
@@ -49,13 +49,13 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
                 : req.getBchLimit();
 
         try {
-            byte[] blockchainKey32 = Base64.getDecoder().decode(req.getLoginKey());
+            byte[] blockchainKey32 = Base64.getDecoder().decode(req.getSolanaKey());
             if (blockchainKey32.length != 32) {
                 return NetExceptionResponseFactory.error(
                         req,
                         WireCodes.Status.BAD_REQUEST,
                         "BAD_BLOCKCHAIN_KEY",
-                        "loginKey должен быть Base64(32 bytes)"
+                        "solanaKey должен быть Base64(32 bytes)"
                 );
             }
 
@@ -100,7 +100,7 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
                 BlockchainStateEntry st = new BlockchainStateEntry();
                 st.setBlockchainName(req.getBlockchainName());
                 st.setLogin(req.getLogin());
-                st.setBlockchainKey(req.getLoginKey()); // Base64(32)
+                st.setBlockchainKey(req.getSolanaKey()); // Base64(32)
                 st.setLastGlobalNumber(-1);
                 st.setLastGlobalHash(new byte[32]);
                 st.setFileSizeBytes(0);

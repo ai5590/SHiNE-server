@@ -197,18 +197,18 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
         // -------------------------------------------------------------------
         // ✅ 5) Ключ подписи берём из blockchain_state.blockchainKey (Base64(32))
         // -------------------------------------------------------------------
-        final byte[] loginKey32;
+        final byte[] solanaKey32;
         try {
-            loginKey32 = st.getBlockchainKeyBytes();
+            solanaKey32 = st.getBlockchainKeyBytes();
         } catch (Exception e) {
             log.warn("AddBlock: bad_blockchain_key_in_state (login={}, blockchainName={}, globalNumber={})",
                     login, blockchainName, globalNumber, e);
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_blockchain_key_in_state", serverLastNum, serverLastHashHex);
         }
 
-        if (loginKey32 == null || loginKey32.length != 32) {
+        if (solanaKey32 == null || solanaKey32.length != 32) {
             log.warn("AddBlock: bad_blockchain_key_len (login={}, blockchainName={}, globalNumber={}, keyLen={})",
-                    login, blockchainName, globalNumber, (loginKey32 == null ? -1 : loginKey32.length));
+                    login, blockchainName, globalNumber, (solanaKey32 == null ? -1 : solanaKey32.length));
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_blockchain_key_len", serverLastNum, serverLastHashHex);
         }
 
@@ -278,7 +278,7 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
                 prevLineHash32,
                 block.getRawBytes(),
                 block.getSignature64(),
-                loginKey32,
+                solanaKey32,
                 block.getHash32()
         );
 

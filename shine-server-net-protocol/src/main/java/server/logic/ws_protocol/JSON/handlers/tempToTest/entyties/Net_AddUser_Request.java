@@ -13,7 +13,7 @@ import server.logic.ws_protocol.JSON.entyties.Net_Request;
  *   "payload": {
  *     "login": "anya",
  *     "blockchainName": "anya0001",
- *     "loginKey": "base64-ed25519-public-key-login",
+ *     "solanaKey": "base64-ed25519-public-key-login",
  *     "deviceKey": "base64-ed25519-public-key-device",
  *     "bchLimit": 1000000
  *   }
@@ -25,7 +25,7 @@ public class Net_AddUser_Request extends Net_Request {
 
     private String login;
     private String blockchainName;
-    private String loginKey;
+    private String solanaKey;
     private String deviceKey;
     private Integer bchLimit;
 
@@ -35,8 +35,8 @@ public class Net_AddUser_Request extends Net_Request {
     public String getBlockchainName() { return blockchainName; }
     public void setBlockchainName(String blockchainName) { this.blockchainName = blockchainName; }
 
-    public String getLoginKey() { return loginKey; }
-    public void setLoginKey(String loginKey) { this.loginKey = loginKey; }
+    public String getSolanaKey() { return solanaKey; }
+    public void setSolanaKey(String solanaKey) { this.solanaKey = solanaKey; }
 
     public String getDeviceKey() { return deviceKey; }
     public void setDeviceKey(String deviceKey) { this.deviceKey = deviceKey; }

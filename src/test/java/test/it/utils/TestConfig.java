@@ -99,7 +99,7 @@ public final class TestConfig {
     public static String BCH_NAME2() { return getBlockchainName(LOGIN2()); }
     public static String BCH_NAME3() { return getBlockchainName(LOGIN3()); }
 
-    /** loginKey для AddUser: по твоему решению = blockchain pubkey. */
+    /** solanaKey для AddUser: по твоему решению = blockchain pubkey. */
     public static String LOGIN_PUBKEY_B64() { return blockchainPublicKeyB64(LOGIN()); }
     public static String LOGIN2_PUBKEY_B64() { return blockchainPublicKeyB64(LOGIN2()); }
     public static String LOGIN3_PUBKEY_B64() { return blockchainPublicKeyB64(LOGIN3()); }
