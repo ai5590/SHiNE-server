@@ -1,6 +1,10 @@
-package test.it;
+package test.it.runner;
 
-import test.it.utils.TestLog;
+import test.it.cases.IT_01_AddUser;
+import test.it.cases.IT_02_Sessions;
+import test.it.cases.IT_03_AddBlock_NoAuth;
+import test.it.cases.IT_04_UserParams_NoAuth;
+import test.it.utils.log.TestLog;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +35,7 @@ public class IT_RunAllMain {
         TestLog.title("IT RUN RESULT (per test)");
         for (String s : summaries) System.out.println(s);
 
-        if (failed == 0) TestLog.ok("✅ ВСЕ IT ТЕСТЫ УСПЕШНО ЗАВЕРШЕНЫ");
+        if (failed == 0) TestLog.ok("\n  ВСЕ IT ТЕСТЫ УСПЕШНО ЗАВЕРШЕНЫ");
         else TestLog.boom("❌ IT ПРОГОН УПАЛ: failed=" + failed + " из " + summaries.size());
 
         return failed;

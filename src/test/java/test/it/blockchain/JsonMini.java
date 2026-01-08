@@ -1,4 +1,4 @@
-package test.it.addBlockUtils;
+package test.it.blockchain;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

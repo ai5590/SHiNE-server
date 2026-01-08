@@ -1,16 +1,16 @@
-package test.it;
+package test.it.cases;
 
 import blockchain.body.ConnectionBody;
 import blockchain.body.HeaderBody;
 import blockchain.body.ReactionBody;
 import blockchain.body.TextBody;
 import blockchain.body.UserParamBody;
-import test.it.addBlockUtils.AddBlockSender;
-import test.it.addBlockUtils.ChainState;
+import test.it.blockchain.AddBlockSender;
+import test.it.blockchain.ChainState;
 import test.it.utils.TestConfig;
-import test.it.utils.TestLog;
-import test.it.utils.TestResult;
-import test.it.utils.WsSession;
+import test.it.utils.log.TestLog;
+import test.it.utils.log.TestResult;
+import test.it.utils.ws.WsSession;
 
 import java.time.Duration;
 

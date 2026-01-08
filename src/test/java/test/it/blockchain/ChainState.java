@@ -1,4 +1,4 @@
-package test.it.addBlockUtils;
+package test.it.blockchain;
 
 import java.util.Arrays;
 import java.util.HashMap;

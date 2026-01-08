@@ -1,5 +1,7 @@
-package test.it.utils;
+package test.it.utils.json;
 
+import test.it.utils.TestIds;
+import test.it.utils.TestConfig;
 import utils.crypto.Ed25519Util;
 
 import java.nio.charset.StandardCharsets;

@@ -1,7 +1,9 @@
-package test.it.utils;
+package test.it.utils.ws;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import test.it.utils.TestConfig;
+import test.it.utils.log.TestLog;
 
 import java.time.Duration;
 

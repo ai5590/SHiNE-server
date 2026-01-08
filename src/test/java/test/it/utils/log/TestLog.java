@@ -1,4 +1,6 @@
-package test.it.utils;
+package test.it.utils.log;
+
+import test.it.utils.TestConfig;
 
 /**
  * TestLog — единое место для:

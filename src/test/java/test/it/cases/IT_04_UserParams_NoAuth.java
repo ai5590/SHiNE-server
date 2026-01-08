@@ -1,8 +1,13 @@
-package test.it;
+package test.it.cases;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import test.it.utils.*;
+import test.it.utils.TestConfig;
+import test.it.utils.json.JsonParsers;
+import test.it.utils.log.TestLog;
+import test.it.utils.log.TestResult;
+import test.it.utils.ws.WsSession;
 import utils.config.ShineSignatureConstants;
 import utils.crypto.Ed25519Util;
 

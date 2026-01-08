@@ -1,6 +1,10 @@
-package test.it;
+package test.it.cases;
 
-import test.it.utils.*;
+import test.it.utils.TestConfig;
+import test.it.utils.json.JsonBuilders;
+import test.it.utils.json.JsonParsers;
+import test.it.utils.log.TestResult;
+import test.it.utils.ws.WsSession;
 
 import java.time.Duration;
 

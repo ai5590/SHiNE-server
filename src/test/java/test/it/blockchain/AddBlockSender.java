@@ -1,13 +1,13 @@
-package test.it.addBlockUtils;
+package test.it.blockchain;
 
 import blockchain.BchBlockEntry;
 import blockchain.BchCryptoVerifier;
 import blockchain.body.BodyRecord;
-import test.it.utils.JsonParsers;
+import test.it.utils.json.JsonParsers;
 import test.it.utils.TestConfig;
 import test.it.utils.TestIds;
-import test.it.utils.TestLog;
-import test.it.utils.WsSession;
+import test.it.utils.log.TestLog;
+import test.it.utils.ws.WsSession;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

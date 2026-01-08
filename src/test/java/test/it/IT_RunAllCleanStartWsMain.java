@@ -1,6 +1,8 @@
 package test.it;
 
 import server.ws.WsServer;
+import test.it.runner.IT_CleanAllDate;
+import test.it.runner.IT_RunAllMain;
 
 public class IT_RunAllCleanStartWsMain {
 

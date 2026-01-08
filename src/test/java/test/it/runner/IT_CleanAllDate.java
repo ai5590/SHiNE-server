@@ -1,7 +1,7 @@
-package test.it;
+package test.it.runner;
 
 import test.it.utils.TestConfig;
-import test.it.utils.TestLog;
+import test.it.utils.log.TestLog;
 
 import java.io.IOException;
 import java.nio.file.*;
