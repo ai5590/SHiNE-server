@@ -10,13 +10,13 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * BchBlockEntry_new — универсальный блок нового формата.
+ * старый формат
  *
  * RAW (BigEndian):
  *   [4]  recordSize        (int)  = размер RAW (включая этот заголовок), БЕЗ signature+hash
  *   [4]  recordNumber      (int)  глобальный номер блока
  *   [8]  timestamp         (long) unix seconds
- *   [2]  lineIndex         (short)
+   [2]  lineIndex         (short)
  *   [4]  lineNumber        (int)
  *   [N]  bodyBytes         (body, начинается с [type][version])
  *
@@ -24,6 +24,56 @@ import java.util.Objects;
  *   [64] signature64 (Ed25519)
  *   [32] hash32      (SHA-256)
  */
+         СМОТРИ файл : "!!!  TODO что бы не забыть"
+/**
+ * BchBlockEntry — универсальный блок нового формата.
+ *
+ * RAW (BigEndian):
+ *   Неизменное заглавие
+ *   [32] prevHash32       (SHA-256)  ХЭЩ ПРИВЕДУЩЕГО
+ *   [4]  blockSize        (int)  = размер RAW (включая этот заголовок), БЕЗ signature
+ *   [4]  blockNumber      (int)  номер блока
+ *   [8]  timestamp        (long) unix seconds
+
+ *   Само сообщение
+ *   [2]  type       - тип соощения
+ *   [2]  Sиbtype    - субтип сообщения
+ *   [2]  version    - версия формата соощения
+ *   [4]  prevLineNumber    НОМЕР ПРИВЕДУЩЕГО СООБЩЕНИЯ В ЛИНИИ    - может быть а может и небыть в зависимости от типа сообщения
+ *   [32] prevLineHash      ХЭШ ПРИВЕДУЩЕГО СООБЩЕНИЯ В ЛИНИИ      - может быть а может и небыть в зависимости от типа сообщения
+ *   [N]  bodyBytes         (ОСТАЛЬНЫЕ БАЙТЫ])
+
+ * TAIL (НЕ входит в recordSize):
+ *   [64] signature64 (Ed25519)
+ * И хэш в конце блока мы не храним, тк он будет в начале следующего блока. А для проверки блока оно не нужно тк мы каждый раз провеяем подпись . А она основана на хэше
+ *
+
+
+ *   [32] hash32      (SHA-256)
+ */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public final class BchBlockEntry {
 
     public static final int SIGNATURE_LEN = 64;
