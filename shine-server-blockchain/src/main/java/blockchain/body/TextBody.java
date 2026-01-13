@@ -1,9 +1,6 @@
-// =======================
-// blockchain/body/TextBody.java   (ИЗМЕНЁННЫЙ: header содержит type/subType/version, body содержит line fields)
-// =======================
 package blockchain.body;
 
-import shine.db.MsgSubType;
+import blockchain.MsgSubType;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

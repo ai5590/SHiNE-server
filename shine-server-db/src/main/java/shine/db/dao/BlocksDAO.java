@@ -1,6 +1,3 @@
-// =======================
-// shine/db/dao/BlocksDAO.java   (ИЗМЕНЁННЫЙ под новый blocks формат + линейная проверка)
-// =======================
 package shine.db.dao;
 
 import shine.db.SqliteDbController;

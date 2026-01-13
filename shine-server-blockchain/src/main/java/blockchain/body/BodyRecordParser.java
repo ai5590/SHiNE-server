@@ -1,6 +1,3 @@
-// =======================
-// blockchain/body/BodyRecordParser.java   (ИЗМЕНЁННЫЙ под новый формат)
-// =======================
 package blockchain.body;
 
 /**

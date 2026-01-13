@@ -1,9 +1,6 @@
-// =======================
-// blockchain/body/UserParamBody.java   (ИЗМЕНЁННЫЙ: bodyBytes без type/subType/version, + line fields)
-// =======================
 package blockchain.body;
 
-import shine.db.MsgSubType;
+import blockchain.MsgSubType;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

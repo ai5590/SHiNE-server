@@ -1,6 +1,3 @@
-// =======================
-// shine/db/dao/BlockchainStateDAO.java   (ИЗМЕНЁННАЯ: убраны line0..7, last_block_*)
-// =======================
 package shine.db.dao;
 
 import shine.db.SqliteDbController;

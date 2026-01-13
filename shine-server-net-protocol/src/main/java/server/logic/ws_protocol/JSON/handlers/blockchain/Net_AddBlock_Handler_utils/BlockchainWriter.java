@@ -1,7 +1,3 @@
-// =======================
-// server/logic/ws_protocol/JSON/handlers/blockchain/Net_AddBlock_Handler_utils/BlockchainWriter.java
-// (НОВАЯ ВЕРСИЯ — чтобы AddBlock работал с новым blocks/state)
-// =======================
 package server.logic.ws_protocol.JSON.handlers.blockchain.Net_AddBlock_Handler_utils;
 
 import blockchain.BchBlockEntry;

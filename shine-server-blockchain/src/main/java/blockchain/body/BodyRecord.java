@@ -1,6 +1,3 @@
-// =======================
-// blockchain/body/BodyRecord.java   (ИЗМЕНЁННЫЙ контракт под ТЗ)
-// =======================
 package blockchain.body;
 
 /**

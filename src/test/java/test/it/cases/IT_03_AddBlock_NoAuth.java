@@ -2,7 +2,7 @@ package test.it.cases;
 
 import blockchain.LineIndex;
 import blockchain.body.*;
-import shine.db.MsgSubType;
+import blockchain.MsgSubType;
 import test.it.blockchain.AddBlockSender;
 import test.it.blockchain.ChainState;
 import test.it.utils.TestConfig;

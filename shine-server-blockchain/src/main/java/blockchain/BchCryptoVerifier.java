@@ -1,6 +1,3 @@
-// =======================
-// blockchain/BchCryptoVerifier.java   (НОВАЯ ВЕРСИЯ под ТЗ)
-// =======================
 package blockchain;
 
 import utils.crypto.Ed25519Util;

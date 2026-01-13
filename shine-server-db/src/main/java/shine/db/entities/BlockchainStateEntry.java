@@ -1,6 +1,3 @@
-// =======================
-// shine/db/entities/BlockchainStateEntry.java   (ИЗМЕНЁННАЯ: убраны line0..7, переименовано last_block_*)
-// =======================
 package shine.db.entities;
 
 import java.util.Base64;

@@ -1,9 +1,6 @@
-// =======================
-// blockchain/body/ReactionBody.java   (ИЗМЕНЁННЫЙ: bodyBytes без type/subType/version, НЕТ линейных полей)
-// =======================
 package blockchain.body;
 
-import shine.db.MsgSubType;
+import blockchain.MsgSubType;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

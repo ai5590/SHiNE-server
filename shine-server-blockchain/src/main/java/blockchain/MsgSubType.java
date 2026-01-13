@@ -1,4 +1,4 @@
-package shine.db;
+package blockchain;
 
 /**
  * MsgSubType — единое место для ВСЕХ subType сообщений (msg_sub_type).

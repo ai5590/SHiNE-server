@@ -1,6 +1,3 @@
-// =======================
-// blockchain/body/HeaderBody.java   (ИЗМЕНЁННЫЙ: bodyBytes без type/subType/version)
-// =======================
 package blockchain.body;
 
 import utils.config.ShineSignatureConstants;

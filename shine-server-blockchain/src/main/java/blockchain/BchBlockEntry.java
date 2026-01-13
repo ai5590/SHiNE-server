@@ -1,6 +1,3 @@
-// =======================
-// blockchain/BchBlockEntry.java   (НОВАЯ ВЕРСИЯ под ТЗ)
-// =======================
 package blockchain;
 
 import blockchain.body.BodyRecord;

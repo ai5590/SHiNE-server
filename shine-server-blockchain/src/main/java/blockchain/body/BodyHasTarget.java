@@ -1,6 +1,3 @@
-// =======================
-// blockchain/body/BodyHasTarget.java   (без изменений, оставляю как есть)
-// =======================
 package blockchain.body;
 
 /**

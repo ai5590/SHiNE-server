@@ -1,6 +1,3 @@
-// =======================
-// server/logic/ws_protocol/JSON/handlers/blockchain/Net_AddBlock_Handler.java   (ИЗМЕНЁННЫЙ под ТЗ)
-// =======================
 package server.logic.ws_protocol.JSON.handlers.blockchain;
 
 import blockchain.BchBlockEntry;

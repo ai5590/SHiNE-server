@@ -1,6 +1,3 @@
-// =======================
-// shine/db/entities/BlockEntry.java   (ИЗМЕНЁННАЯ под новый blocks формат)
-// =======================
 package shine.db.entities;
 
 /**
