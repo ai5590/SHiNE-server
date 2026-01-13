@@ -26,7 +26,6 @@ import java.sql.Statement;
  */
 public class DatabaseInitializer {
 
-
     /* ===================== TEXT (msg_type=1) ===================== */
 
     /** Новое сообщение (начало ветки). */
@@ -47,24 +46,16 @@ public class DatabaseInitializer {
     public static final short REACTION_LIKE = 1;
 
     /* ===================== CONNECTION (msg_type=3) ===================== */
+    // Приведено к твоему shine.db.MsgSubType:
+    // FRIEND=10/11, CONTACT=20/21, FOLLOW=30/31
+    public static final short CONNECTION_FRIEND     = 10;
+    public static final short CONNECTION_UNFRIEND   = 11;
 
-    /** Добавить в друзья. */
-    public static final short CONNECTION_FRIEND = 10;
+    public static final short CONNECTION_CONTACT    = 20;
+    public static final short CONNECTION_UNCONTACT  = 21;
 
-    /** Удалить из друзей. */
-    public static final short CONNECTION_UNFRIEND = 11;
-
-    /** Подписаться (follow). */
-    public static final short CONNECTION_FOLLOW = 20;
-
-    /** Отписаться (unfollow). */
-    public static final short CONNECTION_UNFOLLOW = 21;
-
-    /** Заблокировать. */
-    public static final short CONNECTION_BLOCK = 30;
-
-    /** Разблокировать. */
-    public static final short CONNECTION_UNBLOCK = 31;
+    public static final short CONNECTION_FOLLOW     = 30;
+    public static final short CONNECTION_UNFOLLOW   = 31;
 
     public static void createNewDB(String[] args) {
         AppConfig config = AppConfig.getInstance();
@@ -191,36 +182,21 @@ public class DatabaseInitializer {
                 ON ip_geo_cache (updated_at_ms);
                 """);
 
-            // 5. blockchain_state (хэши -> BLOB NULLABLE)
+            // 5. blockchain_state (НОВЫЙ формат под BlockchainStateDAO/Entry)
+            //    ВАЖНО: last_block_number / last_block_hash (а не last_global_*)
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS blockchain_state (
-                    blockchain_name       TEXT    NOT NULL PRIMARY KEY,
-                    login                 TEXT    NOT NULL,
-                    blockchain_key        TEXT    NOT NULL,
+                    blockchain_name   TEXT    NOT NULL PRIMARY KEY,
+                    login             TEXT    NOT NULL,
+                    blockchain_key    TEXT    NOT NULL,
 
-                    size_limit            INTEGER NOT NULL,
-                    file_size_bytes       INTEGER NOT NULL,
+                    size_limit        INTEGER NOT NULL,
+                    file_size_bytes   INTEGER NOT NULL,
 
-                    last_global_number    INTEGER NOT NULL,
-                    last_global_hash      BLOB,
-                    updated_at_ms         INTEGER NOT NULL,
+                    last_block_number INTEGER NOT NULL,
+                    last_block_hash   BLOB,
 
-                    line0_last_number     INTEGER NOT NULL,
-                    line0_last_hash       BLOB,
-                    line1_last_number     INTEGER NOT NULL,
-                    line1_last_hash       BLOB,
-                    line2_last_number     INTEGER NOT NULL,
-                    line2_last_hash       BLOB,
-                    line3_last_number     INTEGER NOT NULL,
-                    line3_last_hash       BLOB,
-                    line4_last_number     INTEGER NOT NULL,
-                    line4_last_hash       BLOB,
-                    line5_last_number     INTEGER NOT NULL,
-                    line5_last_hash       BLOB,
-                    line6_last_number     INTEGER NOT NULL,
-                    line6_last_hash       BLOB,
-                    line7_last_number     INTEGER NOT NULL,
-                    line7_last_hash       BLOB,
+                    updated_at_ms     INTEGER NOT NULL,
 
                     FOREIGN KEY (login) REFERENCES solana_users(login)
                 );
@@ -236,60 +212,63 @@ public class DatabaseInitializer {
                 ON blockchain_state (updated_at_ms);
                 """);
 
-            // 6. blocks (хэши/подпись -> BLOB, + edited_by_block_global_number)
+            // 6. blocks (НОВЫЙ формат под BlocksDAO/BlockEntry)
+            // Ключ: (bch_name, block_number)
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS blocks (
-                    login                     TEXT    NOT NULL,
-                    bch_name                  TEXT    NOT NULL,
-                    block_global_number       INTEGER NOT NULL,
-                    block_global_pre_hashe    BLOB    NOT NULL,
+                    login                TEXT    NOT NULL,
+                    bch_name             TEXT    NOT NULL,
+                    block_number         INTEGER NOT NULL,
 
-                    block_line_index          INTEGER NOT NULL,
-                    block_line_number         INTEGER NOT NULL,
-                    block_line_pre_hashe      BLOB    NOT NULL,
+                    msg_type             INTEGER NOT NULL,
+                    msg_sub_type         INTEGER NOT NULL,
 
-                    msg_type                  INTEGER NOT NULL,
-                    msg_sub_type              INTEGER NOT NULL,
+                    block_bytes          BLOB    NOT NULL,
 
-                    block_byte                BLOB,
+                    -- target (reply/like/edit и т.д.)
+                    to_login             TEXT,
+                    to_bch_name          TEXT,
+                    to_block_number      INTEGER,
+                    to_block_hash        BLOB,
 
-                    -- Ссылка на целевой блок (для reply/like/edit и т.д.)
-                    to_login                  TEXT,
-                    to_bch_name               TEXT,
-                    to_block_global_number    INTEGER,
-                    to_block_hashe            BLOB,
+                    -- собственные данные
+                    block_hash           BLOB    NOT NULL,
+                    block_signature      BLOB    NOT NULL,
 
-                    -- Собственные данные блока (по просьбе)
-                    block_hash                BLOB    NOT NULL,
-                    block_signature           BLOB    NOT NULL,
+                    -- если этот блок был изменён последним edit'ом
+                    edited_by_block_number INTEGER,
 
-                    -- Последний edit, который изменил этот блок (NULL если не редактировали)
-                    edited_by_block_global_number INTEGER,
+                    -- линейность (опционально)
+                    prev_line_number     INTEGER,
+                    prev_line_hash       BLOB,
+                    this_line_number     INTEGER,
 
                     FOREIGN KEY (login) REFERENCES solana_users(login),
-                    FOREIGN KEY (bch_name) REFERENCES blockchain_state(blockchain_name)
+                    FOREIGN KEY (bch_name) REFERENCES blockchain_state(blockchain_name),
+
+                    UNIQUE (bch_name, block_number)
                 );
                 """);
 
             st.executeUpdate("""
-                CREATE INDEX IF NOT EXISTS idx_blocks_chain_global
-                ON blocks (login, bch_name, block_global_number);
+                CREATE INDEX IF NOT EXISTS idx_blocks_by_chain_number
+                ON blocks (bch_name, block_number);
                 """);
 
             st.executeUpdate("""
                 CREATE INDEX IF NOT EXISTS idx_blocks_to_target
-                ON blocks (to_login, to_bch_name, to_block_global_number);
+                ON blocks (to_login, to_bch_name, to_block_number);
                 """);
 
-            // 7) connections_state (to_block_hashe -> BLOB)
+            // 7) connections_state (под SubscriptionsDAO: rel_type + to_login/to_bch_name)
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS connections_state (
-                    login                  TEXT    NOT NULL,
-                    rel_type               INTEGER NOT NULL,
-                    to_login               TEXT    NOT NULL,
-                    to_bch_name            TEXT    NOT NULL,
-                    to_block_global_number INTEGER,
-                    to_block_hashe         BLOB,
+                    login           TEXT    NOT NULL,
+                    rel_type        INTEGER NOT NULL,
+                    to_login        TEXT    NOT NULL,
+                    to_bch_name     TEXT    NOT NULL,
+                    to_block_number INTEGER,
+                    to_block_hash   BLOB,
 
                     FOREIGN KEY (login) REFERENCES solana_users(login),
 
@@ -312,7 +291,7 @@ public class DatabaseInitializer {
                 ON connections_state (login, to_login);
                 """);
 
-            // 8) Trigger: connection state
+            // 8) Trigger: connection state (под новые имена колонок)
             st.executeUpdate("""
                 CREATE TRIGGER IF NOT EXISTS trg_blocks_connection_state_ai
                 AFTER INSERT ON blocks
@@ -320,23 +299,23 @@ public class DatabaseInitializer {
                 BEGIN
 
                     INSERT INTO connections_state (
-                        login, rel_type, to_login, to_bch_name, to_block_global_number, to_block_hashe
+                        login, rel_type, to_login, to_bch_name, to_block_number, to_block_hash
                     )
                     SELECT
                         NEW.login,
                         NEW.msg_sub_type,
                         NEW.to_login,
                         NEW.to_bch_name,
-                        NEW.to_block_global_number,
-                        NEW.to_block_hashe
+                        NEW.to_block_number,
+                        NEW.to_block_hash
                     WHERE NEW.msg_sub_type IN (%d, %d, %d)
                       AND NEW.to_login IS NOT NULL
                       AND NEW.to_bch_name IS NOT NULL
                     ON CONFLICT(login, rel_type, to_login)
                     DO UPDATE SET
-                        to_bch_name = excluded.to_bch_name,
-                        to_block_global_number = excluded.to_block_global_number,
-                        to_block_hashe = excluded.to_block_hashe;
+                        to_bch_name     = excluded.to_bch_name,
+                        to_block_number = excluded.to_block_number,
+                        to_block_hash   = excluded.to_block_hash;
 
                     DELETE FROM connections_state
                     WHERE login = NEW.login
@@ -352,34 +331,34 @@ public class DatabaseInitializer {
                 END;
                 """.formatted(
                     (int) CONNECTION_FRIEND,
+                    (int) CONNECTION_CONTACT,
                     (int) CONNECTION_FOLLOW,
-                    (int) CONNECTION_BLOCK,
 
-                    (int) CONNECTION_UNFRIEND, (int) CONNECTION_FRIEND,
-                    (int) CONNECTION_UNFOLLOW, (int) CONNECTION_FOLLOW,
-                    (int) CONNECTION_UNBLOCK,  (int) CONNECTION_BLOCK,
+                    (int) CONNECTION_UNFRIEND,  (int) CONNECTION_FRIEND,
+                    (int) CONNECTION_UNCONTACT, (int) CONNECTION_CONTACT,
+                    (int) CONNECTION_UNFOLLOW,  (int) CONNECTION_FOLLOW,
 
                     (int) CONNECTION_UNFRIEND,
-                    (int) CONNECTION_UNFOLLOW,
-                    (int) CONNECTION_UNBLOCK
-            ));
+                    (int) CONNECTION_UNCONTACT,
+                    (int) CONNECTION_UNFOLLOW
+                ));
 
-            // 9) message_stats (to_block_hash -> BLOB) + edits_count
+            // 9) message_stats (под новые to_* имена) + edits_count
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS message_stats (
-                    to_login               TEXT    NOT NULL,
-                    to_bch_name            TEXT    NOT NULL,
-                    to_block_global_number INTEGER NOT NULL,
-                    to_block_hash          BLOB    NOT NULL,
+                    to_login          TEXT    NOT NULL,
+                    to_bch_name       TEXT    NOT NULL,
+                    to_block_number   INTEGER NOT NULL,
+                    to_block_hash     BLOB    NOT NULL,
 
-                    likes_count            INTEGER NOT NULL DEFAULT 0,
-                    replies_count          INTEGER NOT NULL DEFAULT 0,
-                    edits_count            INTEGER NOT NULL DEFAULT 0,
+                    likes_count       INTEGER NOT NULL DEFAULT 0,
+                    replies_count     INTEGER NOT NULL DEFAULT 0,
+                    edits_count       INTEGER NOT NULL DEFAULT 0,
 
                     UNIQUE (
                         to_login,
                         to_bch_name,
-                        to_block_global_number,
+                        to_block_number,
                         to_block_hash
                     )
                 );
@@ -387,7 +366,7 @@ public class DatabaseInitializer {
 
             st.executeUpdate("""
                 CREATE INDEX IF NOT EXISTS idx_message_stats_target
-                ON message_stats (to_bch_name, to_block_global_number, to_block_hash);
+                ON message_stats (to_bch_name, to_block_number, to_block_hash);
                 """);
 
             st.executeUpdate("""
@@ -404,23 +383,25 @@ public class DatabaseInitializer {
                     INSERT INTO message_stats (
                         to_login,
                         to_bch_name,
-                        to_block_global_number,
+                        to_block_number,
                         to_block_hash,
                         likes_count,
-                        replies_count
+                        replies_count,
+                        edits_count
                     )
                     SELECT
-                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4),
+                        NEW.to_login,
                         NEW.to_bch_name,
-                        NEW.to_block_global_number,
-                        NEW.to_block_hashe,
+                        NEW.to_block_number,
+                        NEW.to_block_hash,
                         1,
+                        0,
                         0
-                    WHERE NEW.to_bch_name IS NOT NULL
-                      AND length(NEW.to_bch_name) > 4
-                      AND NEW.to_block_global_number IS NOT NULL
-                      AND NEW.to_block_hashe IS NOT NULL
-                    ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)
+                    WHERE NEW.to_login IS NOT NULL
+                      AND NEW.to_bch_name IS NOT NULL
+                      AND NEW.to_block_number IS NOT NULL
+                      AND NEW.to_block_hash IS NOT NULL
+                    ON CONFLICT(to_login, to_bch_name, to_block_number, to_block_hash)
                     DO UPDATE SET
                         likes_count = message_stats.likes_count + 1;
                 END;
@@ -435,23 +416,25 @@ public class DatabaseInitializer {
                     INSERT INTO message_stats (
                         to_login,
                         to_bch_name,
-                        to_block_global_number,
+                        to_block_number,
                         to_block_hash,
                         likes_count,
-                        replies_count
+                        replies_count,
+                        edits_count
                     )
                     SELECT
-                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4),
+                        NEW.to_login,
                         NEW.to_bch_name,
-                        NEW.to_block_global_number,
-                        NEW.to_block_hashe,
+                        NEW.to_block_number,
+                        NEW.to_block_hash,
                         0,
-                        1
-                    WHERE NEW.to_bch_name IS NOT NULL
-                      AND length(NEW.to_bch_name) > 4
-                      AND NEW.to_block_global_number IS NOT NULL
-                      AND NEW.to_block_hashe IS NOT NULL
-                    ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)
+                        1,
+                        0
+                    WHERE NEW.to_login IS NOT NULL
+                      AND NEW.to_bch_name IS NOT NULL
+                      AND NEW.to_block_number IS NOT NULL
+                      AND NEW.to_block_hash IS NOT NULL
+                    ON CONFLICT(to_login, to_bch_name, to_block_number, to_block_hash)
                     DO UPDATE SET
                         replies_count = message_stats.replies_count + 1;
                 END;
@@ -463,36 +446,36 @@ public class DatabaseInitializer {
                 AFTER INSERT ON blocks
                 WHEN NEW.msg_type = 1 AND NEW.msg_sub_type = %d
                 BEGIN
-                    -- 1) Как раньше: помечаем исходный блок, что его изменили последним edit'ом
+                    -- 1) Помечаем исходный блок, что его изменили последним edit'ом
                     UPDATE blocks
-                    SET edited_by_block_global_number = NEW.block_global_number
+                    SET edited_by_block_number = NEW.block_number
                     WHERE login = NEW.login
                       AND bch_name = NEW.bch_name
-                      AND block_global_number = NEW.to_block_global_number;
+                      AND block_number = NEW.to_block_number;
 
-                    -- 2) Счётчик edits_count +1 в message_stats (upsert)
+                    -- 2) edits_count +1 в message_stats (upsert)
                     INSERT INTO message_stats (
                         to_login,
                         to_bch_name,
-                        to_block_global_number,
+                        to_block_number,
                         to_block_hash,
                         likes_count,
                         replies_count,
                         edits_count
                     )
                     SELECT
-                        substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4),
+                        NEW.to_login,
                         NEW.to_bch_name,
-                        NEW.to_block_global_number,
-                        NEW.to_block_hashe,
+                        NEW.to_block_number,
+                        NEW.to_block_hash,
                         0,
                         0,
                         1
-                    WHERE NEW.to_bch_name IS NOT NULL
-                      AND length(NEW.to_bch_name) > 4
-                      AND NEW.to_block_global_number IS NOT NULL
-                      AND NEW.to_block_hashe IS NOT NULL
-                    ON CONFLICT(to_login, to_bch_name, to_block_global_number, to_block_hash)
+                    WHERE NEW.to_login IS NOT NULL
+                      AND NEW.to_bch_name IS NOT NULL
+                      AND NEW.to_block_number IS NOT NULL
+                      AND NEW.to_block_hash IS NOT NULL
+                    ON CONFLICT(to_login, to_bch_name, to_block_number, to_block_hash)
                     DO UPDATE SET
                         edits_count = message_stats.edits_count + 1;
                 END;

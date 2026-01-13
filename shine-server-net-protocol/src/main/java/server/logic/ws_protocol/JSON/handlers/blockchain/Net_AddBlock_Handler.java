@@ -68,8 +68,8 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
         try {
             AddBlockResult r = addBlock(
                     blockchainName,
-                    req.getGlobalNumber(),        // старое поле, пока оставляем
-                    req.getPrevGlobalHash(),      // старое поле, пока оставляем
+                    req.getBlockNumber(),        // старое поле, пока оставляем
+                    req.getPrevBlockHash(),      // старое поле, пока оставляем
                     req.getBlockBytesB64()
             );
 
