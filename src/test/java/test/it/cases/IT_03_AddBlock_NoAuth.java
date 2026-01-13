@@ -1,10 +1,8 @@
 package test.it.cases;
 
-import blockchain.body.ConnectionBody;
-import blockchain.body.HeaderBody;
-import blockchain.body.ReactionBody;
-import blockchain.body.TextBody;
-import blockchain.body.UserParamBody;
+import blockchain.LineIndex;
+import blockchain.body.*;
+import shine.db.MsgSubType;
 import test.it.blockchain.AddBlockSender;
 import test.it.blockchain.ChainState;
 import test.it.utils.TestConfig;
@@ -17,11 +15,7 @@ import java.time.Duration;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * IT_03_AddBlock_NoAuth
- *
- * ВАЖНО:
- *  - пользователей НЕ создаём (их создаёт IT_01)
- *  - ключи берём только из TestConfig по login
+ * IT_03_AddBlock_NoAuth — обновлён под новый формат блоков (ТЗ).
  */
 public class IT_03_AddBlock_NoAuth {
 
@@ -63,30 +57,88 @@ public class IT_03_AddBlock_NoAuth {
             sender1.send(new HeaderBody(u1), t);
             assertTrue(st1.hasHeader());
 
-            sender1.send(new TextBody(TextBody.SUB_NEW, "Hello #1 (NEW) from IT_03 test"), t);
-            sender1.send(new TextBody(TextBody.SUB_NEW, "Hello #2 (NEW) from IT_03 test"), t);
-            sender1.send(new TextBody(TextBody.SUB_NEW, "Hello #3 (NEW) from IT_03 test"), t);
+            // TEXT_NEW x3 (с line)
+            {
+                var ln = st1.nextLine(LineIndex.TEXT);
+                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.TEXT_NEW,
+                        "Hello #1 (NEW) from IT_03 test",
+                        null, null, null
+                ), t);
+            }
+            {
+                var ln = st1.nextLine(LineIndex.TEXT);
+                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.TEXT_NEW,
+                        "Hello #2 (NEW) from IT_03 test",
+                        null, null, null
+                ), t);
+            }
+            {
+                var ln = st1.nextLine(LineIndex.TEXT);
+                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.TEXT_NEW,
+                        "Hello #3 (NEW) from IT_03 test",
+                        null, null, null
+                ), t);
+            }
 
-            byte[] text1Hash = st1.getGlobalHash32(1);
-            byte[] text2Hash = st1.getGlobalHash32(2);
-            byte[] text3Hash = st1.getGlobalHash32(3);
+            byte[] text1Hash = st1.getHash32(1);
+            byte[] text2Hash = st1.getHash32(2);
+            byte[] text3Hash = st1.getHash32(3);
             assertNotNull(text1Hash);
             assertNotNull(text2Hash);
             assertNotNull(text3Hash);
 
-            sender1.send(new TextBody(TextBody.SUB_REPLY, "Reply to TEXT#1", bch1, 1, text1Hash), t);
-            sender1.send(new TextBody(TextBody.SUB_REPLY, "Reply to TEXT#3", bch1, 3, text3Hash), t);
+            // TEXT_REPLY x2 (с line + target)
+            {
+                var ln = st1.nextLine(LineIndex.TEXT);
+                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.TEXT_REPLY,
+                        "Reply to TEXT#1",
+                        bch1, 1, text1Hash
+                ), t);
+            }
+            {
+                var ln = st1.nextLine(LineIndex.TEXT);
+                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.TEXT_REPLY,
+                        "Reply to TEXT#3",
+                        bch1, 3, text3Hash
+                ), t);
+            }
 
-            sender1.send(new ReactionBody(ReactionBody.SUB_LIKE, bch1, 1, text1Hash), t);
-            sender1.send(new ReactionBody(ReactionBody.SUB_LIKE, bch1, 2, text2Hash), t);
+            // REACTION_LIKE x2 (без line)
+            sender1.send(new ReactionBody(bch1, 1, text1Hash), t);
+            sender1.send(new ReactionBody(bch1, 2, text2Hash), t);
 
-            sender1.send(new TextBody(TextBody.SUB_EDIT, "Hello #2 (EDIT#1) from IT_03 test", bch1, 2, text2Hash), t);
-            sender1.send(new TextBody(TextBody.SUB_EDIT, "Hello #2 (EDIT#2) from IT_03 test", bch1, 2, text2Hash), t);
-            sender1.send(new TextBody(TextBody.SUB_EDIT, "Hello #3 (EDIT#1) from IT_03 test", bch1, 3, text3Hash), t);
+            // TEXT_EDIT x3 (с line + target)
+            {
+                var ln = st1.nextLine(LineIndex.TEXT);
+                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.TEXT_EDIT,
+                        "Hello #2 (EDIT#1) from IT_03 test",
+                        bch1, 2, text2Hash
+                ), t);
+            }
+            {
+                var ln = st1.nextLine(LineIndex.TEXT);
+                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.TEXT_EDIT,
+                        "Hello #2 (EDIT#2) from IT_03 test",
+                        bch1, 2, text2Hash
+                ), t);
+            }
+            {
+                var ln = st1.nextLine(LineIndex.TEXT);
+                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.TEXT_EDIT,
+                        "Hello #3 (EDIT#1) from IT_03 test",
+                        bch1, 3, text3Hash
+                ), t);
+            }
 
-            assertEquals(10, st1.globalLastNumber(), "USER1: globalLastNumber должен быть 10 (11 блоков)");
-            assertEquals(8, st1.lineLastNumber((short) 1), "USER1: line=1 должно быть 8 TEXT блоков");
-            assertEquals(2, st1.lineLastNumber((short) 2), "USER1: line=2 должно быть 2 REACTION блока");
+            assertEquals(10, st1.lastBlockNumber(), "USER1: lastBlockNumber должен быть 10 (всего 11 блоков включая HEADER)");
 
             // USER2
             ChainState st2 = new ChainState();
@@ -95,7 +147,13 @@ public class IT_03_AddBlock_NoAuth {
             sender2.send(new HeaderBody(u2), t);
             assertTrue(st2.hasHeader());
 
-            sender2.send(new UserParamBody("Anya", "Amsterdam, Example street 10"), t);
+            // USER_PARAM (с line)
+            {
+                var ln = st2.nextLine(LineIndex.USER_PARAM);
+                sender2.send(new UserParamBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        "Anya", "Amsterdam, Example street 10"
+                ), t);
+            }
 
             // USER3 (нужен, чтобы u1 мог подписаться на существующий блокчейн)
             ChainState st3 = new ChainState();
@@ -105,27 +163,70 @@ public class IT_03_AddBlock_NoAuth {
             assertTrue(st3.hasHeader());
 
             // -----------------------------------------------------------------
-            // Подписки (как ты просил):
+            // Подписки:
             //  - u1 follows u2 и u3
             //  - u2 follows только u1
+            // Все CONNECTION идут по линии CONNECTION (по ТЗ "да надо")
             // -----------------------------------------------------------------
 
             // u1 -> follow u2
-            sender1.send(new ConnectionBody(ConnectionBody.SUB_FOLLOW, u2, bch2, 0, new byte[32]), t);
+            {
+                var ln = st1.nextLine(LineIndex.CONNECTION);
+                sender1.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.CONNECTION_FOLLOW,
+                        u2, bch2, 0, new byte[32]
+                ), t);
+            }
 
             // u1 -> follow u3
-            sender1.send(new ConnectionBody(ConnectionBody.SUB_FOLLOW, u3, bch3, 0, new byte[32]), t);
+            {
+                var ln = st1.nextLine(LineIndex.CONNECTION);
+                sender1.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.CONNECTION_FOLLOW,
+                        u3, bch3, 0, new byte[32]
+                ), t);
+            }
 
             // u2 -> follow u1
-            sender2.send(new ConnectionBody(ConnectionBody.SUB_FOLLOW, u1, bch1, 0, new byte[32]), t);
+            {
+                var ln = st2.nextLine(LineIndex.CONNECTION);
+                sender2.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.CONNECTION_FOLLOW,
+                        u1, bch1, 0, new byte[32]
+                ), t);
+            }
 
-            // (оставил твои friend/unfriend как было — но они уже не обязательны для подписок)
-            sender2.send(new ConnectionBody(ConnectionBody.SUB_FRIEND, u1, bch1, 0, new byte[32]), t);
+            // friend/unfriend как было, но тоже по CONNECTION линии
+            {
+                var ln = st2.nextLine(LineIndex.CONNECTION);
+                sender2.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.CONNECTION_FRIEND,
+                        u1, bch1, 0, new byte[32]
+                ), t);
+            }
 
-            sender1.send(new UserParamBody("Anna", "Gareeva"), t);
-            sender1.send(new ConnectionBody(ConnectionBody.SUB_FRIEND, u2, bch2, 0, new byte[32]), t);
+            // user1 param + friend to u2
+            {
+                var ln = st1.nextLine(LineIndex.USER_PARAM);
+                sender1.send(new UserParamBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        "Anna", "Gareeva"
+                ), t);
+            }
+            {
+                var ln = st1.nextLine(LineIndex.CONNECTION);
+                sender1.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.CONNECTION_FRIEND,
+                        u2, bch2, 0, new byte[32]
+                ), t);
+            }
 
-            sender2.send(new ConnectionBody(ConnectionBody.SUB_UNFRIEND, u1, bch1, 0, new byte[32]), t);
+            {
+                var ln = st2.nextLine(LineIndex.CONNECTION);
+                sender2.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        MsgSubType.CONNECTION_UNFRIEND,
+                        u1, bch1, 0, new byte[32]
+                ), t);
+            }
 
             r.ok("IT_03 сценарий блоков выполнен");
 

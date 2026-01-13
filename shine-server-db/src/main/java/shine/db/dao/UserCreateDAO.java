@@ -9,7 +9,7 @@ import java.sql.*;
 /**
  * UserCreateDAO — атомарное добавление пользователя:
  *  - solana_users (login, device_key)
- *  - blockchain_state (blockchain_name, login, blockchain_key, size_limit, ... last_global_number=-1 ...)
+ *  - blockchain_state (blockchain_name, login, blockchain_key, size_limit, ... last_block_number=-1 ...)
  *
  * ВАЖНО:
  *  - только INSERT/UPSERT
@@ -67,14 +67,9 @@ public final class UserCreateDAO {
                 st.setSizeLimit(sizeLimit);
                 st.setFileSizeBytes(0L);
 
-                // старт: глобальных блоков ещё нет
-                st.setLastGlobalNumber(-1);
-                st.setLastGlobalHash(null);
-
-                for (int line = 0; line < 8; line++) {
-                    st.setLastLineNumber(line, 0);
-                    st.setLastLineHash(line, null);
-                }
+                // старт: блоков ещё нет
+                st.setLastBlockNumber(-1);
+                st.setLastBlockHash(null);
 
                 st.setUpdatedAtMs(nowMs);
 

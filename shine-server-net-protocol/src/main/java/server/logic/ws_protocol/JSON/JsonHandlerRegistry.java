@@ -24,7 +24,7 @@ import server.logic.ws_protocol.JSON.handlers.userParams.entyties.Net_ListUserPa
 import server.logic.ws_protocol.JSON.handlers.userParams.entyties.Net_UpsertUserParam_Request;
 
 // !!! подставь реальные пакеты/имена, как у тебя в проекте:
-import server.logic.ws_protocol.JSON.handlers.subscriptions.Net_GetSubscribedChannels_Handler;
+//import server.logic.ws_protocol.JSON.handlers.subscriptions.Net_GetSubscribedChannels_Handler;
 import server.logic.ws_protocol.JSON.handlers.subscriptions.entyties.Net_GetSubscribedChannels_Request;
 
 import java.util.Map;
@@ -48,10 +48,10 @@ public final class JsonHandlerRegistry {
             // --- userParams ---
             Map.entry("UpsertUserParam",    new Net_UpsertUserParam_Handler()),
             Map.entry("GetUserParam",       new Net_GetUserParam_Handler()),
-            Map.entry("ListUserParams",     new Net_ListUserParams_Handler()),
+            Map.entry("ListUserParams",     new Net_ListUserParams_Handler())
 
             // --- subscriptions ---
-            Map.entry("ListSubscribedChannels", new Net_GetSubscribedChannels_Handler())
+//            Map.entry("ListSubscribedChannels", new Net_GetSubscribedChannels_Handler())
     );
 
     private static final Map<String, Class<? extends Net_Request>> REQUEST_TYPES = Map.ofEntries(

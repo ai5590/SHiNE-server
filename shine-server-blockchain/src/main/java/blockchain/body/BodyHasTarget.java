@@ -1,7 +1,10 @@
+// =======================
+// blockchain/body/BodyHasTarget.java   (без изменений, оставляю как есть)
+// =======================
 package blockchain.body;
 
 /**
- * BodyToFields — дополнительный интерфейс для body, которые "ссылаются" на цель (to-поля).
+ * BodyHasTarget — дополнительный интерфейс для body, которые "ссылаются" на цель (to-поля).
  *
  * Идея:
  *  - Не все body имеют "to".
@@ -10,11 +13,6 @@ package blockchain.body;
  *
  * Важно:
  *  - Все методы могут возвращать null.
- *  - toLogin может отсутствовать в самом формате body (например, ReactionBody, TextBody reply/repost),
- *    но в БД мы пишем toLogin "про запас".
- *    Поэтому writer может:
- *      - взять toLogin из body (если есть),
- *      - либо попытаться вычислить из toBchName.
  */
 public interface BodyHasTarget {
 

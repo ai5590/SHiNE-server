@@ -1,31 +1,34 @@
+// =======================
+// blockchain/body/BodyRecordParser.java   (ИЗМЕНЁННЫЙ под новый формат)
+// =======================
 package blockchain.body;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-
+/**
+ * Парсер body теперь выбирает класс по header: type/subType/version,
+ * потому что bodyBytes больше НЕ содержат type/subType/version.
+ */
 public final class BodyRecordParser {
 
     private BodyRecordParser() {}
 
-    public static BodyRecord parse(byte[] bodyBytes) {
+    public static BodyRecord parse(short type, short subType, short version, byte[] bodyBytes) {
         if (bodyBytes == null) throw new IllegalArgumentException("bodyBytes == null");
-        if (bodyBytes.length < 4) throw new IllegalArgumentException("bodyBytes too short (<4)");
 
-        ByteBuffer bb = ByteBuffer.wrap(bodyBytes).order(ByteOrder.BIG_ENDIAN);
-        short type = bb.getShort();
-        short ver  = bb.getShort();
+        int t = type & 0xFFFF;
+        int v = version & 0xFFFF;
 
-        int key = ((type & 0xFFFF) << 16) | (ver & 0xFFFF);
+        // ключ = (type<<16)|version (как раньше по смыслу), но берём из HEADER
+        int key = (t << 16) | v;
 
         return switch (key) {
-            case HeaderBody.KEY     -> new HeaderBody(bodyBytes);      // type=0, ver=1          заглавие блокчейна
-            case TextBody.KEY       -> new TextBody(bodyBytes);        // type=1, ver=1          текст
-            case ReactionBody.KEY   -> new ReactionBody(bodyBytes);    // type=2, ver=1          реакции
-            case ConnectionBody.KEY -> new ConnectionBody(bodyBytes);  // type=3, ver=1          связи
-            case UserParamBody.KEY  -> new UserParamBody(bodyBytes);   // type=4, ver=1          параметры пользователя
+            case HeaderBody.KEY     -> new HeaderBody(subType, version, bodyBytes);
+            case TextBody.KEY       -> new TextBody(subType, version, bodyBytes);
+            case ReactionBody.KEY   -> new ReactionBody(subType, version, bodyBytes);
+            case ConnectionBody.KEY -> new ConnectionBody(subType, version, bodyBytes);
+            case UserParamBody.KEY  -> new UserParamBody(subType, version, bodyBytes);
             default -> throw new IllegalArgumentException(String.format(
-                    "Unknown body type/version: type=%d ver=%d (key=0x%08X)",
-                    (type & 0xFFFF), (ver & 0xFFFF), key
+                    "Unknown body type/version from header: type=%d ver=%d subType=%d",
+                    t, v, (subType & 0xFFFF)
             ));
         };
     }

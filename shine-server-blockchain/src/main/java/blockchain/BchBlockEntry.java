@@ -1,3 +1,6 @@
+// =======================
+// blockchain/BchBlockEntry.java   (НОВАЯ ВЕРСИЯ под ТЗ)
+// =======================
 package blockchain;
 
 import blockchain.body.BodyRecord;
@@ -10,99 +13,65 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * старый формат     -его надо поменять на новый формат
- *
- * RAW (BigEndian):
- *   [4]  recordSize        (int)  = размер RAW (включая этот заголовок), БЕЗ signature+hash
- *   [4]  recordNumber      (int)  глобальный номер блока
- *   [8]  timestamp         (long) unix seconds
-   [2]  lineIndex         (short)
- *   [4]  lineNumber        (int)
- *   [N]  bodyBytes         (body, начинается с [type][version])
- *
- * TAIL (НЕ входит в recordSize):
- *   [64] signature64 (Ed25519)
- *   [32] hash32      (SHA-256)
- */
-
-/**
  * BchBlockEntry — универсальный блок нового формата.
  *
- * RAW (BigEndian):
- *   Неизменное заглавие
- *   [32] prevHash32       (SHA-256)  ХЭЩ ПРИВЕДУЩЕГО
- *   [4]  blockSize        (int)  = размер RAW (включая этот заголовок), БЕЗ signature
- *   [4]  blockNumber      (int)  номер блока
- *   [8]  timestamp        (long) unix seconds
-
+ * RAW (BigEndian) = preimage:
+ *   [32] prevHash32       (SHA-256)  hash предыдущего блока (цепочка)
+ *   [4]  blockSize        (int)      = размер preimage (в байтах), БЕЗ signature64
+ *   [4]  blockNumber      (int)      глобальный номер блока
+ *   [8]  timestamp        (long)     unix seconds
  *
- *   [2]  type       - тип соощения
- *   [2]  Sиbtype    - субтип сообщения
- *   [2]  version    - версия формата соощения
+ *   [2]  type             (short)    тип сообщения
+ *   [2]  subType          (short)    подтип сообщения
+ *   [2]  version          (short)    версия формата сообщения
  *
+ *   [N]  bodyBytes        (bytes)    тело сообщения (БЕЗ type/subType/version)
  *
- *   Дальше Само сообщение (может быть разным)
- *   [4]  prevLineNumber    НОМЕР ПРИВЕДУЩЕГО СООБЩЕНИЯ В ЛИНИИ    - может быть а может и небыть в зависимости от типа сообщения
- *   [32] prevLineHash      ХЭШ ПРИВЕДУЩЕГО СООБЩЕНИЯ В ЛИНИИ      - может быть а может и небыть в зависимости от типа сообщения
- *   [4] номер самого сообщения в этой линии
- *   [N]  bodyBytes         (ОСТАЛЬНЫЕ БАЙТЫ])
-
- * TAIL (НЕ входит в recordSize):
- *   [64] signature64 (Ed25519)
- * И хэш в конце блока мы не храним, тк он будет в начале следующего блока. А для проверки блока оно не нужно тк мы каждый раз провеяем подпись . А она основана на хэше
+ * TAIL (НЕ входит в blockSize):
+ *   [64] signature64 (Ed25519)      подпись над hash32
  *
-
-
- *   [32] hash32      (SHA-256)
+ * hash32 ВНУТРИ БЛОКА НЕ ХРАНИМ.
+ * hash32 вычисляется при парсинге:
+ *   preimage = первые blockSize байт
+ *   hash32   = SHA-256(preimage)
  */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 public final class BchBlockEntry {
 
     public static final int SIGNATURE_LEN = 64;
     public static final int HASH_LEN = 32;
 
     /** Размер фиксированного RAW-заголовка без body */
-    public static final int RAW_HEADER_SIZE = 4 + 4 + 8 + 2 + 4;
+    public static final int RAW_HEADER_SIZE =
+            32   // prevHash32
+            + 4  // blockSize
+            + 4  // blockNumber
+            + 8  // timestamp
+            + 2  // type
+            + 2  // subType
+            + 2; // version
 
-    // --- RAW ---
-    public final int recordSize;     // только RAW, без signature+hash
-    public final int recordNumber;
+    // --- HEADER (RAW) ---
+    public final byte[] prevHash32;   // 32
+    public final int blockSize;       // preimage size
+    public final int blockNumber;
     public final long timestamp;
-    public final short lineIndex;
-    public final int lineNumber;
+    public final short type;
+    public final short subType;
+    public final short version;
+
+    // --- BODY (RAW) ---
     public final byte[] bodyBytes;
 
     /** Распарсенное тело (создаётся сразу при парсинге блока). */
     public final BodyRecord body;
 
     // --- TAIL ---
-    private final byte[] signature64;
-    private final byte[] hash32;
+    private final byte[] signature64; // 64
 
-    // --- cached ---
-    private final byte[] fullBytes;
+    // --- derived ---
+    private final byte[] hash32;      // 32, computed
+    private final byte[] preimage;    // blockSize bytes
+    private final byte[] fullBytes;   // preimage + signature
 
     /* ===================================================================== */
     /* ====================== Конструктор из байт ========================== */
@@ -110,113 +79,113 @@ public final class BchBlockEntry {
 
     public BchBlockEntry(byte[] fullBytes) {
         Objects.requireNonNull(fullBytes, "fullBytes == null");
-        if (fullBytes.length < RAW_HEADER_SIZE + SIGNATURE_LEN + HASH_LEN)
+
+        if (fullBytes.length < RAW_HEADER_SIZE + SIGNATURE_LEN) {
             throw new IllegalArgumentException("Block too short");
+        }
 
         ByteBuffer bb = ByteBuffer.wrap(fullBytes).order(ByteOrder.BIG_ENDIAN);
 
-        this.recordSize = bb.getInt();
-        if (recordSize + SIGNATURE_LEN + HASH_LEN != fullBytes.length)
-            throw new IllegalArgumentException("recordSize mismatch");
+        this.prevHash32 = new byte[32];
+        bb.get(this.prevHash32);
 
-        this.recordNumber = bb.getInt();
+        this.blockSize = bb.getInt();
+        if (blockSize < RAW_HEADER_SIZE) {
+            throw new IllegalArgumentException("blockSize too small: " + blockSize);
+        }
+        if (blockSize + SIGNATURE_LEN != fullBytes.length) {
+            throw new IllegalArgumentException("blockSize mismatch: blockSize=" + blockSize + " fullLen=" + fullBytes.length);
+        }
+
+        this.blockNumber = bb.getInt();
         this.timestamp = bb.getLong();
-        this.lineIndex = bb.getShort();
-        this.lineNumber = bb.getInt();
 
-        int bodyLen = recordSize - RAW_HEADER_SIZE;
-        if (bodyLen <= 0)
-            throw new IllegalArgumentException("Invalid body length");
+        this.type = bb.getShort();
+        this.subType = bb.getShort();
+        this.version = bb.getShort();
+
+        int bodyLen = blockSize - RAW_HEADER_SIZE;
+        if (bodyLen < 0) throw new IllegalArgumentException("Invalid body length: " + bodyLen);
 
         this.bodyBytes = new byte[bodyLen];
         bb.get(this.bodyBytes);
 
-        // ✅ Сразу парсим BodyRecord (и если неизвестный type/version — тут же упадём)
-        this.body = BodyRecordParser.parse(this.bodyBytes);
-
-        // ✅ УРОВЕНЬ B: проверка ожидаемой линии по типу body
-        short expectedLine = this.body.expectedLineIndex();
-        if (this.lineIndex != expectedLine) {
-            throw new IllegalArgumentException(
-                    "Body is in wrong lineIndex: expected=" + expectedLine + " actual=" + this.lineIndex +
-                            " (type=" + this.body.type() + " ver=" + this.body.version() + ")"
-            );
-        }
-
         this.signature64 = new byte[SIGNATURE_LEN];
         bb.get(this.signature64);
 
-        this.hash32 = new byte[HASH_LEN];
-        bb.get(this.hash32);
+        // preimage = первые blockSize байт
+        this.preimage = Arrays.copyOfRange(fullBytes, 0, blockSize);
+
+        // hash32 = sha256(preimage)
+        this.hash32 = BchCryptoVerifier.sha256(preimage);
+
+        // parse body по header.type/subType/version
+        this.body = BodyRecordParser.parse(this.type, this.subType, this.version, this.bodyBytes);
 
         this.fullBytes = Arrays.copyOf(fullBytes, fullBytes.length);
+
+        // запрет мусора
+        if (bb.remaining() != 0) {
+            throw new IllegalArgumentException("Unexpected tail bytes, remaining=" + bb.remaining());
+        }
     }
 
     /* ===================================================================== */
     /* ====================== Конструктор сборки ============================ */
     /* ===================================================================== */
 
-    public BchBlockEntry(int recordNumber,
+    public BchBlockEntry(byte[] prevHash32,
+                         int blockNumber,
                          long timestamp,
-                         short lineIndex,
-                         int lineNumber,
+                         short type,
+                         short subType,
+                         short version,
                          byte[] bodyBytes,
-                         byte[] signature64,
-                         byte[] hash32) {
+                         byte[] signature64) {
 
+        Objects.requireNonNull(prevHash32, "prevHash32 == null");
         Objects.requireNonNull(bodyBytes, "bodyBytes == null");
         Objects.requireNonNull(signature64, "signature64 == null");
-        Objects.requireNonNull(hash32, "hash32 == null");
 
-        if (signature64.length != SIGNATURE_LEN)
-            throw new IllegalArgumentException("signature64 != 64");
-        if (hash32.length != HASH_LEN)
-            throw new IllegalArgumentException("hash32 != 32");
+        if (prevHash32.length != 32) throw new IllegalArgumentException("prevHash32 != 32");
+        if (signature64.length != SIGNATURE_LEN) throw new IllegalArgumentException("signature64 != 64");
 
-        this.recordNumber = recordNumber;
+        this.prevHash32 = Arrays.copyOf(prevHash32, 32);
+        this.blockNumber = blockNumber;
         this.timestamp = timestamp;
-        this.lineIndex = lineIndex;
-        this.lineNumber = lineNumber;
+        this.type = type;
+        this.subType = subType;
+        this.version = version;
         this.bodyBytes = Arrays.copyOf(bodyBytes, bodyBytes.length);
-
-        // ✅ И при сборке — тоже сразу парсим body (чтобы объект был цельным)
-        this.body = BodyRecordParser.parse(this.bodyBytes);
-
-        // ✅ УРОВЕНЬ B: проверка ожидаемой линии по типу body
-        short expectedLine = this.body.expectedLineIndex();
-        if (this.lineIndex != expectedLine) {
-            throw new IllegalArgumentException(
-                    "Body is in wrong lineIndex: expected=" + expectedLine + " actual=" + this.lineIndex +
-                            " (type=" + this.body.type() + " ver=" + this.body.version() + ")"
-            );
-        }
-
         this.signature64 = Arrays.copyOf(signature64, SIGNATURE_LEN);
-        this.hash32 = Arrays.copyOf(hash32, HASH_LEN);
 
-        // recordSize теперь только RAW (header + body), без signature+hash
-        this.recordSize = RAW_HEADER_SIZE + bodyBytes.length;
+        this.blockSize = RAW_HEADER_SIZE + this.bodyBytes.length;
 
-        int fullLen = this.recordSize + SIGNATURE_LEN + HASH_LEN;
+        // parse body по header
+        this.body = BodyRecordParser.parse(this.type, this.subType, this.version, this.bodyBytes);
 
-        ByteBuffer bb = ByteBuffer.allocate(fullLen).order(ByteOrder.BIG_ENDIAN);
-        bb.putInt(this.recordSize);
-        bb.putInt(recordNumber);
-        bb.putLong(timestamp);
-        bb.putShort(lineIndex);
-        bb.putInt(lineNumber);
-        bb.put(bodyBytes);
-        bb.put(this.signature64);
-        bb.put(this.hash32);
+        // build preimage
+        ByteBuffer pre = ByteBuffer.allocate(blockSize).order(ByteOrder.BIG_ENDIAN);
+        pre.put(this.prevHash32);
+        pre.putInt(this.blockSize);
+        pre.putInt(this.blockNumber);
+        pre.putLong(this.timestamp);
+        pre.putShort(this.type);
+        pre.putShort(this.subType);
+        pre.putShort(this.version);
+        pre.put(this.bodyBytes);
 
-        this.fullBytes = bb.array();
+        this.preimage = pre.array();
+        this.hash32 = BchCryptoVerifier.sha256(preimage);
+
+        ByteBuffer full = ByteBuffer.allocate(blockSize + SIGNATURE_LEN).order(ByteOrder.BIG_ENDIAN);
+        full.put(this.preimage);
+        full.put(this.signature64);
+        this.fullBytes = full.array();
     }
 
-    public byte[] getRawBytes() {
-        int rawLen = recordSize; // ровно RAW, без signature+hash
-        byte[] raw = new byte[rawLen];
-        System.arraycopy(fullBytes, 0, raw, 0, rawLen);
-        return raw;
+    public byte[] getPreimageBytes() {
+        return Arrays.copyOf(preimage, preimage.length);
     }
 
     public byte[] getSignature64() {
@@ -241,26 +210,18 @@ public final class BchBlockEntry {
         }
 
         return "BchBlockEntry{"
-                + "RAW{"
-                + "recordSize=" + recordSize
-                + ", recordNumber=" + recordNumber
+                + "HDR{"
+                + "blockSize=" + blockSize
+                + ", blockNumber=" + blockNumber
                 + ", timestamp=" + timestamp + " (" + timeIso + ")"
-                + ", lineIndex=" + lineIndex
-                + ", lineNumber=" + lineNumber
-                + ", bodyLen=" + (bodyBytes == null ? -1 : bodyBytes.length)
-                + ", bodyType=" + (body == null ? "?" : (body.type() & 0xFFFF))
-                + ", bodyVer=" + (body == null ? "?" : (body.version() & 0xFFFF))
+                + ", type=" + (type & 0xFFFF)
+                + ", subType=" + (subType & 0xFFFF)
+                + ", version=" + (version & 0xFFFF)
+                + ", prevHash32(hex)=" + toHex(prevHash32)
                 + "}"
-                + ", TAIL{"
-                + "signature64(hex)=" + toHex(signature64)
-                + ", hash32(hex)=" + toHex(hash32)
-                + "}"
-                + ", FULL{"
-                + "fullLen=" + (fullBytes == null ? -1 : fullBytes.length)
-                + ", rawLen=" + recordSize
-                + "}"
-                + ", body=" + (body == null ? "null" : body.toString())
-                + ", bodyBytesPreview(hex32)=" + toHexPreview(bodyBytes, 32)
+                + ", BODY{len=" + (bodyBytes == null ? -1 : bodyBytes.length) + "}"
+                + ", TAIL{signature64(hex)=" + toHex(signature64) + "}"
+                + ", DERIVED{hash32(hex)=" + toHex(hash32) + "}"
                 + "}";
     }
 
@@ -274,15 +235,5 @@ public final class BchBlockEntry {
             out[i * 2 + 1] = HEX[v & 0x0F];
         }
         return new String(out);
-    }
-
-    private static String toHexPreview(byte[] bytes, int maxBytes) {
-        if (bytes == null) return "null";
-        if (maxBytes <= 0) return "";
-        int n = Math.min(bytes.length, maxBytes);
-        byte[] cut = Arrays.copyOf(bytes, n);
-        String hex = toHex(cut);
-        if (bytes.length > n) hex += "…(+" + (bytes.length - n) + " байт)";
-        return hex;
     }
 }

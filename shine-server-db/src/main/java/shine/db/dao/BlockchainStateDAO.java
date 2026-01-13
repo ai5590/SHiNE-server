@@ -1,5 +1,5 @@
 // =======================
-// BlockchainStateDAO.java   (НОВАЯ ВЕРСИЯ)
+// shine/db/dao/BlockchainStateDAO.java   (ИЗМЕНЁННАЯ: убраны line0..7, last_block_*)
 // =======================
 package shine.db.dao;
 
@@ -40,17 +40,9 @@ public final class BlockchainStateDAO {
                 blockchain_key,
                 size_limit,
                 file_size_bytes,
-                last_global_number,
-                last_global_hash,
-                updated_at_ms,
-                line0_last_number, line0_last_hash,
-                line1_last_number, line1_last_hash,
-                line2_last_number, line2_last_hash,
-                line3_last_number, line3_last_hash,
-                line4_last_number, line4_last_hash,
-                line5_last_number, line5_last_hash,
-                line6_last_number, line6_last_hash,
-                line7_last_number, line7_last_hash
+                last_block_number,
+                last_block_hash,
+                updated_at_ms
             FROM blockchain_state
             WHERE blockchain_name = ?
             """;
@@ -73,10 +65,6 @@ public final class BlockchainStateDAO {
 
     /** UPSERT с внешним соединением. Соединение НЕ закрывает. */
     public void upsert(Connection c, BlockchainStateEntry e) throws SQLException {
-
-        // Колонок ровно 24:
-        //  8 основных + (8 линий * 2 поля) = 24
-
         String sql = """
             INSERT INTO blockchain_state (
                 blockchain_name,
@@ -84,53 +72,19 @@ public final class BlockchainStateDAO {
                 blockchain_key,
                 size_limit,
                 file_size_bytes,
-                last_global_number,
-                last_global_hash,
-                updated_at_ms,
-                line0_last_number, line0_last_hash,
-                line1_last_number, line1_last_hash,
-                line2_last_number, line2_last_hash,
-                line3_last_number, line3_last_hash,
-                line4_last_number, line4_last_hash,
-                line5_last_number, line5_last_hash,
-                line6_last_number, line6_last_hash,
-                line7_last_number, line7_last_hash
-            ) VALUES (
-                ?,?,?,?,?,?,?,?,
-                ?,?,
-                ?,?,
-                ?,?,
-                ?,?,
-                ?,?,
-                ?,?,
-                ?,?,
-                ?,?
-            )
+                last_block_number,
+                last_block_hash,
+                updated_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(blockchain_name)
             DO UPDATE SET
-                login              = excluded.login,
-                blockchain_key     = excluded.blockchain_key,
-                size_limit         = excluded.size_limit,
-                file_size_bytes    = excluded.file_size_bytes,
-                last_global_number = excluded.last_global_number,
-                last_global_hash   = excluded.last_global_hash,
-                updated_at_ms      = excluded.updated_at_ms,
-                line0_last_number  = excluded.line0_last_number,
-                line0_last_hash    = excluded.line0_last_hash,
-                line1_last_number  = excluded.line1_last_number,
-                line1_last_hash    = excluded.line1_last_hash,
-                line2_last_number  = excluded.line2_last_number,
-                line2_last_hash    = excluded.line2_last_hash,
-                line3_last_number  = excluded.line3_last_number,
-                line3_last_hash    = excluded.line3_last_hash,
-                line4_last_number  = excluded.line4_last_number,
-                line4_last_hash    = excluded.line4_last_hash,
-                line5_last_number  = excluded.line5_last_number,
-                line5_last_hash    = excluded.line5_last_hash,
-                line6_last_number  = excluded.line6_last_number,
-                line6_last_hash    = excluded.line6_last_hash,
-                line7_last_number  = excluded.line7_last_number,
-                line7_last_hash    = excluded.line7_last_hash
+                login            = excluded.login,
+                blockchain_key   = excluded.blockchain_key,
+                size_limit       = excluded.size_limit,
+                file_size_bytes  = excluded.file_size_bytes,
+                last_block_number= excluded.last_block_number,
+                last_block_hash  = excluded.last_block_hash,
+                updated_at_ms    = excluded.updated_at_ms
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
@@ -143,14 +97,10 @@ public final class BlockchainStateDAO {
             ps.setLong(i++, e.getSizeLimit());
             ps.setLong(i++, e.getFileSizeBytes());
 
-            ps.setInt(i++, e.getLastGlobalNumber());
-            setBytesNullable(ps, i++, e.getLastGlobalHash());
-            ps.setLong(i++, e.getUpdatedAtMs());
+            ps.setInt(i++, e.getLastBlockNumber());
+            setBytesNullable(ps, i++, e.getLastBlockHash());
 
-            for (int line = 0; line < 8; line++) {
-                ps.setInt(i++, e.getLastLineNumber(line));
-                setBytesNullable(ps, i++, e.getLastLineHash(line));
-            }
+            ps.setLong(i++, e.getUpdatedAtMs());
 
             ps.executeUpdate();
         }
@@ -175,22 +125,8 @@ public final class BlockchainStateDAO {
             ps.setLong(2, nowMs);
             ps.setString(3, blockchainName);
             ps.setLong(4, deltaBytes);
-            int updated = ps.executeUpdate();
-            return updated > 0;
+            return ps.executeUpdate() > 0;
         }
-    }
-
-    /** Удобная проверка для HEADER: запись должна быть и last_global_number должен быть -1. */
-    public BlockchainStateEntry requireExistingAtGenesis(Connection c, String blockchainName) throws SQLException {
-        BlockchainStateEntry st = getByBlockchainName(c, blockchainName);
-        if (st == null) {
-            throw new IllegalStateException("Blockchain state not found for blockchainName=" + blockchainName);
-        }
-        if (st.getLastGlobalNumber() != -1) {
-            throw new IllegalStateException("Blockchain state is not at genesis (-1). blockchainName=" + blockchainName +
-                    " last_global_number=" + st.getLastGlobalNumber());
-        }
-        return st;
     }
 
     private BlockchainStateEntry mapRow(ResultSet rs) throws SQLException {
@@ -203,15 +139,10 @@ public final class BlockchainStateDAO {
         e.setSizeLimit(rs.getLong("size_limit"));
         e.setFileSizeBytes(rs.getLong("file_size_bytes"));
 
-        e.setLastGlobalNumber(rs.getInt("last_global_number"));
-        e.setLastGlobalHash(rs.getBytes("last_global_hash")); // может быть null
+        e.setLastBlockNumber(rs.getInt("last_block_number"));
+        e.setLastBlockHash(rs.getBytes("last_block_hash")); // nullable
 
         e.setUpdatedAtMs(rs.getLong("updated_at_ms"));
-
-        for (int line = 0; line < 8; line++) {
-            e.setLastLineNumber(line, rs.getInt("line" + line + "_last_number"));
-            e.setLastLineHash(line, rs.getBytes("line" + line + "_last_hash")); // может быть null
-        }
 
         return e;
     }

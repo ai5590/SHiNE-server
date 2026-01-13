@@ -113,8 +113,8 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
                 st.setBlockchainName(req.getBlockchainName());
                 st.setLogin(req.getLogin());
                 st.setBlockchainKey(req.getBlockchainKey()); // Base64(32)
-                st.setLastGlobalNumber(-1);
-                st.setLastGlobalHash(new byte[32]);
+                st.setLastBlockNumber(-1);
+                st.setLastBlockHash(new byte[32]);
                 st.setFileSizeBytes(0);
                 st.setSizeLimit(limit);
                 st.setUpdatedAtMs(System.currentTimeMillis());
