@@ -37,6 +37,18 @@ public final class BchBlockEntry {
     public static final int SIGNATURE_LEN = 64;
     public static final int HASH_LEN = 32;
 
+    /**
+     * Максимальный допустимый размер блока (preimage+signature), чтобы не уложить сервер по памяти/диску.
+     * 4 МБ — нормальный “потолок” под тексты/метаданные, и при этом защищает от мусора/атаки.
+     */
+    public static final int MAX_BLOCK_FULL_BYTES = 4 * 1024 * 1024;
+
+    /**
+     * Насколько блок может “обгонять” текущее время (защита от кривых часов/вбросов).
+     * Если timestamp больше now + 60 сек — блок считаем неверным.
+     */
+    public static final long MAX_FUTURE_SECONDS = 60;
+
     /** Размер фиксированного RAW-заголовка без body */
     public static final int RAW_HEADER_SIZE =
             32   // prevHash32
@@ -80,6 +92,9 @@ public final class BchBlockEntry {
         if (fullBytes.length < RAW_HEADER_SIZE + SIGNATURE_LEN) {
             throw new IllegalArgumentException("Block too short");
         }
+        if (fullBytes.length > MAX_BLOCK_FULL_BYTES) {
+            throw new IllegalArgumentException("Block too large: " + fullBytes.length + " > " + MAX_BLOCK_FULL_BYTES);
+        }
 
         ByteBuffer bb = ByteBuffer.wrap(fullBytes).order(ByteOrder.BIG_ENDIAN);
 
@@ -93,9 +108,18 @@ public final class BchBlockEntry {
         if (blockSize + SIGNATURE_LEN != fullBytes.length) {
             throw new IllegalArgumentException("blockSize mismatch: blockSize=" + blockSize + " fullLen=" + fullBytes.length);
         }
+        if (blockSize + SIGNATURE_LEN > MAX_BLOCK_FULL_BYTES) {
+            throw new IllegalArgumentException("Block too large by blockSize: " + (blockSize + SIGNATURE_LEN) + " > " + MAX_BLOCK_FULL_BYTES);
+        }
 
         this.blockNumber = bb.getInt();
         this.timestamp = bb.getLong();
+
+        // запрет “в будущее” больше чем на 1 минуту
+        long now = Instant.now().getEpochSecond();
+        if (this.timestamp > now + MAX_FUTURE_SECONDS) {
+            throw new IllegalArgumentException("timestamp is too far in future: ts=" + this.timestamp + " now=" + now + " maxFutureSec=" + MAX_FUTURE_SECONDS);
+        }
 
         this.type = bb.getShort();
         this.subType = bb.getShort();
@@ -116,7 +140,7 @@ public final class BchBlockEntry {
         // hash32 = sha256(preimage)
         this.hash32 = BchCryptoVerifier.sha256(preimage);
 
-        // parse body по header.type/subType/version
+        // parse body по header.type/subType/version + ОБЯЗАТЕЛЬНЫЙ check()
         this.body = BodyRecordParser.parse(this.type, this.subType, this.version, this.bodyBytes);
 
         this.fullBytes = Arrays.copyOf(fullBytes, fullBytes.length);
@@ -147,6 +171,12 @@ public final class BchBlockEntry {
         if (prevHash32.length != 32) throw new IllegalArgumentException("prevHash32 != 32");
         if (signature64.length != SIGNATURE_LEN) throw new IllegalArgumentException("signature64 != 64");
 
+        // запрет “в будущее” больше чем на 1 минуту
+        long now = Instant.now().getEpochSecond();
+        if (timestamp > now + MAX_FUTURE_SECONDS) {
+            throw new IllegalArgumentException("timestamp is too far in future: ts=" + timestamp + " now=" + now + " maxFutureSec=" + MAX_FUTURE_SECONDS);
+        }
+
         this.prevHash32 = Arrays.copyOf(prevHash32, 32);
         this.blockNumber = blockNumber;
         this.timestamp = timestamp;
@@ -158,7 +188,12 @@ public final class BchBlockEntry {
 
         this.blockSize = RAW_HEADER_SIZE + this.bodyBytes.length;
 
-        // parse body по header
+        int fullLen = this.blockSize + SIGNATURE_LEN;
+        if (fullLen > MAX_BLOCK_FULL_BYTES) {
+            throw new IllegalArgumentException("Block too large: " + fullLen + " > " + MAX_BLOCK_FULL_BYTES);
+        }
+
+        // parse body по header + ОБЯЗАТЕЛЬНЫЙ check()
         this.body = BodyRecordParser.parse(this.type, this.subType, this.version, this.bodyBytes);
 
         // build preimage

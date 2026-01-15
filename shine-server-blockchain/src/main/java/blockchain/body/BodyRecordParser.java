@@ -17,7 +17,7 @@ public final class BodyRecordParser {
         // ключ = (type<<16)|version (как раньше по смыслу), но берём из HEADER
         int key = (t << 16) | v;
 
-        return switch (key) {
+        BodyRecord r = switch (key) {
             case HeaderBody.KEY     -> new HeaderBody(subType, version, bodyBytes);
             case TextBody.KEY       -> new TextBody(subType, version, bodyBytes);
             case ReactionBody.KEY   -> new ReactionBody(subType, version, bodyBytes);
@@ -28,5 +28,9 @@ public final class BodyRecordParser {
                     t, v, (subType & 0xFFFF)
             ));
         };
+
+        // 1) “построили” объект
+        // 2) ОБЯЗАТЕЛЬНО прогнали валидацию
+        return r.check();
     }
 }
