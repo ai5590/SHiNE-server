@@ -14,24 +14,74 @@ import java.util.Objects;
  * TextBody — type=1, ver=1 (в заголовке блока).
  *
  * subType (в заголовке блока):
- *   1  = NEW
- *   2  = REPLY
- *   3  = REPOST
- *   10 = EDIT
+ *   10 = POST
+ *   11 = EDIT_POST
+ *   20 = REPLY
+ *   21 = EDIT_REPLY
  *
- * bodyBytes (BigEndian), новый формат:
+ * =========================================================================
+ * КОНЦЕПЦИЯ ЛИНИЙ ДЛЯ ТЕКСТОВЫХ СООБЩЕНИЙ:
+ *
+ * POST и EDIT_POST принадлежат ЛИНИИ КАНАЛА и имеют hasLine:
  *   [4]  prevLineNumber
  *   [32] prevLineHash32
  *   [4]  thisLineNumber
  *
- *   [2] textLenBytes (uint16)
- *   [N] text UTF-8
+ * Канал в POST/EDIT_POST НЕ хранится (channelName не лежит в bodyBytes).
+ * Канал определяется логически через lineRootBlockNumber:
+ *   - канал "0": lineRootBlockNumber = blockNumber заголовка (HEADER)
+ *   - канал "X": lineRootBlockNumber = blockNumber тех-сообщения CREATE_CHANNEL("X")
  *
- *   Далее ТОЛЬКО если subType == REPLY/REPOST/EDIT:
- *     [1] toBlockchainNameLen (uint8)
- *     [N] toBlockchainName UTF-8
- *     [4] toBlockGlobalNumber (int32)
- *     [32] toBlockHash32 (raw 32 bytes)
+ * REPLY и EDIT_REPLY НЕ имеют линии (нет hasLine).
+ *
+ * =========================================================================
+ * ФОРМАТЫ bodyBytes (BigEndian):
+ *
+ * 1) POST (subType=10):
+ *   [4]  prevLineNumber
+ *   [32] prevLineHash32
+ *   [4]  thisLineNumber          // 0,1,2...
+ *   [2]  textLenBytes (uint16)
+ *   [N]  text UTF-8
+ *
+ * 2) EDIT_POST (subType=11):
+ *   [4]  prevLineNumber
+ *   [32] prevLineHash32
+ *   [4]  thisLineNumber          // равен thisLineNumber предыдущего сообщения линии
+ *
+ *   hasTarget (на ОРИГИНАЛЬНЫЙ POST, toBchName НЕ хранить):
+ *     [4]  toBlockGlobalNumber
+ *     [32] toBlockHash32
+ *
+ *   [2]  textLenBytes (uint16)
+ *   [N]  text UTF-8
+ *
+ * 3) REPLY (subType=20) — НЕ в линии:
+ *   hasTarget (может быть на чужой блокчейн; существование НЕ проверяем):
+ *     [1]  toBlockchainNameLen (uint8)
+ *     [N]  toBlockchainName UTF-8
+ *     [4]  toBlockGlobalNumber
+ *     [32] toBlockHash32
+ *
+ *   [2]  textLenBytes (uint16)
+ *   [M]  text UTF-8
+ *
+ * 4) EDIT_REPLY (subType=21) — НЕ в линии:
+ *   hasTarget (на ОРИГИНАЛЬНЫЙ REPLY, toBchName НЕ хранить):
+ *     [4]  toBlockGlobalNumber
+ *     [32] toBlockHash32
+ *
+ *   [2]  textLenBytes (uint16)
+ *   [N]  text UTF-8
+ *
+ * =========================================================================
+ * ВАЖНО:
+ * - Body.check() НЕ имеет доступа к БД, поэтому:
+ *   - не проверяет существование prevLineNumber/hash
+ *   - не проверяет согласование thisLineNumber относительно prev
+ *   - не проверяет существование target для REPLY
+ *
+ * Эти проверки выполняются на сервере/в БД при вставке.
  */
 public final class TextBody implements BodyRecord, BodyHasTarget, BodyHasLine {
 
@@ -43,18 +93,25 @@ public final class TextBody implements BodyRecord, BodyHasTarget, BodyHasLine {
     public final short subType;   // из header
     public final short version;   // из header
 
-    // линейные поля
+    // ===== line fields (только для POST/EDIT_POST) =====
+    // Для REPLY/EDIT_REPLY эти поля НЕ сериализуются; значения держим как "пустые".
     public final int prevLineNumber;
-    public final byte[] prevLineHash32; // 32
+    public final byte[] prevLineHash32; // 32 or null
     public final int thisLineNumber;
 
-    // payload
+    // ===== message text =====
     public final String message;
 
-    // target (только для reply/repost/edit)
-    public final String toBlockchainName;
-    public final int toBlockGlobalNumber;
-    public final byte[] toBlockHash32;
+    // ===== target fields =====
+    // REPLY: toBlockchainName + globalNumber + hash32
+    // EDIT_POST / EDIT_REPLY: только globalNumber + hash32 (без toBlockchainName)
+    public final String toBlockchainName;    // nullable
+    public final Integer toBlockGlobalNumber; // nullable
+    public final byte[] toBlockHash32;       // nullable(но если target есть -> 32)
+
+    /* ===================================================================== */
+    /* ====================== Конструктор из байт ========================== */
+    /* ===================================================================== */
 
     public TextBody(short subType, short version, byte[] bodyBytes) {
         Objects.requireNonNull(bodyBytes, "bodyBytes == null");
@@ -65,52 +122,59 @@ public final class TextBody implements BodyRecord, BodyHasTarget, BodyHasLine {
         if ((this.version & 0xFFFF) != (VER & 0xFFFF)) {
             throw new IllegalArgumentException("TextBody version must be 1, got=" + (this.version & 0xFFFF));
         }
-
         if (!isValidSubType(this.subType)) {
             throw new IllegalArgumentException("Bad Text subType: " + (this.subType & 0xFFFF));
         }
 
-        // минимум: line(4+32+4) + textLen(2)
-        if (bodyBytes.length < 4 + 32 + 4 + 2) {
-            throw new IllegalArgumentException("TextBody too short");
-        }
-
         ByteBuffer bb = ByteBuffer.wrap(bodyBytes).order(ByteOrder.BIG_ENDIAN);
 
-        this.prevLineNumber = bb.getInt();
+        int st = this.subType & 0xFFFF;
 
-        this.prevLineHash32 = new byte[32];
-        bb.get(this.prevLineHash32);
+        if (st == (MsgSubType.TEXT_POST & 0xFFFF)) {
+            // POST: hasLine + text
+            ensureMin(bb, (4 + 32 + 4) + 2, "POST too short");
 
-        this.thisLineNumber = bb.getInt();
+            this.prevLineNumber = bb.getInt();
+            this.prevLineHash32 = new byte[32];
+            bb.get(this.prevLineHash32);
+            this.thisLineNumber = bb.getInt();
 
-        int textLen = Short.toUnsignedInt(bb.getShort());
-        if (textLen <= 0) throw new IllegalArgumentException("Text payload is empty");
-        if (bb.remaining() < textLen) throw new IllegalArgumentException("Text payload too short (len=" + textLen + ")");
+            this.message = readStrictUtf8Len16(bb, "POST text");
 
-        byte[] textBytes = new byte[textLen];
-        bb.get(textBytes);
+            this.toBlockchainName = null;
+            this.toBlockGlobalNumber = null;
+            this.toBlockHash32 = null;
 
-        var decoder = StandardCharsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT);
+            ensureNoTail(bb, "POST");
 
-        try {
-            this.message = decoder.decode(ByteBuffer.wrap(textBytes)).toString();
-        } catch (CharacterCodingException e) {
-            throw new IllegalArgumentException("Text payload is not valid UTF-8", e);
-        }
+        } else if (st == (MsgSubType.TEXT_EDIT_POST & 0xFFFF)) {
+            // EDIT_POST: hasLine + target(no bch) + text
+            ensureMin(bb, (4 + 32 + 4) + (4 + 32) + 2, "EDIT_POST too short");
 
-        if (this.message.isBlank()) throw new IllegalArgumentException("Text message is blank");
+            this.prevLineNumber = bb.getInt();
+            this.prevLineHash32 = new byte[32];
+            bb.get(this.prevLineHash32);
+            this.thisLineNumber = bb.getInt();
 
-        // target only for reply/repost/edit
-        if (isHasTargetSubType(this.subType)) {
-            if (bb.remaining() < 1) throw new IllegalArgumentException("Missing toBlockchainNameLen");
+            int tgtNum = bb.getInt();
+            byte[] tgtHash = new byte[32];
+            bb.get(tgtHash);
+
+            this.toBlockchainName = null;
+            this.toBlockGlobalNumber = tgtNum;
+            this.toBlockHash32 = tgtHash;
+
+            this.message = readStrictUtf8Len16(bb, "EDIT_POST text");
+
+            ensureNoTail(bb, "EDIT_POST");
+
+        } else if (st == (MsgSubType.TEXT_REPLY & 0xFFFF)) {
+            // REPLY: target(with bch) + text
+            ensureMin(bb, 1 + 1 + 4 + 32 + 2, "REPLY too short");
 
             int nameLen = Byte.toUnsignedInt(bb.get());
-            if (nameLen <= 0) throw new IllegalArgumentException("toBlockchainNameLen is 0");
-            if (bb.remaining() < nameLen + 4 + 32)
-                throw new IllegalArgumentException("Reply/Repost/Edit payload too short");
+            if (nameLen <= 0) throw new IllegalArgumentException("REPLY toBlockchainNameLen is 0");
+            ensureMin(bb, nameLen + 4 + 32 + 2, "REPLY payload too short");
 
             byte[] nameBytes = new byte[nameLen];
             bb.get(nameBytes);
@@ -121,40 +185,121 @@ public final class TextBody implements BodyRecord, BodyHasTarget, BodyHasLine {
             this.toBlockHash32 = new byte[32];
             bb.get(this.toBlockHash32);
 
-            if (bb.remaining() != 0) throw new IllegalArgumentException("Unexpected tail bytes, remaining=" + bb.remaining());
+            this.message = readStrictUtf8Len16(bb, "REPLY text");
+
+            // line fields отсутствуют в байтах
+            this.prevLineNumber = -1;
+            this.prevLineHash32 = null;
+            this.thisLineNumber = -1;
+
+            ensureNoTail(bb, "REPLY");
+
+        } else if (st == (MsgSubType.TEXT_EDIT_REPLY & 0xFFFF)) {
+            // EDIT_REPLY: target(no bch) + text
+            ensureMin(bb, (4 + 32) + 2, "EDIT_REPLY too short");
+
+            int tgtNum = bb.getInt();
+            byte[] tgtHash = new byte[32];
+            bb.get(tgtHash);
+
+            this.toBlockchainName = null;
+            this.toBlockGlobalNumber = tgtNum;
+            this.toBlockHash32 = tgtHash;
+
+            this.message = readStrictUtf8Len16(bb, "EDIT_REPLY text");
+
+            // line fields отсутствуют в байтах
+            this.prevLineNumber = -1;
+            this.prevLineHash32 = null;
+            this.thisLineNumber = -1;
+
+            ensureNoTail(bb, "EDIT_REPLY");
 
         } else {
-            this.toBlockchainName = null;
-            this.toBlockGlobalNumber = 0;
-            this.toBlockHash32 = null;
-
-            if (bb.remaining() != 0) throw new IllegalArgumentException("Unexpected tail for subType=NEW, remaining=" + bb.remaining());
+            // недостижимо из-за isValidSubType, но пусть будет
+            throw new IllegalArgumentException("Unsupported Text subType: " + st);
         }
     }
 
-    public TextBody(int prevLineNumber,
+    /* ===================================================================== */
+    /* ====================== Фабрики (удобно) ============================= */
+    /* ===================================================================== */
+
+    public static TextBody newPost(int prevLineNumber, byte[] prevLineHash32, int thisLineNumber, String message) {
+        return new TextBody(MsgSubType.TEXT_POST, prevLineNumber, prevLineHash32, thisLineNumber,
+                message, null, null, null);
+    }
+
+    public static TextBody newEditPost(int prevLineNumber, byte[] prevLineHash32, int thisLineNumber,
+                                       int targetBlockNumber, byte[] targetHash32,
+                                       String message) {
+        return new TextBody(MsgSubType.TEXT_EDIT_POST, prevLineNumber, prevLineHash32, thisLineNumber,
+                message, null, targetBlockNumber, targetHash32);
+    }
+
+    public static TextBody newReply(String toBlockchainName, int targetBlockNumber, byte[] targetHash32, String message) {
+        return new TextBody(MsgSubType.TEXT_REPLY, -1, null, -1,
+                message, toBlockchainName, targetBlockNumber, targetHash32);
+    }
+
+    public static TextBody newEditReply(int targetBlockNumber, byte[] targetHash32, String message) {
+        return new TextBody(MsgSubType.TEXT_EDIT_REPLY, -1, null, -1,
+                message, null, targetBlockNumber, targetHash32);
+    }
+
+    /**
+     * Универсальный конструктор “вручную”.
+     * Для REPLY/EDIT_REPLY line поля игнорируются при сериализации (их в формате нет).
+     */
+    public TextBody(short subType,
+                    int prevLineNumber,
                     byte[] prevLineHash32,
                     int thisLineNumber,
-                    short subType,
                     String message,
                     String toBlockchainName,
                     Integer toBlockGlobalNumber,
                     byte[] toBlockHash32) {
 
         Objects.requireNonNull(message, "message == null");
+
         if (!isValidSubType(subType)) throw new IllegalArgumentException("Bad Text subType: " + (subType & 0xFFFF));
         if (message.isBlank()) throw new IllegalArgumentException("message is blank");
-
-        this.prevLineNumber = prevLineNumber;
-        this.prevLineHash32 = (prevLineHash32 == null ? new byte[32] : Arrays.copyOf(prevLineHash32, 32));
-        this.thisLineNumber = thisLineNumber;
 
         this.subType = subType;
         this.version = VER;
 
+        int st = subType & 0xFFFF;
+
+        // line применима только к POST/EDIT_POST
+        if (st == (MsgSubType.TEXT_POST & 0xFFFF) || st == (MsgSubType.TEXT_EDIT_POST & 0xFFFF)) {
+            this.prevLineNumber = prevLineNumber;
+            this.prevLineHash32 = (prevLineHash32 == null ? new byte[32] : Arrays.copyOf(prevLineHash32, 32));
+            this.thisLineNumber = thisLineNumber;
+        } else {
+            this.prevLineNumber = -1;
+            this.prevLineHash32 = null;
+            this.thisLineNumber = -1;
+        }
+
         this.message = message;
 
-        if (isHasTargetSubType(subType)) {
+        // target правила
+        if (st == (MsgSubType.TEXT_POST & 0xFFFF)) {
+            this.toBlockchainName = null;
+            this.toBlockGlobalNumber = null;
+            this.toBlockHash32 = null;
+
+        } else if (st == (MsgSubType.TEXT_EDIT_POST & 0xFFFF)) {
+            Objects.requireNonNull(toBlockGlobalNumber, "toBlockGlobalNumber == null");
+            Objects.requireNonNull(toBlockHash32, "toBlockHash32 == null");
+            if (toBlockGlobalNumber < 0) throw new IllegalArgumentException("toBlockGlobalNumber < 0");
+            if (toBlockHash32.length != 32) throw new IllegalArgumentException("toBlockHash32 != 32");
+
+            this.toBlockchainName = null; // по ТЗ: не хранить
+            this.toBlockGlobalNumber = toBlockGlobalNumber;
+            this.toBlockHash32 = Arrays.copyOf(toBlockHash32, 32);
+
+        } else if (st == (MsgSubType.TEXT_REPLY & 0xFFFF)) {
             Objects.requireNonNull(toBlockchainName, "toBlockchainName == null");
             Objects.requireNonNull(toBlockGlobalNumber, "toBlockGlobalNumber == null");
             Objects.requireNonNull(toBlockHash32, "toBlockHash32 == null");
@@ -165,47 +310,81 @@ public final class TextBody implements BodyRecord, BodyHasTarget, BodyHasLine {
             this.toBlockchainName = toBlockchainName;
             this.toBlockGlobalNumber = toBlockGlobalNumber;
             this.toBlockHash32 = Arrays.copyOf(toBlockHash32, 32);
+
+        } else if (st == (MsgSubType.TEXT_EDIT_REPLY & 0xFFFF)) {
+            Objects.requireNonNull(toBlockGlobalNumber, "toBlockGlobalNumber == null");
+            Objects.requireNonNull(toBlockHash32, "toBlockHash32 == null");
+            if (toBlockGlobalNumber < 0) throw new IllegalArgumentException("toBlockGlobalNumber < 0");
+            if (toBlockHash32.length != 32) throw new IllegalArgumentException("toBlockHash32 != 32");
+
+            this.toBlockchainName = null; // по ТЗ: не хранить
+            this.toBlockGlobalNumber = toBlockGlobalNumber;
+            this.toBlockHash32 = Arrays.copyOf(toBlockHash32, 32);
+
         } else {
+            // недостижимо
             this.toBlockchainName = null;
-            this.toBlockGlobalNumber = 0;
+            this.toBlockGlobalNumber = null;
             this.toBlockHash32 = null;
         }
     }
 
     private static boolean isValidSubType(short st) {
         int v = st & 0xFFFF;
-        return v == (MsgSubType.TEXT_NEW & 0xFFFF)
+        return v == (MsgSubType.TEXT_POST & 0xFFFF)
+                || v == (MsgSubType.TEXT_EDIT_POST & 0xFFFF)
                 || v == (MsgSubType.TEXT_REPLY & 0xFFFF)
-                || v == (MsgSubType.TEXT_REPOST & 0xFFFF)
-                || v == (MsgSubType.TEXT_EDIT & 0xFFFF);
-    }
-
-    private static boolean isHasTargetSubType(short st) {
-        int v = st & 0xFFFF;
-        return v == (MsgSubType.TEXT_REPLY & 0xFFFF)
-                || v == (MsgSubType.TEXT_REPOST & 0xFFFF)
-                || v == (MsgSubType.TEXT_EDIT & 0xFFFF);
+                || v == (MsgSubType.TEXT_EDIT_REPLY & 0xFFFF);
     }
 
     @Override
     public TextBody check() {
-        if (!isValidSubType(subType)) throw new IllegalArgumentException("Bad Text subType: " + (subType & 0xFFFF));
-        if (message == null || message.isBlank()) throw new IllegalArgumentException("Text message is blank");
+        if (!isValidSubType(subType))
+            throw new IllegalArgumentException("Bad Text subType: " + (subType & 0xFFFF));
 
-        // line fields rule:
-        if (prevLineNumber == -1) {
-            if (!isAllZero32(prevLineHash32)) throw new IllegalArgumentException("prevLineHash32 must be zero when prevLineNumber=-1");
-            if (thisLineNumber != -1) throw new IllegalArgumentException("thisLineNumber must be -1 when prevLineNumber=-1");
+        if (message == null || message.isBlank())
+            throw new IllegalArgumentException("Text message is blank");
+
+        int st = subType & 0xFFFF;
+
+        // локальные проверки line (БД не трогаем)
+        if (st == (MsgSubType.TEXT_POST & 0xFFFF) || st == (MsgSubType.TEXT_EDIT_POST & 0xFFFF)) {
+            if (prevLineHash32 == null || prevLineHash32.length != 32)
+                throw new IllegalArgumentException("prevLineHash32 invalid");
         } else {
-            if (prevLineHash32 == null || prevLineHash32.length != 32) throw new IllegalArgumentException("prevLineHash32 invalid");
+            // reply/edit_reply: line отсутствует
+            if (prevLineHash32 != null)
+                throw new IllegalArgumentException("REPLY/EDIT_REPLY must not contain line hash");
         }
 
-        if (isHasTargetSubType(subType)) {
-            if (toBlockchainName == null || toBlockchainName.isBlank()) throw new IllegalArgumentException("toBlockchainName is blank");
-            if (toBlockGlobalNumber < 0) throw new IllegalArgumentException("toBlockGlobalNumber < 0");
-            if (toBlockHash32 == null || toBlockHash32.length != 32) throw new IllegalArgumentException("toBlockHash32 invalid");
-        } else {
-            if (toBlockchainName != null || toBlockHash32 != null) throw new IllegalArgumentException("SUB_NEW must not contain target fields");
+        // target rules
+        if (st == (MsgSubType.TEXT_POST & 0xFFFF)) {
+            if (toBlockchainName != null || toBlockGlobalNumber != null || toBlockHash32 != null)
+                throw new IllegalArgumentException("POST must not contain target fields");
+
+        } else if (st == (MsgSubType.TEXT_EDIT_POST & 0xFFFF)) {
+            if (toBlockchainName != null)
+                throw new IllegalArgumentException("EDIT_POST must not contain toBlockchainName in target");
+            if (toBlockGlobalNumber == null || toBlockGlobalNumber < 0)
+                throw new IllegalArgumentException("EDIT_POST toBlockGlobalNumber invalid");
+            if (toBlockHash32 == null || toBlockHash32.length != 32)
+                throw new IllegalArgumentException("EDIT_POST toBlockHash32 invalid");
+
+        } else if (st == (MsgSubType.TEXT_REPLY & 0xFFFF)) {
+            if (toBlockchainName == null || toBlockchainName.isBlank())
+                throw new IllegalArgumentException("REPLY toBlockchainName is blank");
+            if (toBlockGlobalNumber == null || toBlockGlobalNumber < 0)
+                throw new IllegalArgumentException("REPLY toBlockGlobalNumber invalid");
+            if (toBlockHash32 == null || toBlockHash32.length != 32)
+                throw new IllegalArgumentException("REPLY toBlockHash32 invalid");
+
+        } else if (st == (MsgSubType.TEXT_EDIT_REPLY & 0xFFFF)) {
+            if (toBlockchainName != null)
+                throw new IllegalArgumentException("EDIT_REPLY must not contain toBlockchainName in target");
+            if (toBlockGlobalNumber == null || toBlockGlobalNumber < 0)
+                throw new IllegalArgumentException("EDIT_REPLY toBlockGlobalNumber invalid");
+            if (toBlockHash32 == null || toBlockHash32.length != 32)
+                throw new IllegalArgumentException("EDIT_REPLY toBlockHash32 invalid");
         }
 
         return this;
@@ -217,53 +396,152 @@ public final class TextBody implements BodyRecord, BodyHasTarget, BodyHasLine {
         if (msgUtf8.length == 0) throw new IllegalArgumentException("Text payload is empty");
         if (msgUtf8.length > 65535) throw new IllegalArgumentException("Text too long (>65535 bytes)");
 
-        int cap = 4 + 32 + 4
-                + 2 + msgUtf8.length;
+        int st = subType & 0xFFFF;
 
-        byte[] nameBytes = null;
+        if (st == (MsgSubType.TEXT_POST & 0xFFFF)) {
+            // hasLine + text
+            int cap = (4 + 32 + 4) + 2 + msgUtf8.length;
 
-        if (isHasTargetSubType(subType)) {
-            nameBytes = toBlockchainName.getBytes(StandardCharsets.UTF_8);
-            if (nameBytes.length == 0 || nameBytes.length > 255)
-                throw new IllegalArgumentException("toBlockchainName utf8 len must be 1..255");
-            if (toBlockHash32 == null || toBlockHash32.length != 32)
-                throw new IllegalArgumentException("toBlockHash32 != 32");
+            ByteBuffer bb = ByteBuffer.allocate(cap).order(ByteOrder.BIG_ENDIAN);
+            bb.putInt(prevLineNumber);
+            bb.put(prevLineHash32 == null ? new byte[32] : Arrays.copyOf(prevLineHash32, 32));
+            bb.putInt(thisLineNumber);
+            bb.putShort((short) msgUtf8.length);
+            bb.put(msgUtf8);
+            return bb.array();
 
-            cap += 1 + nameBytes.length + 4 + 32;
-        }
+        } else if (st == (MsgSubType.TEXT_EDIT_POST & 0xFFFF)) {
+            // hasLine + target(no bch) + text
+            if (toBlockGlobalNumber == null) throw new IllegalArgumentException("EDIT_POST missing toBlockGlobalNumber");
+            if (toBlockHash32 == null || toBlockHash32.length != 32) throw new IllegalArgumentException("EDIT_POST toBlockHash32 != 32");
 
-        ByteBuffer bb = ByteBuffer.allocate(cap).order(ByteOrder.BIG_ENDIAN);
+            int cap = (4 + 32 + 4) + (4 + 32) + 2 + msgUtf8.length;
 
-        bb.putInt(prevLineNumber);
-        bb.put(prevLineHash32 == null ? new byte[32] : Arrays.copyOf(prevLineHash32, 32));
-        bb.putInt(thisLineNumber);
+            ByteBuffer bb = ByteBuffer.allocate(cap).order(ByteOrder.BIG_ENDIAN);
+            bb.putInt(prevLineNumber);
+            bb.put(prevLineHash32 == null ? new byte[32] : Arrays.copyOf(prevLineHash32, 32));
+            bb.putInt(thisLineNumber);
 
-        bb.putShort((short) msgUtf8.length);
-        bb.put(msgUtf8);
-
-        if (isHasTargetSubType(subType)) {
-            bb.put((byte) nameBytes.length);
-            bb.put(nameBytes);
             bb.putInt(toBlockGlobalNumber);
             bb.put(toBlockHash32);
-        }
 
-        return bb.array();
+            bb.putShort((short) msgUtf8.length);
+            bb.put(msgUtf8);
+            return bb.array();
+
+        } else if (st == (MsgSubType.TEXT_REPLY & 0xFFFF)) {
+            // target(with bch) + text
+            if (toBlockchainName == null) throw new IllegalArgumentException("REPLY missing toBlockchainName");
+            if (toBlockGlobalNumber == null) throw new IllegalArgumentException("REPLY missing toBlockGlobalNumber");
+            if (toBlockHash32 == null || toBlockHash32.length != 32) throw new IllegalArgumentException("REPLY toBlockHash32 != 32");
+
+            byte[] nameUtf8 = toBlockchainName.getBytes(StandardCharsets.UTF_8);
+            if (nameUtf8.length == 0 || nameUtf8.length > 255)
+                throw new IllegalArgumentException("REPLY toBlockchainName utf8 len must be 1..255");
+
+            int cap = 1 + nameUtf8.length + 4 + 32
+                    + 2 + msgUtf8.length;
+
+            ByteBuffer bb = ByteBuffer.allocate(cap).order(ByteOrder.BIG_ENDIAN);
+            bb.put((byte) nameUtf8.length);
+            bb.put(nameUtf8);
+            bb.putInt(toBlockGlobalNumber);
+            bb.put(toBlockHash32);
+
+            bb.putShort((short) msgUtf8.length);
+            bb.put(msgUtf8);
+            return bb.array();
+
+        } else if (st == (MsgSubType.TEXT_EDIT_REPLY & 0xFFFF)) {
+            // target(no bch) + text
+            if (toBlockGlobalNumber == null) throw new IllegalArgumentException("EDIT_REPLY missing toBlockGlobalNumber");
+            if (toBlockHash32 == null || toBlockHash32.length != 32) throw new IllegalArgumentException("EDIT_REPLY toBlockHash32 != 32");
+
+            int cap = (4 + 32) + 2 + msgUtf8.length;
+
+            ByteBuffer bb = ByteBuffer.allocate(cap).order(ByteOrder.BIG_ENDIAN);
+            bb.putInt(toBlockGlobalNumber);
+            bb.put(toBlockHash32);
+
+            bb.putShort((short) msgUtf8.length);
+            bb.put(msgUtf8);
+            return bb.array();
+
+        } else {
+            throw new IllegalStateException("Unsupported Text subType: " + st);
+        }
     }
 
-    private static boolean isAllZero32(byte[] b) {
-        if (b == null || b.length != 32) return true;
-        for (int i = 0; i < 32; i++) if (b[i] != 0) return false;
-        return true;
+    /* ===================================================================== */
+    /* ========================== Helpers ================================== */
+    /* ===================================================================== */
+
+    private static String readStrictUtf8Len16(ByteBuffer bb, String fieldName) {
+        int len = Short.toUnsignedInt(bb.getShort());
+        if (len <= 0) throw new IllegalArgumentException(fieldName + " is empty");
+        if (bb.remaining() < len) throw new IllegalArgumentException(fieldName + " payload too short (len=" + len + ")");
+
+        byte[] bytes = new byte[len];
+        bb.get(bytes);
+
+        var decoder = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+
+        try {
+            String s = decoder.decode(ByteBuffer.wrap(bytes)).toString();
+            if (s.isBlank()) throw new IllegalArgumentException(fieldName + " is blank");
+            return s;
+        } catch (CharacterCodingException e) {
+            throw new IllegalArgumentException(fieldName + " is not valid UTF-8", e);
+        }
+    }
+
+    private static void ensureMin(ByteBuffer bb, int need, String msg) {
+        if (bb.remaining() < need) throw new IllegalArgumentException(msg + " (need=" + need + ", remaining=" + bb.remaining() + ")");
+    }
+
+    private static void ensureNoTail(ByteBuffer bb, String ctx) {
+        if (bb.remaining() != 0) throw new IllegalArgumentException("Unexpected tail bytes for " + ctx + ", remaining=" + bb.remaining());
     }
 
     /* ====================== BodyHasLine ====================== */
     @Override public int prevLineNumber() { return prevLineNumber; }
-    @Override public byte[] prevLineHash32() { return prevLineHash32 == null ? null : Arrays.copyOf(prevLineHash32, 32); }
+    @Override public byte[] prevLineHash32() {
+        if (prevLineHash32 == null) return null;
+        return Arrays.copyOf(prevLineHash32, 32);
+    }
     @Override public int thisLineNumber() { return thisLineNumber; }
 
     /* ====================== BodyHasTarget ===================== */
-    @Override public String toBchName() { return isHasTargetSubType(subType) ? toBlockchainName : null; }
-    @Override public Integer toBlockGlobalNumber() { return isHasTargetSubType(subType) ? toBlockGlobalNumber : null; }
-    @Override public byte[] toBlockHashBytes() { return isHasTargetSubType(subType) ? toBlockHash32 : null; }
+    @Override public String toBchName() { return toBlockchainName; }
+    @Override public Integer toBlockGlobalNumber() { return toBlockGlobalNumber; }
+    @Override public byte[] toBlockHashBytes() { return toBlockHash32; }
+
+
+
+    /* ===================================================================== */
+    /* ===================== Удобные хелперы (для ChainState) =============== */
+    /* ===================================================================== */
+
+    /** true только для POST / EDIT_POST (т.е. это сообщение в линии канала). */
+    public boolean isLineMessage() {
+        int st = subType & 0xFFFF;
+        return st == (MsgSubType.TEXT_POST & 0xFFFF)
+                || st == (MsgSubType.TEXT_EDIT_POST & 0xFFFF);
+    }
+
+    /** true только для EDIT_POST / EDIT_REPLY. */
+    public boolean isEditMessage() {
+        int st = subType & 0xFFFF;
+        return st == (MsgSubType.TEXT_EDIT_POST & 0xFFFF)
+                || st == (MsgSubType.TEXT_EDIT_REPLY & 0xFFFF);
+    }
+
+    /** true только для REPLY / EDIT_REPLY (т.е. “не в линии”). */
+    public boolean isReplyFamily() {
+        int st = subType & 0xFFFF;
+        return st == (MsgSubType.TEXT_REPLY & 0xFFFF)
+                || st == (MsgSubType.TEXT_EDIT_REPLY & 0xFFFF);
+    }
 }

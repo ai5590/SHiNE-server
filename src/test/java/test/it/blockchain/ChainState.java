@@ -1,32 +1,34 @@
 package test.it.blockchain;
 
-import java.util.Arrays;
+import blockchain.MsgSubType;
+import blockchain.body.BodyRecord;
+import blockchain.body.BodyHasLine;
+import blockchain.body.CreateChannelBody;
+import blockchain.body.TextBody;
+
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * ChainState — состояние глобальной цепочки + состояние линий (только тех, где они нужны).
+ * ChainState — состояние глобальной цепочки + состояние линий.
  *
  * Глобальная цепочка:
  *  - lastBlockNumber / lastBlockHashHex
- *  - map blockNumber -> hash32 (для ссылок reply/edit/reaction)
+ *  - map blockNumber -> hash32
  *
- * Линии по ТЗ нужны только для:
- *  - TEXT (type=1)
- *  - CONNECTION (type=3)
- *  - USER_PARAM (type=4)
+ * Линии:
+ *  - TECH (type=0): только CREATE_CHANNEL (hasLine), root = HEADER
+ *  - TEXT (type=1): линии каналов, root = HEADER (канал "0") или CREATE_CHANNEL (канал "X")
+ *  - CONNECTION (type=3): одна линия
+ *  - USER_PARAM (type=4): одна линия
  *
- * prevLineNumber по ТЗ — это GLOBAL blockNumber предыдущего блока линии.
- * thisLineNumber — внутренний номер линии (мы ведём локально: 1,2,3...)
- *
- * ВАЖНО:
- *  - Здесь НЕТ обращения к blockchain.LineIndex.
- *  - Линии адресуются по msg_type (type).
+ * Важно:
+ *  - prevLineNumber — это GLOBAL blockNumber предыдущего блока линии.
+ *  - thisLineNumber — внутренний номер линии (для постов: 0,1,2...; для тех-линии: 1,2,3...)
  */
 public final class ChainState {
 
-    // какие msg_type имеют линейную цепочку по ТЗ
-    public static final short TYPE_HEADER     = 0;
+    public static final short TYPE_TECH       = 0; // header/create_channel
     public static final short TYPE_TEXT       = 1;
     public static final short TYPE_REACTION   = 2;
     public static final short TYPE_CONNECTION = 3;
@@ -42,13 +44,25 @@ public final class ChainState {
     // header (block#0)
     private byte[] headerHash32 = null;
 
-    /**
-     * line state per TYPE (только для TEXT/CONNECTION/USER_PARAM):
-     *  - lastGlobalNumber: последний GLOBAL blockNumber в линии
-     *  - lastHashHex: hash последнего блока линии
-     *  - lastThisLineNumber: последний thisLineNumber (внутренний)
-     */
-    private static final class LineState {
+    private final Map<Integer, byte[]> hash32ByNumber = new HashMap<>();
+
+    // ---------- TECH line state ----------
+    private static final class TechLineState {
+        int lastGlobalNumber = -1;   // последний TECH-блок (HEADER или CREATE_CHANNEL)
+        String lastHashHex = "";
+        int lastThisLineNumber = 0;  // 0 у HEADER (логически), дальше 1,2,3...
+
+        void reset() {
+            lastGlobalNumber = -1;
+            lastHashHex = "";
+            lastThisLineNumber = 0;
+        }
+    }
+
+    private final TechLineState techLine = new TechLineState();
+
+    // ---------- CONNECTION/USER_PARAM line state ----------
+    private static final class SimpleLineState {
         int lastGlobalNumber = -1;
         String lastHashHex = "";
         int lastThisLineNumber = 0;
@@ -60,14 +74,32 @@ public final class ChainState {
         }
     }
 
-    private final LineState textLine = new LineState();
-    private final LineState connectionLine = new LineState();
-    private final LineState userParamLine = new LineState();
+    private final SimpleLineState connectionLine = new SimpleLineState();
+    private final SimpleLineState userParamLine = new SimpleLineState();
 
-    private final Map<Integer, byte[]> hash32ByNumber = new HashMap<>();
+    // ---------- TEXT channels ----------
+    public static final class ChannelLineState {
+        final int rootBlockNumber;
+        final String rootHashHex;
+
+        int lastGlobalNumber;
+        String lastHashHex;
+        int lastThisLineNumber; // перед первым постом = -1, чтобы первый был 0
+
+        ChannelLineState(int rootBlockNumber, String rootHashHex) {
+            this.rootBlockNumber = rootBlockNumber;
+            this.rootHashHex = rootHashHex;
+            this.lastGlobalNumber = rootBlockNumber;
+            this.lastHashHex = rootHashHex;
+            this.lastThisLineNumber = -1;
+        }
+    }
+
+    // rootBlockNumber -> state
+    private final Map<Integer, ChannelLineState> textChannels = new HashMap<>();
 
     public ChainState() {
-        textLine.reset();
+        techLine.reset();
         connectionLine.reset();
         userParamLine.reset();
     }
@@ -113,38 +145,72 @@ public final class ChainState {
         }
     }
 
-    /** Является ли type "линейным" по ТЗ (т.е. нужно вести prevLine/thisLine). */
-    public static boolean isLineType(short type) {
-        int t = type & 0xFFFF;
-        return t == TYPE_TEXT || t == TYPE_CONNECTION || t == TYPE_USER_PARAM;
-    }
-
-    /** Следующие line-поля для указанного TYPE (только TEXT/CONNECTION/USER_PARAM). */
+    /** Следующие line-поля для TECH/CONNECTION/USER_PARAM. */
     public NextLine nextLineByType(short type) {
-        if (!isLineType(type)) {
-            throw new IllegalArgumentException("Type " + (type & 0xFFFF) + " не использует line-поля по ТЗ");
-        }
         if (!hasHeader()) {
             throw new IllegalStateException("Нельзя формировать line-поля до HEADER (нет headerHash32)");
         }
 
-        LineState ls = lineStateByType(type);
+        int t = type & 0xFFFF;
 
+        if (t == TYPE_TECH) {
+            // tech-line: prev = последний TECH; первый CREATE_CHANNEL -> prev = HEADER
+            if (techLine.lastGlobalNumber == -1) {
+                // после HEADER мы должны инициализировать techLine (делаем в applyHeader)
+                throw new IllegalStateException("TECH line is not initialized yet");
+            }
+            return new NextLine(techLine.lastGlobalNumber, hexToBytes32(techLine.lastHashHex), techLine.lastThisLineNumber + 1);
+        }
+
+        if (t == TYPE_CONNECTION) {
+            return nextSimpleLine(connectionLine);
+        }
+        if (t == TYPE_USER_PARAM) {
+            return nextSimpleLine(userParamLine);
+        }
+
+        throw new IllegalArgumentException("Type " + t + " не поддерживает nextLineByType()");
+    }
+
+    private NextLine nextSimpleLine(SimpleLineState ls) {
         if (ls.lastGlobalNumber == -1) {
             // первый блок линии ссылается на HEADER (block#0)
             return new NextLine(0, headerHash32.clone(), 1);
         }
-
         if (ls.lastHashHex == null || ls.lastHashHex.isBlank()) {
-            throw new IllegalStateException("LineState.lastHashHex пуст, но lastGlobalNumber!=-1 (type=" + (type & 0xFFFF) + ")");
+            throw new IllegalStateException("LineState.lastHashHex пуст, но lastGlobalNumber!=-1");
         }
-
         return new NextLine(ls.lastGlobalNumber, hexToBytes32(ls.lastHashHex), ls.lastThisLineNumber + 1);
+    }
+
+    /** Следующие line-поля для TEXT-канала по rootBlockNumber. */
+    public NextLine nextTextLineByRoot(int rootBlockNumber) {
+        if (!hasHeader()) throw new IllegalStateException("No HEADER");
+        ChannelLineState cs = textChannels.get(rootBlockNumber);
+        if (cs == null) throw new IllegalStateException("Unknown TEXT channel rootBlockNumber=" + rootBlockNumber);
+
+        return new NextLine(
+                cs.lastGlobalNumber,
+                hexToBytes32(cs.lastHashHex),
+                cs.lastThisLineNumber + 1
+        );
+    }
+
+    /** Зарегистрировать новый канал TEXT по root = CREATE_CHANNEL block. */
+    public void registerTextChannelRoot(int rootBlockNumber, byte[] rootHash32) {
+        if (rootBlockNumber <= 0) throw new IllegalArgumentException("rootBlockNumber must be > 0 for custom channel");
+        if (rootHash32 == null || rootHash32.length != 32) throw new IllegalArgumentException("rootHash32 invalid");
+        textChannels.put(rootBlockNumber, new ChannelLineState(rootBlockNumber, bytesToHex64(rootHash32)));
+    }
+
+    /** root канала "0" (по умолчанию) — это HEADER block#0. */
+    public int rootChannel0() {
+        return 0;
     }
 
     // -------------------- apply --------------------
 
-    public void applyAppendedBlock(int blockNumber, byte[] hash32, boolean isHeader, short type) {
+    public void applyAppendedBlock(int blockNumber, byte[] hash32, boolean isHeader, short type, BodyRecord body) {
         if (hash32 == null || hash32.length != 32) {
             throw new IllegalArgumentException("hash32 must be 32 bytes");
         }
@@ -167,30 +233,64 @@ public final class ChainState {
 
         hash32ByNumber.put(blockNumber, hash32.clone());
 
-        // обновляем line-state только если этот type по ТЗ линейный
-        if (isLineType(type)) {
-            LineState ls = lineStateByType(type);
-            ls.lastGlobalNumber = blockNumber;
-            ls.lastHashHex = hex64;
-            // thisLineNumber обновляется отдельным вызовом (см. applyThisLineNumberByType)
+        // ---- init after HEADER ----
+        if (isHeader) {
+            // TECH line root = HEADER
+            techLine.lastGlobalNumber = 0;
+            techLine.lastHashHex = hex64;
+            techLine.lastThisLineNumber = 0;
+
+            // TEXT channel "0" root = HEADER, первый пост будет thisLineNumber=0
+            textChannels.put(0, new ChannelLineState(0, hex64));
+
+            return;
+        }
+
+        int t = type & 0xFFFF;
+
+        // ---- TECH (CREATE_CHANNEL) ----
+        if (t == TYPE_TECH && body instanceof CreateChannelBody ccb) {
+            techLine.lastGlobalNumber = blockNumber;
+            techLine.lastHashHex = hex64;
+            techLine.lastThisLineNumber = ccb.thisLineNumber;
+            return;
+        }
+
+        // ---- CONNECTION / USER_PARAM ----
+        if (t == TYPE_CONNECTION && body instanceof BodyHasLine hlc) {
+            connectionLine.lastGlobalNumber = blockNumber;
+            connectionLine.lastHashHex = hex64;
+            connectionLine.lastThisLineNumber = hlc.thisLineNumber();
+            return;
+        }
+        if (t == TYPE_USER_PARAM && body instanceof BodyHasLine hlu) {
+            userParamLine.lastGlobalNumber = blockNumber;
+            userParamLine.lastHashHex = hex64;
+            userParamLine.lastThisLineNumber = hlu.thisLineNumber();
+            return;
+        }
+
+        // ---- TEXT channels (POST/EDIT_POST) ----
+        if (t == TYPE_TEXT && body instanceof TextBody tb) {
+            if (tb.isLineMessage()) {
+                // ищем канал по совпадению prevLineNumber с lastGlobalNumber канала
+                ChannelLineState channel = findTextChannelByLastGlobal(tb.prevLineNumber);
+                if (channel == null) {
+                    throw new IllegalStateException("TEXT line message prevLineNumber=" + tb.prevLineNumber + " не привязан ни к одному каналу (канал root не зарегистрирован?)");
+                }
+
+                channel.lastGlobalNumber = blockNumber;
+                channel.lastHashHex = hex64;
+                channel.lastThisLineNumber = tb.thisLineNumber;
+            }
         }
     }
 
-    /** В тестах удобно явно обновлять thisLineNumber после успешной отправки line-body. */
-    public void applyThisLineNumberByType(short type, int thisLineNumber) {
-        if (!isLineType(type)) return;
-        LineState ls = lineStateByType(type);
-        ls.lastThisLineNumber = thisLineNumber;
-    }
-
-    private LineState lineStateByType(short type) {
-        int t = type & 0xFFFF;
-        return switch (t) {
-            case TYPE_TEXT -> textLine;
-            case TYPE_CONNECTION -> connectionLine;
-            case TYPE_USER_PARAM -> userParamLine;
-            default -> throw new IllegalArgumentException("Type " + t + " не имеет LineState по ТЗ");
-        };
+    private ChannelLineState findTextChannelByLastGlobal(int prevLineNumber) {
+        for (ChannelLineState cs : textChannels.values()) {
+            if (cs.lastGlobalNumber == prevLineNumber) return cs;
+        }
+        return null;
     }
 
     // -------------------- utils --------------------

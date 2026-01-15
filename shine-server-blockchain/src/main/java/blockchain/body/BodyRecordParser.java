@@ -1,7 +1,7 @@
 package blockchain.body;
 
 /**
- * Парсер body теперь выбирает класс по header: type/subType/version,
+ * Парсер body выбирает класс по header: type/subType/version,
  * потому что bodyBytes больше НЕ содержат type/subType/version.
  */
 public final class BodyRecordParser {
@@ -14,23 +14,31 @@ public final class BodyRecordParser {
         int t = type & 0xFFFF;
         int v = version & 0xFFFF;
 
-        // ключ = (type<<16)|version (как раньше по смыслу), но берём из HEADER
         int key = (t << 16) | v;
 
         BodyRecord r = switch (key) {
-            case HeaderBody.KEY     -> new HeaderBody(subType, version, bodyBytes);
+            case HeaderBody.KEY -> {
+                int st = subType & 0xFFFF;
+                if (st == (HeaderBody.SUBTYPE_COMPAT & 0xFFFF)) {
+                    yield new HeaderBody(subType, version, bodyBytes);
+                }
+                if (st == (CreateChannelBody.SUBTYPE & 0xFFFF)) {
+                    yield new CreateChannelBody(subType, version, bodyBytes);
+                }
+                throw new IllegalArgumentException("Unknown TECH subType for type=0 ver=1: subType=" + st);
+            }
+
             case TextBody.KEY       -> new TextBody(subType, version, bodyBytes);
             case ReactionBody.KEY   -> new ReactionBody(subType, version, bodyBytes);
             case ConnectionBody.KEY -> new ConnectionBody(subType, version, bodyBytes);
             case UserParamBody.KEY  -> new UserParamBody(subType, version, bodyBytes);
+
             default -> throw new IllegalArgumentException(String.format(
                     "Unknown body type/version from header: type=%d ver=%d subType=%d",
                     t, v, (subType & 0xFFFF)
             ));
         };
 
-        // 1) “построили” объект
-        // 2) ОБЯЗАТЕЛЬНО прогнали валидацию
         return r.check();
     }
 }

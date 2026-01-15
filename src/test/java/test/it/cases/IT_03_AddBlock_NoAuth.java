@@ -1,7 +1,7 @@
 package test.it.cases;
 
-import blockchain.body.*;
 import blockchain.MsgSubType;
+import blockchain.body.*;
 import test.it.blockchain.AddBlockSender;
 import test.it.blockchain.ChainState;
 import test.it.utils.TestConfig;
@@ -14,12 +14,12 @@ import java.time.Duration;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * IT_03_AddBlock_NoAuth — обновлён под новый формат блоков (ТЗ).
+ * IT_03_AddBlock_NoAuth — сценарий блоков (новый формат + каналы).
  *
  * ВАЖНО:
- *  - НЕТ обращения к blockchain.LineIndex (можно удалить LineIndex.java).
- *  - Линии берём через ChainState.nextLineByType(TYPE_...).
- *  - ConnectionBody: toLogin в байтах НЕ хранится, вычисляется из toBlockchainName.
+ *  - TECH: Header + CreateChannel идут по тех-линии (hasLine у CreateChannel).
+ *  - TEXT: посты в каналах — отдельные линии, root = Header(канал "0") или CreateChannel(канал "X").
+ *  - REPLY (subType=20): без линии, target может указывать на чужой блокчейн, и ОБЯЗАТЕЛЬНО содержит toBlockNumber+toBlockHash32.
  */
 public class IT_03_AddBlock_NoAuth {
 
@@ -54,183 +54,122 @@ public class IT_03_AddBlock_NoAuth {
                 );
             }
 
+            // =========================
             // USER1
+            // =========================
             ChainState st1 = new ChainState();
             AddBlockSender sender1 = new AddBlockSender(ws, st1, u1, bch1, TestConfig.getBlockchainPrivatKey(u1));
 
             sender1.send(new HeaderBody(u1), t);
             assertTrue(st1.hasHeader());
 
-            // TEXT_NEW x3 (с line)
+            // канал "0" (root=HEADER) — по умолчанию существует
+            int root0 = st1.rootChannel0();
+
+            // POST в канал "0"
             {
-                var ln = st1.nextLineByType(ChainState.TYPE_TEXT);
-                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.TEXT_NEW,
-                        "Hello #1 (NEW) from IT_03 test",
-                        null, null, null
-                ), t);
-            }
-            {
-                var ln = st1.nextLineByType(ChainState.TYPE_TEXT);
-                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.TEXT_NEW,
-                        "Hello #2 (NEW) from IT_03 test",
-                        null, null, null
-                ), t);
-            }
-            {
-                var ln = st1.nextLineByType(ChainState.TYPE_TEXT);
-                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.TEXT_NEW,
-                        "Hello #3 (NEW) from IT_03 test",
+                var ln = st1.nextTextLineByRoot(root0);
+                sender1.send(new TextBody(
+                        MsgSubType.TEXT_POST,
+                        ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        "U1: story/post in channel 0",
                         null, null, null
                 ), t);
             }
 
-            byte[] text1Hash = st1.getHash32(1);
-            byte[] text2Hash = st1.getHash32(2);
-            byte[] text3Hash = st1.getHash32(3);
-            assertNotNull(text1Hash);
-            assertNotNull(text2Hash);
-            assertNotNull(text3Hash);
+            int post0Block = st1.lastBlockNumber();
+            byte[] post0Hash = st1.getHash32(post0Block);
+            assertNotNull(post0Hash);
 
-            // TEXT_REPLY x2 (с line + target)
+            // CREATE_CHANNEL "News" (TECH line)
+            int newsRootBlock;
+            byte[] newsRootHash;
             {
-                var ln = st1.nextLineByType(ChainState.TYPE_TEXT);
-                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.TEXT_REPLY,
-                        "Reply to TEXT#1",
-                        bch1, 1, text1Hash
+                var ln = st1.nextLineByType(ChainState.TYPE_TECH);
+                sender1.send(new CreateChannelBody(
+                        ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        "News"
                 ), t);
-            }
-            {
-                var ln = st1.nextLineByType(ChainState.TYPE_TEXT);
-                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.TEXT_REPLY,
-                        "Reply to TEXT#3",
-                        bch1, 3, text3Hash
-                ), t);
+
+                newsRootBlock = st1.lastBlockNumber();
+                newsRootHash = st1.getHash32(newsRootBlock);
+                assertNotNull(newsRootHash);
+
+                // зарегистрируем root канала для тестового state, чтобы nextTextLineByRoot() работал
+                st1.registerTextChannelRoot(newsRootBlock, newsRootHash);
             }
 
-            // REACTION_LIKE x2 (без line)
-            sender1.send(new ReactionBody(bch1, 1, text1Hash), t);
-            sender1.send(new ReactionBody(bch1, 2, text2Hash), t);
+            // POST #0 в канал "News"
+            int newsPost0Block;
+            byte[] newsPost0Hash;
+            {
+                var ln = st1.nextTextLineByRoot(newsRootBlock);
+                sender1.send(new TextBody(
+                        MsgSubType.TEXT_POST,
+                        ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        "U1: News post #0",
+                        null, null, null
+                ), t);
 
-            // TEXT_EDIT x3 (с line + target)
-            {
-                var ln = st1.nextLineByType(ChainState.TYPE_TEXT);
-                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.TEXT_EDIT,
-                        "Hello #2 (EDIT#1) from IT_03 test",
-                        bch1, 2, text2Hash
-                ), t);
+                newsPost0Block = st1.lastBlockNumber();
+                newsPost0Hash = st1.getHash32(newsPost0Block);
+                assertNotNull(newsPost0Hash);
             }
+
+            // POST #1 в канал "News"
             {
-                var ln = st1.nextLineByType(ChainState.TYPE_TEXT);
-                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.TEXT_EDIT,
-                        "Hello #2 (EDIT#2) from IT_03 test",
-                        bch1, 2, text2Hash
-                ), t);
-            }
-            {
-                var ln = st1.nextLineByType(ChainState.TYPE_TEXT);
-                sender1.send(new TextBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.TEXT_EDIT,
-                        "Hello #3 (EDIT#1) from IT_03 test",
-                        bch1, 3, text3Hash
+                var ln = st1.nextTextLineByRoot(newsRootBlock);
+                sender1.send(new TextBody(
+                        MsgSubType.TEXT_POST,
+                        ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        "U1: News post #1",
+                        null, null, null
                 ), t);
             }
 
-            assertEquals(10, st1.lastBlockNumber(), "USER1: lastBlockNumber должен быть 10 (всего 11 блоков включая HEADER)");
+            // EDIT_POST (не увеличивает thisLineNumber, но является частью линии)
+            {
+                var ln = st1.nextTextLineByRoot(newsRootBlock);
+                // edit должен иметь thisLineNumber как у предыдущего сообщения линии (ChainState это уже даёт)
+                sender1.send(new TextBody(
+                        MsgSubType.TEXT_EDIT_POST,
+                        ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
+                        "U1: News post #0 (EDIT)",
+                        null,
+                        newsPost0Block,
+                        newsPost0Hash
+                ), t);
+            }
 
-            // USER2
+            // =========================
+            // USER2 (ответ в чужой канал)
+            // =========================
             ChainState st2 = new ChainState();
             AddBlockSender sender2 = new AddBlockSender(ws, st2, u2, bch2, TestConfig.getBlockchainPrivatKey(u2));
 
             sender2.send(new HeaderBody(u2), t);
             assertTrue(st2.hasHeader());
 
-            // USER_PARAM (с line)
+            // REPLY (20): ответ на post в чужом блокчейне/канале
             {
-                var ln = st2.nextLineByType(ChainState.TYPE_USER_PARAM);
-                sender2.send(new UserParamBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        "Anya", "Amsterdam, Example street 10"
+                sender2.send(new TextBody(
+                        MsgSubType.TEXT_REPLY,
+                        -1, new byte[32], -1, // для replies линии нет
+                        "U2: reply to U1 News post #0 (cross-chain)",
+                        bch1,
+                        newsPost0Block,
+                        newsPost0Hash
                 ), t);
             }
 
-            // USER3 (нужен, чтобы u1 мог подписаться на существующий блокчейн)
+            // =========================
+            // USER3 (просто чтобы оставалось как раньше)
+            // =========================
             ChainState st3 = new ChainState();
             AddBlockSender sender3 = new AddBlockSender(ws, st3, u3, bch3, TestConfig.getBlockchainPrivatKey(u3));
 
             sender3.send(new HeaderBody(u3), t);
             assertTrue(st3.hasHeader());
-
-            // -----------------------------------------------------------------
-            // Подписки:
-            //  - u1 follows u2 и u3
-            //  - u2 follows только u1
-            // Все CONNECTION идут по линии CONNECTION (по ТЗ "да надо")
-            // -----------------------------------------------------------------
-
-            // u1 -> follow u2
-            {
-                var ln = st1.nextLineByType(ChainState.TYPE_CONNECTION);
-                sender1.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.CONNECTION_FOLLOW,
-                        bch2, 0, new byte[32]
-                ), t);
-            }
-
-            // u1 -> follow u3
-            {
-                var ln = st1.nextLineByType(ChainState.TYPE_CONNECTION);
-                sender1.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.CONNECTION_FOLLOW,
-                        bch3, 0, new byte[32]
-                ), t);
-            }
-
-            // u2 -> follow u1
-            {
-                var ln = st2.nextLineByType(ChainState.TYPE_CONNECTION);
-                sender2.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.CONNECTION_FOLLOW,
-                        bch1, 0, new byte[32]
-                ), t);
-            }
-
-            // friend/unfriend как было, но тоже по CONNECTION линии
-            {
-                var ln = st2.nextLineByType(ChainState.TYPE_CONNECTION);
-                sender2.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.CONNECTION_FRIEND,
-                        bch1, 0, new byte[32]
-                ), t);
-            }
-
-            // user1 param + friend to u2
-            {
-                var ln = st1.nextLineByType(ChainState.TYPE_USER_PARAM);
-                sender1.send(new UserParamBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        "Anna", "Gareeva"
-                ), t);
-            }
-            {
-                var ln = st1.nextLineByType(ChainState.TYPE_CONNECTION);
-                sender1.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.CONNECTION_FRIEND,
-                        bch2, 0, new byte[32]
-                ), t);
-            }
-
-            {
-                var ln = st2.nextLineByType(ChainState.TYPE_CONNECTION);
-                sender2.send(new ConnectionBody(ln.prevLineNumber, ln.prevLineHash32, ln.thisLineNumber,
-                        MsgSubType.CONNECTION_UNFRIEND,
-                        bch1, 0, new byte[32]
-                ), t);
-            }
 
             r.ok("IT_03 сценарий блоков выполнен");
 

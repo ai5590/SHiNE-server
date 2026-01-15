@@ -21,8 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  *  - signature = Ed25519.sign(hash32)
  *
  * ВАЖНО:
- *  - Линии (prevLine/thisLine) по ТЗ нужны только для TEXT/CONNECTION/USER_PARAM.
- *  - Здесь НЕТ обращения к blockchain.LineIndex.
+ *  - Линии по ТЗ ведём на стороне сервера/БД (триггеры), а в тестах считаем локально.
  */
 public final class AddBlockSender {
 
@@ -75,7 +74,6 @@ public final class AddBlockSender {
 
         byte[] bodyBytes = body.toBytes();
 
-        // preimage -> hash32 -> signature
         byte[] preimage = buildPreimage(prevHash32, blockNumber, tsSec, type, subType, version, bodyBytes);
         byte[] hash32 = blockchain.BchCryptoVerifier.sha256(preimage);
         byte[] signature64 = utils.crypto.Ed25519Util.sign(hash32, loginPrivKey);
@@ -102,7 +100,6 @@ public final class AddBlockSender {
 
         String serverLastHash = JsonMini.extractPayloadString(resp, "serverLastBlockHash");
         if (serverLastHash == null) {
-            // на всякий случай, но ты говорил старое не поддерживаем — оставил мягко
             serverLastHash = JsonMini.extractPayloadString(resp, "serverLastGlobalHash");
         }
 
@@ -118,15 +115,7 @@ public final class AddBlockSender {
 
         assertEquals(localHashHex, serverLastHash, op + ": serverLastBlockHash must match local hash");
 
-        // фиксируем в state глобальную цепочку + (если нужно) line-state по TYPE
-        state.applyAppendedBlock(blockNumber, entry.getHash32(), isHeader, type);
-
-        // если это line-body — обновим thisLineNumber в state (для nextLineByType())
-        if (body instanceof BodyHasLine hl) {
-            if (ChainState.isLineType(type)) {
-                state.applyThisLineNumberByType(type, hl.thisLineNumber());
-            }
-        }
+        state.applyAppendedBlock(blockNumber, entry.getHash32(), isHeader, type, body);
 
         if (TestConfig.DEBUG()) TestLog.info(op + ": state updated");
     }
@@ -174,6 +163,7 @@ public final class AddBlockSender {
 
     private static short typeOf(BodyRecord body) {
         if (body instanceof HeaderBody) return HeaderBody.TYPE;
+        if (body instanceof CreateChannelBody) return CreateChannelBody.TYPE;
         if (body instanceof TextBody) return TextBody.TYPE;
         if (body instanceof ReactionBody) return ReactionBody.TYPE;
         if (body instanceof ConnectionBody) return ConnectionBody.TYPE;
@@ -183,6 +173,7 @@ public final class AddBlockSender {
 
     private static short subTypeOf(BodyRecord body) {
         if (body instanceof HeaderBody hb) return hb.subType;
+        if (body instanceof CreateChannelBody cb) return cb.subType;
         if (body instanceof TextBody tb) return tb.subType;
         if (body instanceof ReactionBody rb) return rb.subType;
         if (body instanceof ConnectionBody cb) return cb.subType;
@@ -192,6 +183,7 @@ public final class AddBlockSender {
 
     private static short versionOf(BodyRecord body) {
         if (body instanceof HeaderBody hb) return hb.version;
+        if (body instanceof CreateChannelBody cb) return cb.version;
         if (body instanceof TextBody tb) return tb.version;
         if (body instanceof ReactionBody rb) return rb.version;
         if (body instanceof ConnectionBody cb) return cb.version;
