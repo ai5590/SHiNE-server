@@ -1,7 +1,6 @@
 package blockchain;
 
 import blockchain.body.BodyRecord;
-import blockchain.body.BodyRecordParser;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

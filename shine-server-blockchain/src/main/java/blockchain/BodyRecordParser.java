@@ -1,6 +1,6 @@
-package blockchain.body;
+package blockchain;
 
-import blockchain.MsgSubType;
+import blockchain.body.*;
 
 /**
  * Парсер body выбирает класс по header: type/subType/version,
