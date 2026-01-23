@@ -294,13 +294,13 @@ public final class ChainState {
         if (t == TYPE_CONNECTION && body instanceof BodyHasLine hlc) {
             connectionLine.lastGlobalNumber = blockNumber;
             connectionLine.lastHashHex = hex64;
-            connectionLine.lastThisLineNumber = hlc.thisLineNumber();
+            connectionLine.lastThisLineNumber = hlc.lineSeq();
             return;
         }
         if (t == TYPE_USER_PARAM && body instanceof BodyHasLine hlu) {
             userParamLine.lastGlobalNumber = blockNumber;
             userParamLine.lastHashHex = hex64;
-            userParamLine.lastThisLineNumber = hlu.thisLineNumber();
+            userParamLine.lastThisLineNumber = hlu.lineSeq();
             return;
         }
 

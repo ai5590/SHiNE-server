@@ -505,12 +505,12 @@ public final class TextBody implements BodyRecord, BodyHasTarget, BodyHasLine {
 
     /* ====================== BodyHasLine ====================== */
     @Override public int lineCode() { return lineCode; }
-    @Override public int prevLineNumber() { return prevLineNumber; }
-    @Override public byte[] prevLineHash32() {
+    @Override public int prevLineBlockGlobalNumber() { return prevLineNumber; }
+    @Override public byte[] prevLineBlockHash32() {
         if (prevLineHash32 == null) return null;
         return Arrays.copyOf(prevLineHash32, 32);
     }
-    @Override public int thisLineNumber() { return thisLineNumber; }
+    @Override public int lineSeq() { return thisLineNumber; }
 
     /* ====================== BodyHasTarget ===================== */
     @Override public String toBchName() { return toBlockchainName; }

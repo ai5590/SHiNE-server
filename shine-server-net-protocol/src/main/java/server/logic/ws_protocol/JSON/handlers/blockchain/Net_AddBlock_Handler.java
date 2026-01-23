@@ -232,9 +232,9 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
 
         if (block.body instanceof BodyHasLine bl) {
             lineCode = bl.lineCode();
-            prevLineNumber = bl.prevLineNumber();
-            prevLineHash32 = bl.prevLineHash32();
-            thisLineNumber = bl.thisLineNumber();
+            prevLineNumber = bl.prevLineBlockGlobalNumber();
+            prevLineHash32 = bl.prevLineBlockHash32();
+            thisLineNumber = bl.lineSeq();
 
             // Нормализация: -1 не пишем в БД (для совместимости со старым TextBody)
             if (prevLineNumber != null && prevLineNumber == -1) {
