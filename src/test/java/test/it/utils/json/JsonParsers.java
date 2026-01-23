@@ -30,6 +30,18 @@ public final class JsonParsers {
         }
     }
 
+    /** nonce из SessionChallenge(v2) */
+    public static String sessionNonce(String json) {
+        try {
+            JsonNode root = MAPPER.readTree(json);
+            JsonNode payload = root.get("payload");
+            if (payload != null && payload.has("nonce")) return payload.get("nonce").asText();
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public static String sessionId(String json) {
         try {
             JsonNode root = MAPPER.readTree(json);
@@ -41,6 +53,7 @@ public final class JsonParsers {
         }
     }
 
+    // оставляю для совместимости с другими тестами, но в IT_02(v2) больше не используется
     public static String sessionPwd(String json) {
         try {
             JsonNode root = MAPPER.readTree(json);

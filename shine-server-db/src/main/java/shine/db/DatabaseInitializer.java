@@ -18,9 +18,9 @@ import java.sql.Statement;
  *  - создаём ТОЛЬКО таблицы/индексы
  *  - в конце вызываем DatabaseTriggersInstaller.createAllTriggers(st)
  *
- * Зачем так:
- *  - триггеры часто ломают совместимость с внешними SQLite-просмотрщиками/сборками
- *  - проще поддерживать/мигрировать
+ * v2 (sessions):
+ *  - active_sessions.session_pwd удалён
+ *  - active_sessions.session_key хранит публичный ключ сессии (sessionPubKeyB64)
  */
 public final class DatabaseInitializer {
 
@@ -28,25 +28,16 @@ public final class DatabaseInitializer {
 
     /* ===================== TEXT (msg_type=1) ===================== */
 
-    /** Новое сообщение (начало ветки). */
     public static final short TEXT_NEW = 1;
-
-    /** Ответ на сообщение (reply). */
     public static final short TEXT_REPLY = 2;
-
-    /** Репост (repost). */
     public static final short TEXT_REPOST = 3;
-
-    /** Редактирование (edit). ВАЖНО: серверное значение = 10. */
     public static final short TEXT_EDIT = 10;
 
     /* ===================== REACTION (msg_type=2) ===================== */
 
-    /** Лайк (LIKE). */
     public static final short REACTION_LIKE = 1;
 
     /* ===================== CONNECTION (msg_type=3) ===================== */
-    // FRIEND=10/11, CONTACT=20/21, FOLLOW=30/31
     public static final short CONNECTION_FRIEND     = 10;
     public static final short CONNECTION_UNFRIEND   = 11;
 
@@ -123,12 +114,12 @@ public final class DatabaseInitializer {
                 ON solana_users (login);
                 """);
 
-            // 2. active_sessions
+            // 2. active_sessions (v2)
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS active_sessions (
                     session_id                 TEXT    NOT NULL PRIMARY KEY,
                     login                      TEXT    NOT NULL,
-                    session_pwd                TEXT    NOT NULL,
+                    session_key                TEXT    NOT NULL,
                     storage_pwd                TEXT    NOT NULL,
                     session_created_at_ms      INTEGER NOT NULL,
                     last_authirificated_at_ms  INTEGER NOT NULL,
@@ -325,7 +316,6 @@ public final class DatabaseInitializer {
                 ON message_stats (to_login);
                 """);
 
-            // ВАЖНО: триггеры ставим отдельно
             DatabaseTriggersInstaller.createAllTriggers(st);
         }
     }

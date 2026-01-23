@@ -7,10 +7,14 @@ public class ActiveSessionEntry {
 
     private String sessionId;
     private String login;
-    private String sessionPwd;
+
+    /** session_key: публичный ключ сессии (base64 от 32 байт). */
+    private String sessionKey;
+
     private String storagePwd;
     private long   sessionCreatedAtMs;
     private long   lastAuthirificatedAtMs;
+
     private String pushEndpoint;
     private String pushP256dhKey;
     private String pushAuthKey;
@@ -20,12 +24,11 @@ public class ActiveSessionEntry {
     private String clientInfoFromRequest;
     private String userLanguage;
 
-    public ActiveSessionEntry() {
-    }
+    public ActiveSessionEntry() { }
 
     public ActiveSessionEntry(String sessionId,
                               String login,
-                              String sessionPwd,
+                              String sessionKey,
                               String storagePwd,
                               long sessionCreatedAtMs,
                               long lastAuthirificatedAtMs,
@@ -38,7 +41,7 @@ public class ActiveSessionEntry {
                               String userLanguage) {
         this.sessionId = sessionId;
         this.login = login;
-        this.sessionPwd = sessionPwd;
+        this.sessionKey = sessionKey;
         this.storagePwd = storagePwd;
         this.sessionCreatedAtMs = sessionCreatedAtMs;
         this.lastAuthirificatedAtMs = lastAuthirificatedAtMs;
@@ -57,8 +60,8 @@ public class ActiveSessionEntry {
     public String getLogin() { return login; }
     public void setLogin(String login) { this.login = login; }
 
-    public String getSessionPwd() { return sessionPwd; }
-    public void setSessionPwd(String sessionPwd) { this.sessionPwd = sessionPwd; }
+    public String getSessionKey() { return sessionKey; }
+    public void setSessionKey(String sessionKey) { this.sessionKey = sessionKey; }
 
     public String getStoragePwd() { return storagePwd; }
     public void setStoragePwd(String storagePwd) { this.storagePwd = storagePwd; }

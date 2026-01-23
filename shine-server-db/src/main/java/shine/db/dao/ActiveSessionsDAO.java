@@ -32,13 +32,12 @@ public final class ActiveSessionsDAO {
 
     // -------------------- INSERT --------------------
 
-    /** Вставка с внешним соединением. Соединение НЕ закрывает. */
     public void insert(Connection c, ActiveSessionEntry session) throws SQLException {
         String sql = """
             INSERT INTO active_sessions (
                 session_id,
                 login,
-                session_pwd,
+                session_key,
                 storage_pwd,
                 session_created_at_ms,
                 last_authirificated_at_ms,
@@ -55,7 +54,7 @@ public final class ActiveSessionsDAO {
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1,  session.getSessionId());
             ps.setString(2,  session.getLogin());
-            ps.setString(3,  session.getSessionPwd());
+            ps.setString(3,  session.getSessionKey());
             ps.setString(4,  session.getStoragePwd());
             ps.setLong(5,    session.getSessionCreatedAtMs());
             ps.setLong(6,    session.getLastAuthirificatedAtMs());
@@ -70,7 +69,6 @@ public final class ActiveSessionsDAO {
         }
     }
 
-    /** Вставка без внешнего соединения. Сам открывает/закрывает. */
     public void insert(ActiveSessionEntry session) throws SQLException {
         try (Connection c = db.getConnection()) {
             insert(c, session);
@@ -79,13 +77,12 @@ public final class ActiveSessionsDAO {
 
     // -------------------- SELECT --------------------
 
-    /** Получить по sessionId с внешним соединением. Соединение НЕ закрывает. */
     public ActiveSessionEntry getBySessionId(Connection c, String sessionId) throws SQLException {
         String sql = """
             SELECT
                 session_id,
                 login,
-                session_pwd,
+                session_key,
                 storage_pwd,
                 session_created_at_ms,
                 last_authirificated_at_ms,
@@ -109,20 +106,18 @@ public final class ActiveSessionsDAO {
         }
     }
 
-    /** Получить по sessionId без внешнего соединения. Сам открывает/закрывает. */
     public ActiveSessionEntry getBySessionId(String sessionId) throws SQLException {
         try (Connection c = db.getConnection()) {
             return getBySessionId(c, sessionId);
         }
     }
 
-    /** Получить список по login с внешним соединением. Соединение НЕ закрывает. */
     public List<ActiveSessionEntry> getByLogin(Connection c, String login) throws SQLException {
         String sql = """
             SELECT
                 session_id,
                 login,
-                session_pwd,
+                session_key,
                 storage_pwd,
                 session_created_at_ms,
                 last_authirificated_at_ms,
@@ -149,7 +144,6 @@ public final class ActiveSessionsDAO {
         return result;
     }
 
-    /** Получить список по login без внешнего соединения. Сам открывает/закрывает. */
     public List<ActiveSessionEntry> getByLogin(String login) throws SQLException {
         try (Connection c = db.getConnection()) {
             return getByLogin(c, login);
@@ -158,7 +152,6 @@ public final class ActiveSessionsDAO {
 
     // -------------------- UPDATE --------------------
 
-    /** Обновить lastAuthirificatedAtMs с внешним соединением. Соединение НЕ закрывает. */
     public void updateLastAuthirificatedAtMs(Connection c, String sessionId, long lastAuthMs) throws SQLException {
         String sql = """
             UPDATE active_sessions
@@ -173,14 +166,12 @@ public final class ActiveSessionsDAO {
         }
     }
 
-    /** Обновить lastAuthirificatedAtMs без внешнего соединения. Сам открывает/закрывает. */
     public void updateLastAuthirificatedAtMs(String sessionId, long lastAuthMs) throws SQLException {
         try (Connection c = db.getConnection()) {
             updateLastAuthirificatedAtMs(c, sessionId, lastAuthMs);
         }
     }
 
-    /** Обновить данные refresh с внешним соединением. Соединение НЕ закрывает. */
     public void updateOnRefresh(
             Connection c,
             String sessionId,
@@ -213,7 +204,6 @@ public final class ActiveSessionsDAO {
         }
     }
 
-    /** Обновить данные refresh без внешнего соединения. Сам открывает/закрывает. */
     public void updateOnRefresh(
             String sessionId,
             long lastAuthMs,
@@ -229,7 +219,6 @@ public final class ActiveSessionsDAO {
 
     // -------------------- DELETE --------------------
 
-    /** Удалить по sessionId с внешним соединением. Соединение НЕ закрывает. */
     public void deleteBySessionId(Connection c, String sessionId) throws SQLException {
         String sql = "DELETE FROM active_sessions WHERE session_id = ?";
 
@@ -239,7 +228,6 @@ public final class ActiveSessionsDAO {
         }
     }
 
-    /** Удалить по sessionId без внешнего соединения. Сам открывает/закрывает. */
     public void deleteBySessionId(String sessionId) throws SQLException {
         try (Connection c = db.getConnection()) {
             deleteBySessionId(c, sessionId);
@@ -251,7 +239,7 @@ public final class ActiveSessionsDAO {
     private ActiveSessionEntry mapRow(ResultSet rs) throws SQLException {
         String sessionId              = rs.getString("session_id");
         String login                  = rs.getString("login");
-        String sessionPwd             = rs.getString("session_pwd");
+        String sessionKey             = rs.getString("session_key");
         String storagePwd             = rs.getString("storage_pwd");
         long   sessionCreatedAtMs     = rs.getLong("session_created_at_ms");
         long   lastAuthirificatedAtMs = rs.getLong("last_authirificated_at_ms");
@@ -266,7 +254,7 @@ public final class ActiveSessionsDAO {
         return new ActiveSessionEntry(
                 sessionId,
                 login,
-                sessionPwd,
+                sessionKey,
                 storagePwd,
                 sessionCreatedAtMs,
                 lastAuthirificatedAtMs,

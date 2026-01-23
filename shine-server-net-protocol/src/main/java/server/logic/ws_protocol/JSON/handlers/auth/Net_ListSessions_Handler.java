@@ -3,12 +3,13 @@ package server.logic.ws_protocol.JSON.handlers.auth;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.logic.ws_protocol.JSON.ConnectionContext;
-import server.logic.ws_protocol.JSON.handlers.auth.entyties.*;
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
 import server.logic.ws_protocol.JSON.entyties.Net_Response;
 import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
-import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
+import server.logic.ws_protocol.JSON.handlers.auth.entyties.Net_ListSessions_Request;
+import server.logic.ws_protocol.JSON.handlers.auth.entyties.Net_ListSessions_Response;
 import server.logic.ws_protocol.JSON.handlers.auth.entyties.Net_ListSessions_Response.SessionInfo;
+import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.dao.ActiveSessionsDAO;
 import shine.db.entities.ActiveSessionEntry;
@@ -20,16 +21,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Хэндлер ListSessions.
+ * ListSessions (v2) — список активных сессий.
  *
- * Назначение:
- *  - вернуть список всех активных сессий текущего пользователя
- *    (по loginId из ctx/solanaUser).
- *
- * Безопасность:
- *  - анонимный клиент → NOT_AUTHENTICATED (UNVERIFIED);
- *  - AUTH_STATUS_USER → достаточно факта авторизации;
- *  - AUTH_STATUS_AUTH_IN_PROGRESS → требуется подпись, как в CreateAuthSession/CloseActiveSession.
+ * Логика авторизации (v2):
+ * - Доступно ТОЛЬКО после успешного входа в сессию (AUTH_STATUS_USER).
+ * - Никаких подписей здесь больше нет.
  */
 public class Net_ListSessions_Handler implements JsonMessageHandler {
 
@@ -39,8 +35,7 @@ public class Net_ListSessions_Handler implements JsonMessageHandler {
     public Net_Response handle(Net_Request baseReq, ConnectionContext ctx) throws Exception {
         Net_ListSessions_Request req = (Net_ListSessions_Request) baseReq;
 
-        // 1) Проверяем, что вообще есть пользователь в контексте
-        if (ctx == null || ctx.getSolanaUser() == null) {
+        if (ctx == null || ctx.getSolanaUser() == null || ctx.getAuthenticationStatus() != ConnectionContext.AUTH_STATUS_USER) {
             return NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.UNVERIFIED,
@@ -52,81 +47,6 @@ public class Net_ListSessions_Handler implements JsonMessageHandler {
         SolanaUserEntry user = ctx.getSolanaUser();
         String currentLogin = user.getLogin();
 
-        int authStatus = ctx.getAuthenticationStatus();
-        if (authStatus != ConnectionContext.AUTH_STATUS_USER
-                && authStatus != ConnectionContext.AUTH_STATUS_AUTH_IN_PROGRESS) {
-
-            return NetExceptionResponseFactory.error(
-                    req,
-                    WireCodes.Status.UNVERIFIED,
-                    "BAD_AUTH_STATUS",
-                    "Операция ListSessions недоступна в текущем статусе аутентификации"
-            );
-        }
-
-        // 2) Если мы ещё на шаге AUTH_IN_PROGRESS — проверяем подпись
-        if (authStatus == ConnectionContext.AUTH_STATUS_AUTH_IN_PROGRESS) {
-            String authNonce = ctx.getAuthNonce();
-            if (authNonce == null) {
-                return NetExceptionResponseFactory.error(
-                        req,
-                        WireCodes.Status.BAD_REQUEST,
-                        "NO_STEP1_CONTEXT",
-                        "Шаг 1 авторизации не был корректно выполнен для данного соединения"
-                );
-            }
-
-            long timeMs = req.getTimeMs();
-            String signatureB64 = req.getSignatureB64();
-
-            if (signatureB64 == null || signatureB64.isBlank()) {
-                return NetExceptionResponseFactory.error(
-                        req,
-                        WireCodes.Status.BAD_REQUEST,
-                        "EMPTY_SIGNATURE",
-                        "Подпись обязательна при статусе AUTH_IN_PROGRESS"
-                );
-            }
-
-            long nowMs = System.currentTimeMillis();
-            long diff = Math.abs(nowMs - timeMs);
-            if (diff > Net_CreateAuthSession__Handler.ALLOWED_SKEW_MS) {
-                return NetExceptionResponseFactory.error(
-                        req,
-                        WireCodes.Status.BAD_REQUEST,
-                        "TIME_SKEW",
-                        "Время клиента отличается от сервера более чем на 30 секунд"
-                );
-            }
-
-            boolean sigOk;
-            try {
-                sigOk = Net_CreateAuthSession__Handler.verifyAuthorificatedSignature(
-                        user,
-                        authNonce,
-                        timeMs,
-                        signatureB64
-                );
-            } catch (IllegalArgumentException e) {
-                return NetExceptionResponseFactory.error(
-                        req,
-                        WireCodes.Status.BAD_REQUEST,
-                        "BAD_BASE64",
-                        "Некорректный формат Base64 для ключа или подписи"
-                );
-            }
-
-            if (!sigOk) {
-                return NetExceptionResponseFactory.error(
-                        req,
-                        WireCodes.Status.UNVERIFIED,
-                        "BAD_SIGNATURE",
-                        "Подпись не прошла проверку"
-                );
-            }
-        }
-
-        // 3) Тянем все активные сессии пользователя из БД
         List<ActiveSessionEntry> sessions;
         try {
             sessions = ActiveSessionsDAO.getInstance().getByLogin(currentLogin);
@@ -140,10 +60,9 @@ public class Net_ListSessions_Handler implements JsonMessageHandler {
             );
         }
 
-        // 4) Собираем DTO с геолокацией
         List<SessionInfo> resultList = new ArrayList<>();
         for (ActiveSessionEntry s : sessions) {
-            SessionInfo info = new Net_ListSessions_Response.SessionInfo();
+            SessionInfo info = new SessionInfo();
             info.setSessionId(s.getSessionId());
             info.setClientInfoFromClient(s.getClientInfoFromClient());
             info.setClientInfoFromRequest(s.getClientInfoFromRequest());
@@ -156,7 +75,6 @@ public class Net_ListSessions_Handler implements JsonMessageHandler {
             resultList.add(info);
         }
 
-        // 5) Формируем ответ
         Net_ListSessions_Response resp = new Net_ListSessions_Response();
         resp.setOp(req.getOp());
         resp.setRequestId(req.getRequestId());

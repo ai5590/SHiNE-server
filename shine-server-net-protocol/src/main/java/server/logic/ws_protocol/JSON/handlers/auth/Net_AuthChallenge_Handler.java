@@ -1,9 +1,11 @@
 package server.logic.ws_protocol.JSON.handlers.auth;
 
 import server.logic.ws_protocol.JSON.ConnectionContext;
-import server.logic.ws_protocol.JSON.entyties.*;
-import server.logic.ws_protocol.JSON.handlers.auth.entyties.*;
+import server.logic.ws_protocol.JSON.entyties.Net_Request;
+import server.logic.ws_protocol.JSON.entyties.Net_Response;
 import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
+import server.logic.ws_protocol.JSON.handlers.auth.entyties.Net_AuthChallenge_Request;
+import server.logic.ws_protocol.JSON.handlers.auth.entyties.Net_AuthChallenge_Response;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.dao.SolanaUsersDAO;
@@ -13,10 +15,18 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
- * Шаг 1 авторизации: запрос выдачи временного nonce (authNonce).
+ * AuthChallenge (v2) — шаг 1 создания новой сессии.
  *
- * Клиент по логину просит сервер сгенерировать случайный authNonce,
- * который будет использован на втором шаге при подписи.
+ * Логика авторизации (v2):
+ * - Создание новой сессии возможно ТОЛЬКО через deviceKey пользователя.
+ * - Этот handler выдаёт одноразовый authNonce, который клиент использует во втором шаге:
+ *   CreateAuthSession(..., signature(deviceKey, AUTH_CREATE_SESSION:...))
+ *
+ * Что делает:
+ * 1) Проверяет login.
+ * 2) Находит пользователя (solana_users).
+ * 3) Пишет solanaUser в ctx, ставит AUTH_STATUS_AUTH_IN_PROGRESS.
+ * 4) Генерирует authNonce (base64url(32)) и сохраняет в ctx.authNonce.
  */
 public class Net_AuthChallenge_Handler implements JsonMessageHandler {
 
@@ -47,9 +57,7 @@ public class Net_AuthChallenge_Handler implements JsonMessageHandler {
             );
         }
 
-        // 2) Ищем пользователя в локальной БД
         SolanaUserEntry solanaUserEntry = SolanaUsersDAO.getInstance().getByLogin(login);
-
         if (solanaUserEntry == null) {
             return NetExceptionResponseFactory.error(
                     req,
@@ -59,21 +67,15 @@ public class Net_AuthChallenge_Handler implements JsonMessageHandler {
             );
         }
 
-        // 3) Заполняем контекст пользователем
         ctx.setSolanaUser(solanaUserEntry);
-
-        // 3.1) Отмечаем, что по этому соединению начата авторификация
         ctx.setAuthenticationStatus(ConnectionContext.AUTH_STATUS_AUTH_IN_PROGRESS);
 
-        // 4) Генерируем одноразовый authNonce = base64(32 случайных байт)
         byte[] buf = new byte[32];
         RANDOM.nextBytes(buf);
         String authNonce = Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
 
-        // Сохраняем challenge в отдельном поле authNonce
         ctx.setAuthNonce(authNonce);
 
-        // 5) Формируем ответ
         Net_AuthChallenge_Response resp = new Net_AuthChallenge_Response();
         resp.setOp(req.getOp());
         resp.setRequestId(req.getRequestId());

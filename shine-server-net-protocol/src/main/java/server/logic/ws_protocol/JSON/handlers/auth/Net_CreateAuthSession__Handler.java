@@ -1,14 +1,15 @@
 package server.logic.ws_protocol.JSON.handlers.auth;
 
+import org.eclipse.jetty.websocket.api.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.eclipse.jetty.websocket.api.Session;
 import server.logic.ws_protocol.JSON.ActiveConnectionsRegistry;
 import server.logic.ws_protocol.JSON.ConnectionContext;
-import server.logic.ws_protocol.JSON.handlers.auth.entyties.*;
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
 import server.logic.ws_protocol.JSON.entyties.Net_Response;
 import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
+import server.logic.ws_protocol.JSON.handlers.auth.entyties.Net_CreateAuthSession_Request;
+import server.logic.ws_protocol.JSON.handlers.auth.entyties.Net_CreateAuthSession_Response;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import server.ws.WsConnectionUtils;
@@ -20,37 +21,37 @@ import shine.geo.GeoLookupService;
 import utils.crypto.Ed25519Util;
 
 import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
 import java.security.SecureRandom;
+import java.sql.SQLException;
 import java.util.Base64;
 
+/**
+ * CreateAuthSession (v2) — шаг 2 создания новой сессии (ТОЛЬКО deviceKey).
+ *
+ * Логика авторизации (v2):
+ *  - Создание сессии: AuthChallenge(login) -> authNonce -> CreateAuthSession(...)
+ *  - Клиент генерирует sessionKey (Ed25519), хранит приватный ключ у себя,
+ *    отправляет на сервер ТОЛЬКО sessionPubKeyB64.
+ *  - Сервер сохраняет sessionPubKeyB64 в active_sessions.session_key.
+ *
+ * Подпись deviceKey (Ed25519) проверяется над строкой (UTF-8):
+ *   AUTH_CREATE_SESSION:{login}:{timeMs}:{authNonce}:{sessionPubKeyB64}:{storagePwd}
+ *
+ * На выходе:
+ *  - создаётся запись active_sessions
+ *  - ctx становится AUTH_STATUS_USER (вход выполнен как "текущая сессия")
+ *  - ответ: sessionId
+ */
 public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
     private static final Logger log = LoggerFactory.getLogger(Net_CreateAuthSession__Handler.class);
-
     private static final SecureRandom RANDOM = new SecureRandom();
 
     public static final long ALLOWED_SKEW_MS = 30_000L;
 
-    public static boolean verifyAuthorificatedSignature(
-            SolanaUserEntry user,
-            String authNonce,
-            long timeMs,
-            String signatureB64
-    ) throws IllegalArgumentException {
-
-        String pubKeyB64 = user.getDeviceKey();
-        byte[] publicKey32 = Ed25519Util.keyFromBase64(pubKeyB64);
-        byte[] signature64 = Base64.getDecoder().decode(signatureB64);
-
-        String preimageStr = "AUTHORIFICATED:" + timeMs + authNonce;
-        byte[] preimage = preimageStr.getBytes(StandardCharsets.UTF_8);
-
-        return Ed25519Util.verify(preimage, signature64, publicKey32);
-    }
-
     @Override
     public Net_Response handle(Net_Request baseReq, ConnectionContext ctx) throws Exception {
+
         Net_CreateAuthSession_Request req = (Net_CreateAuthSession_Request) baseReq;
 
         if (ctx == null
@@ -93,6 +94,43 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             return err;
         }
 
+        String sessionPubKeyB64 = req.getSessionPubKeyB64();
+        if (sessionPubKeyB64 == null || sessionPubKeyB64.isBlank()) {
+            Net_Response err = NetExceptionResponseFactory.error(
+                    req,
+                    WireCodes.Status.BAD_REQUEST,
+                    "EMPTY_SESSION_PUBKEY",
+                    "Пустой sessionPubKeyB64"
+            );
+            WsConnectionUtils.closeConnection(ctx, 4001, "Auth failed: empty session pubkey");
+            return err;
+        }
+
+        // Проверим, что ключ декодируется в 32 байта
+        byte[] sessionPubKey32;
+        try {
+            sessionPubKey32 = decodeBase64Any(sessionPubKeyB64);
+        } catch (IllegalArgumentException e) {
+            Net_Response err = NetExceptionResponseFactory.error(
+                    req,
+                    WireCodes.Status.BAD_REQUEST,
+                    "BAD_BASE64",
+                    "Некорректный base64 в sessionPubKeyB64"
+            );
+            WsConnectionUtils.closeConnection(ctx, 4001, "Auth failed: bad session pubkey base64");
+            return err;
+        }
+        if (sessionPubKey32.length != 32) {
+            Net_Response err = NetExceptionResponseFactory.error(
+                    req,
+                    WireCodes.Status.BAD_REQUEST,
+                    "BAD_SESSION_PUBKEY_LEN",
+                    "sessionPubKey должен быть 32 байта"
+            );
+            WsConnectionUtils.closeConnection(ctx, 4001, "Auth failed: bad session pubkey length");
+            return err;
+        }
+
         String signatureB64 = req.getSignatureB64();
         if (signatureB64 == null || signatureB64.isBlank()) {
             Net_Response err = NetExceptionResponseFactory.error(
@@ -107,7 +145,6 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
         long timeMs = req.getTimeMs();
         long nowMs = System.currentTimeMillis();
-
         long diff = Math.abs(nowMs - timeMs);
         if (diff > ALLOWED_SKEW_MS) {
             Net_Response err = NetExceptionResponseFactory.error(
@@ -125,15 +162,15 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             clientInfoFromClient = clientInfoFromClient.substring(0, 50);
         }
 
-        String pubKeyB64 = user.getDeviceKey();
-        if (pubKeyB64 == null || pubKeyB64.isBlank()) {
+        String devicePubKeyB64 = user.getDeviceKey();
+        if (devicePubKeyB64 == null || devicePubKeyB64.isBlank()) {
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.BAD_REQUEST,
-                    "NO_PUBKEY1",
-                    "Отсутствует публичный ключ pubkey1 для пользователя"
+                    "NO_DEVICE_KEY",
+                    "Отсутствует deviceKey у пользователя"
             );
-            WsConnectionUtils.closeConnection(ctx, 4001, "Auth failed: no pubkey");
+            WsConnectionUtils.closeConnection(ctx, 4001, "Auth failed: no deviceKey");
             return err;
         }
 
@@ -141,7 +178,15 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
         boolean sigOk;
         try {
-            sigOk = verifyAuthorificatedSignature(user, authNonce, timeMs, signatureB64);
+            sigOk = verifyCreateSessionSignature(
+                    user,
+                    login,
+                    authNonce,
+                    timeMs,
+                    sessionPubKeyB64,
+                    storagePwd,
+                    signatureB64
+            );
         } catch (IllegalArgumentException ex) {
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
@@ -164,9 +209,8 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             return err;
         }
 
-        // --- Генерируем настоящий секрет сессии (sessionPwd) и sessionId ---
-        String newSessionPwd = generateRandomSecret();
-        String sessionId = generateRandomSessionId();
+        // --- генерируем sessionId ---
+        String sessionId = generateRandom32B64Url();
         long now = System.currentTimeMillis();
 
         // --- Сбор данных о клиенте (IP, UA, язык) ---
@@ -174,11 +218,12 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         String clientInfoFromRequest = ClientInfoService.buildClientInfoString(wsSession);
         String userLanguage = ClientInfoService.extractPreferredLanguageTag(wsSession);
 
-        String clientIp = null;
+        String clientIp = "";
         if (wsSession != null) {
-            clientIp = ClientInfoService.extractClientIp(wsSession);
+            String ip = ClientInfoService.extractClientIp(wsSession);
+            if (ip != null) clientIp = ip;
 
-            if (clientIp != null && !clientIp.isBlank()) {
+            if (!clientIp.isBlank()) {
                 try {
                     GeoLookupService.resolveCountryCityOrIpWithCache(clientIp);
                 } catch (Exception e) {
@@ -186,7 +231,6 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
                 }
             }
         }
-        if (clientIp == null) clientIp = "";
 
         // --- создаём запись ActiveSession и сохраняем в БД ---
         ActiveSessionsDAO dao = ActiveSessionsDAO.getInstance();
@@ -196,7 +240,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             activeSessionEntry = new ActiveSessionEntry(
                     sessionId,
                     login,
-                    newSessionPwd,
+                    sessionPubKeyB64,         // session_key (pubkey)
                     storagePwd,
                     now,
                     now,
@@ -225,8 +269,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         // --- обновляем контекст ---
         ctx.setActiveSession(activeSessionEntry);
         ctx.setSessionId(sessionId);
-        ctx.setSessionPwd(newSessionPwd);   // теперь в контексте хранится секрет сессии
-        ctx.setAuthNonce(null);            // одноразовый nonce больше не нужен
+        ctx.setAuthNonce(null);
         ctx.setAuthenticationStatus(ConnectionContext.AUTH_STATUS_USER);
 
         ActiveConnectionsRegistry.getInstance().register(ctx);
@@ -237,25 +280,40 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         resp.setRequestId(req.getRequestId());
         resp.setStatus(WireCodes.Status.OK);
         resp.setSessionId(sessionId);
-        resp.setSessionPwd(newSessionPwd);
         return resp;
     }
 
-    /**
-     * Генерация случайного sessionId: base64-строка от 32 байт.
-     */
-    private String generateRandomSessionId() {
+    private static boolean verifyCreateSessionSignature(
+            SolanaUserEntry user,
+            String login,
+            String authNonce,
+            long timeMs,
+            String sessionPubKeyB64,
+            String storagePwd,
+            String signatureB64
+    ) throws IllegalArgumentException {
+
+        byte[] publicKey32 = Ed25519Util.keyFromBase64(user.getDeviceKey());
+        byte[] signature64 = decodeBase64Any(signatureB64);
+
+        String preimageStr = "AUTH_CREATE_SESSION:" + login + ":" + timeMs + ":" + authNonce + ":" + sessionPubKeyB64 + ":" + storagePwd;
+        byte[] preimage = preimageStr.getBytes(StandardCharsets.UTF_8);
+
+        return Ed25519Util.verify(preimage, signature64, publicKey32);
+    }
+
+    private static String generateRandom32B64Url() {
         byte[] buf = new byte[32];
         RANDOM.nextBytes(buf);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
     }
 
-    /**
-     * Генерация случайного секрета (sessionPwd): base64-строка от 32 байт.
-     */
-    private String generateRandomSecret() {
-        byte[] buf = new byte[32];
-        RANDOM.nextBytes(buf);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
+    private static byte[] decodeBase64Any(String s) throws IllegalArgumentException {
+        // сначала url-safe, потом обычный
+        try {
+            return Base64.getUrlDecoder().decode(s);
+        } catch (IllegalArgumentException ignore) {
+            return Base64.getDecoder().decode(s);
+        }
     }
 }

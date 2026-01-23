@@ -58,9 +58,11 @@ public final class JsonBuilders {
                 """.formatted(requestId, login);
     }
 
-    // ---------------- CreateAuthSession ----------------
+    // ---------------- CreateAuthSession (v2) ----------------
+    // v2: sessionKey генерируется на клиенте, на сервер отправляем только sessionPubKey (base64).
+    // подпись шага CreateAuthSession всё ещё делается deviceKey: "AUTHORIFICATED:" + timeMs + authNonce
 
-    public static String createAuthSession(String login, String authNonce, String storagePwd) {
+    public static String createAuthSessionV2(String login, String authNonce, String storagePwd, String sessionPubKeyB64) {
         long timeMs = System.currentTimeMillis();
         byte[] devicePriv = TestConfig.getDevicePrivatKey(login);
         String sigB64 = signAuthorificated(authNonce, timeMs, devicePriv);
@@ -72,12 +74,56 @@ public final class JsonBuilders {
                   "requestId": "%s",
                   "payload": {
                     "storagePwd": "%s",
+                    "sessionPubKeyB64": "%s",
                     "timeMs": %d,
                     "signatureB64": "%s",
                     "clientInfo": "%s"
                   }
                 }
-                """.formatted(requestId, storagePwd, timeMs, sigB64, TestConfig.TEST_CLIENT_INFO);
+                """.formatted(
+                requestId,
+                storagePwd,
+                sessionPubKeyB64,
+                timeMs,
+                sigB64,
+                TestConfig.TEST_CLIENT_INFO
+        );
+    }
+
+    // ---------------- SessionChallenge (v2) ----------------
+
+    public static String sessionChallenge(String sessionId) {
+        String requestId = TestIds.next("sch");
+        return """
+            {
+              "op": "SessionChallenge",
+              "requestId": "%s",
+              "payload": {
+                "sessionId": "%s"
+              }
+            }
+            """.formatted(requestId, sessionId);
+    }
+
+    // ---------------- SessionLogin (v2) ----------------
+
+    public static String sessionLogin(String sessionId, String nonce, byte[] sessionPrivKey) {
+        long timeMs = System.currentTimeMillis();
+        String sigB64 = signSessionLogin(sessionId, timeMs, nonce, sessionPrivKey);
+
+        String requestId = TestIds.next("slogin");
+        return """
+            {
+              "op": "SessionLogin",
+              "requestId": "%s",
+              "payload": {
+                "sessionId": "%s",
+                "timeMs": %d,
+                "signatureB64": "%s",
+                "clientInfo": "%s"
+              }
+            }
+            """.formatted(requestId, sessionId, timeMs, sigB64, TestConfig.TEST_CLIENT_INFO);
     }
 
     // ---------------- ListSessions ----------------
@@ -95,23 +141,6 @@ public final class JsonBuilders {
               }
             }
             """.formatted(requestId, timeMs, signatureB64);
-    }
-
-    // ---------------- RefreshSession ----------------
-
-    public static String refreshSession(String sessionId, String sessionPwd) {
-        String requestId = TestIds.next("refresh");
-        return """
-            {
-              "op": "RefreshSession",
-              "requestId": "%s",
-              "payload": {
-                "sessionId": "%s",
-                "sessionPwd": "%s",
-                "clientInfo": "%s"
-              }
-            }
-            """.formatted(requestId, sessionId, sessionPwd, TestConfig.TEST_CLIENT_INFO);
     }
 
     // ---------------- CloseActiveSession ----------------
@@ -145,7 +174,6 @@ public final class JsonBuilders {
         """.formatted(requestId, login);
     }
 
-
     /**
      * Подпись для режима AUTH_IN_PROGRESS:
      * preimage = "AUTHORIFICATED:" + timeMs + authNonce
@@ -155,6 +183,18 @@ public final class JsonBuilders {
         String preimageStr = "AUTHORIFICATED:" + timeMs + authNonce;
         byte[] preimage = preimageStr.getBytes(StandardCharsets.UTF_8);
         byte[] sig = Ed25519Util.sign(preimage, devicePrivKey);
+        return Base64.getEncoder().encodeToString(sig);
+    }
+
+    /**
+     * Подпись для SessionLogin(v2):
+     * preimage = "SESSION_LOGIN:" + sessionId + ":" + timeMs + ":" + nonce
+     * подписываем sessionPrivKey.
+     */
+    public static String signSessionLogin(String sessionId, long timeMs, String nonce, byte[] sessionPrivKey) {
+        String preimageStr = "SESSION_LOGIN:" + sessionId + ":" + timeMs + ":" + nonce;
+        byte[] preimage = preimageStr.getBytes(StandardCharsets.UTF_8);
+        byte[] sig = Ed25519Util.sign(preimage, sessionPrivKey);
         return Base64.getEncoder().encodeToString(sig);
     }
 }

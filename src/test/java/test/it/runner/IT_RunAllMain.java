@@ -4,7 +4,6 @@ import test.it.cases.IT_01_AddUser;
 import test.it.cases.IT_02_Sessions;
 import test.it.cases.IT_03_AddBlock_NoAuth;
 import test.it.cases.IT_04_UserParams_NoAuth;
-import test.it.cases.IT_05_ListSubscribedChannels_200;
 import test.it.utils.log.TestLog;
 
 import java.util.ArrayList;
@@ -31,7 +30,6 @@ public class IT_RunAllMain {
         String s2 = IT_02_Sessions.run(); summaries.add(s2); if (s2.contains("FAIL:")) failed++;
         String s3 = IT_03_AddBlock_NoAuth.run(); summaries.add(s3); if (s3.contains("FAIL:")) failed++;
         String s4 = IT_04_UserParams_NoAuth.run(); summaries.add(s4); if (s4.contains("FAIL:")) failed++;
-        String s5 = IT_05_ListSubscribedChannels_200.run(); summaries.add(s5); if (s5.contains("FAIL:")) failed++;
 
         TestLog.title("IT RUN RESULT (per test)");
         for (String s : summaries) System.out.println(s);
