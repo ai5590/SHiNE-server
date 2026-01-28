@@ -13,9 +13,11 @@ import java.util.List;
  * Таблица: solana_users
  *
  * Колонки:
- *  - login      TEXT PRIMARY KEY
- *  - device_key TEXT NOT NULL
- *  - solana_key TEXT NULLABLE
+ *  - login           TEXT PRIMARY KEY (COLLATE NOCASE)
+ *  - blockchain_name TEXT NOT NULL
+ *  - solana_key      TEXT NOT NULL
+ *  - blockchain_key  TEXT NOT NULL
+ *  - device_key      TEXT NOT NULL
  *
  * Правило работы с соединениями:
  *  - методы с Connection НЕ закрывают соединение
@@ -42,14 +44,17 @@ public final class SolanaUsersDAO {
     /** Вставка с внешним соединением. Соединение НЕ закрывает. */
     public void insert(Connection c, SolanaUserEntry user) throws SQLException {
         String sql = """
-            INSERT INTO solana_users (login, device_key, solana_key)
-            VALUES (?, ?, ?)
+            INSERT INTO solana_users (
+                login, blockchain_name, solana_key, blockchain_key, device_key
+            ) VALUES (?, ?, ?, ?, ?)
             """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, user.getLogin());
-            ps.setString(2, user.getDeviceKey());
+            ps.setString(2, user.getBlockchainName());
             ps.setString(3, user.getSolanaKey());
+            ps.setString(4, user.getBlockchainKey());
+            ps.setString(5, user.getDeviceKey());
             ps.executeUpdate();
         }
     }
@@ -87,12 +92,41 @@ public final class SolanaUsersDAO {
         }
     }
 
+    /** Проверка существования по blockchain_name (case-sensitive, как в БД) с внешним соединением. */
+    public boolean existsByBlockchainName(Connection c, String blockchainName) throws SQLException {
+        String sql = """
+            SELECT 1
+            FROM solana_users
+            WHERE blockchain_name = ?
+            LIMIT 1
+            """;
+
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, blockchainName);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    /** Проверка существования по blockchain_name без внешнего соединения. */
+    public boolean existsByBlockchainName(String blockchainName) throws SQLException {
+        try (Connection c = db.getConnection()) {
+            return existsByBlockchainName(c, blockchainName);
+        }
+    }
+
     // -------------------- SELECT --------------------
 
     /** Получить по login (case-insensitive) с внешним соединением. Соединение НЕ закрывает. */
     public SolanaUserEntry getByLogin(Connection c, String login) throws SQLException {
         String sql = """
-            SELECT login, device_key, solana_key
+            SELECT
+                login,
+                blockchain_name,
+                solana_key,
+                blockchain_key,
+                device_key
             FROM solana_users
             WHERE LOWER(login) = LOWER(?)
             """;
@@ -113,10 +147,44 @@ public final class SolanaUsersDAO {
         }
     }
 
+    /** Получить по blockchain_name (case-sensitive) с внешним соединением. Соединение НЕ закрывает. */
+    public SolanaUserEntry getByBlockchainName(Connection c, String blockchainName) throws SQLException {
+        String sql = """
+            SELECT
+                login,
+                blockchain_name,
+                solana_key,
+                blockchain_key,
+                device_key
+            FROM solana_users
+            WHERE blockchain_name = ?
+            """;
+
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, blockchainName);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                return mapRow(rs);
+            }
+        }
+    }
+
+    /** Получить по blockchain_name без внешнего соединения. */
+    public SolanaUserEntry getByBlockchainName(String blockchainName) throws SQLException {
+        try (Connection c = db.getConnection()) {
+            return getByBlockchainName(c, blockchainName);
+        }
+    }
+
     /** Поиск по префиксу с внешним соединением. Соединение НЕ закрывает. */
     public List<SolanaUserEntry> searchByLoginPrefix(Connection c, String prefix) throws SQLException {
         String sql = """
-            SELECT login, device_key, solana_key
+            SELECT
+                login,
+                blockchain_name,
+                solana_key,
+                blockchain_key,
+                device_key
             FROM solana_users
             WHERE LOWER(login) LIKE ?
             ORDER BY login
@@ -145,14 +213,13 @@ public final class SolanaUsersDAO {
     // -------------------- MAPPER --------------------
 
     private SolanaUserEntry mapRow(ResultSet rs) throws SQLException {
-        SolanaUserEntry e = new SolanaUserEntry(
-                rs.getString("login"),
-                rs.getString("device_key")
-        );
+        SolanaUserEntry e = new SolanaUserEntry();
 
-        String solanaKey = rs.getString("solana_key");
-        if (rs.wasNull()) solanaKey = null;
-        e.setSolanaKey(solanaKey);
+        e.setLogin(rs.getString("login"));
+        e.setBlockchainName(rs.getString("blockchain_name"));
+        e.setSolanaKey(rs.getString("solana_key"));
+        e.setBlockchainKey(rs.getString("blockchain_key"));
+        e.setDeviceKey(rs.getString("device_key"));
 
         return e;
     }

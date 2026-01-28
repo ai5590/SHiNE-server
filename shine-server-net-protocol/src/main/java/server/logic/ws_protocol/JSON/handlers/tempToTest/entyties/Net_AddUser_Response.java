@@ -1,3 +1,4 @@
+// file: server/logic/ws_protocol/JSON/handlers/tempToTest/entyties/Net_AddUser_Response.java
 package server.logic.ws_protocol.JSON.handlers.tempToTest.entyties;
 
 import server.logic.ws_protocol.JSON.entyties.Net_Response;

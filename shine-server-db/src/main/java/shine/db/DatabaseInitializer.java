@@ -101,12 +101,24 @@ public final class DatabaseInitializer {
             st.execute("PRAGMA foreign_keys = ON");
 
             // 1. solana_users
+            // ВАЖНО:
+            // - Все требуемые поля теперь лежат в solana_users:
+            //   login, blockchain_name, solana_key, blockchain_key, device_key
+            // - Поиск по login в DAO сделан case-insensitive.
+            // - Для защиты от дублей "Anya" и "anya" добавляем COLLATE NOCASE на PRIMARY KEY.
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS solana_users (
-                    login       TEXT    NOT NULL PRIMARY KEY,
-                    device_key  TEXT    NOT NULL,
-                    solana_key  TEXT
+                    login           TEXT    NOT NULL PRIMARY KEY COLLATE NOCASE,
+                    blockchain_name TEXT    NOT NULL,
+                    solana_key      TEXT    NOT NULL,
+                    blockchain_key  TEXT    NOT NULL,
+                    device_key      TEXT    NOT NULL
                 );
+                """);
+
+            st.executeUpdate("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_solana_users_blockchain_name
+                ON solana_users (blockchain_name);
                 """);
 
             st.executeUpdate("""

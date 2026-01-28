@@ -45,6 +45,21 @@ public final class JsonBuilders {
         );
     }
 
+    // ---------------- GetUser ----------------
+
+    public static String getUser(String login) {
+        String requestId = TestIds.next("getuser");
+        return """
+                {
+                  "op": "GetUser",
+                  "requestId": "%s",
+                  "payload": {
+                    "login": "%s"
+                  }
+                }
+                """.formatted(requestId, login);
+    }
+
     // ---------------- AuthChallenge ----------------
 
     public static String authChallenge(String login) {

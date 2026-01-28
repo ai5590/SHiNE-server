@@ -61,6 +61,17 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
                 : req.getBchLimit();
 
         try {
+            // базовая валидация форматов ключей: Base64(32 bytes)
+            byte[] solanaKey32 = Base64.getDecoder().decode(req.getSolanaKey());
+            if (solanaKey32.length != 32) {
+                return NetExceptionResponseFactory.error(
+                        req,
+                        WireCodes.Status.BAD_REQUEST,
+                        "BAD_SOLANA_KEY",
+                        "solanaKey должен быть Base64(32 bytes)"
+                );
+            }
+
             byte[] blockchainKey32 = Base64.getDecoder().decode(req.getBlockchainKey());
             if (blockchainKey32.length != 32) {
                 return NetExceptionResponseFactory.error(
@@ -68,6 +79,16 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
                         WireCodes.Status.BAD_REQUEST,
                         "BAD_BLOCKCHAIN_KEY",
                         "blockchainKey должен быть Base64(32 bytes)"
+                );
+            }
+
+            byte[] deviceKey32 = Base64.getDecoder().decode(req.getDeviceKey());
+            if (deviceKey32.length != 32) {
+                return NetExceptionResponseFactory.error(
+                        req,
+                        WireCodes.Status.BAD_REQUEST,
+                        "BAD_DEVICE_KEY",
+                        "deviceKey должен быть Base64(32 bytes)"
                 );
             }
 
@@ -79,8 +100,8 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
             try (Connection c = db.getConnection()) {
                 c.setAutoCommit(false);
 
-                // 1. Проверяем, что пользователя нет
-                if (usersDAO.getByLogin(req.getLogin()) != null) {
+                // 1. Проверяем, что пользователя нет (case-insensitive)
+                if (usersDAO.getByLogin(c, req.getLogin()) != null) {
                     return NetExceptionResponseFactory.error(
                             req,
                             409,
@@ -89,26 +110,38 @@ public class Net_AddUser_Handler implements JsonMessageHandler {
                     );
                 }
 
-                // 2. Проверяем, что blockchain_state ещё нет
-                if (stateDAO.getByBlockchainName(req.getBlockchainName()) != null) {
+                // 2. Проверяем, что blockchainName ещё нет (case-sensitive, как в БД)
+                if (usersDAO.existsByBlockchainName(c, req.getBlockchainName())) {
                     return NetExceptionResponseFactory.error(
                             req,
                             409,
                             "BLOCKCHAIN_ALREADY_EXISTS",
+                            "Пользователь с таким blockchainName уже существует"
+                    );
+                }
+
+                // 3. На всякий случай оставляем старую проверку blockchain_state,
+                //    потому что эта таблица нужна серверу (состояние цепочки/лимиты).
+                if (stateDAO.getByBlockchainName(c, req.getBlockchainName()) != null) {
+                    return NetExceptionResponseFactory.error(
+                            req,
+                            409,
+                            "BLOCKCHAIN_STATE_ALREADY_EXISTS",
                             "blockchain_state уже существует"
                     );
                 }
 
-                // 3. Создаём пользователя (solanaKey + deviceKey)
-                SolanaUserEntry user = new SolanaUserEntry(
-                        req.getLogin(),
-                        req.getSolanaKey(),
-                        req.getDeviceKey()
-                );
+                // 4. Создаём пользователя (все поля теперь лежат в solana_users)
+                SolanaUserEntry user = new SolanaUserEntry();
+                user.setLogin(req.getLogin());
+                user.setBlockchainName(req.getBlockchainName());
+                user.setSolanaKey(req.getSolanaKey());
+                user.setBlockchainKey(req.getBlockchainKey());
+                user.setDeviceKey(req.getDeviceKey());
 
                 usersDAO.insert(c, user);
 
-                // 4. Создаём INITIAL blockchain_state (blockchainKey)
+                // 5. Создаём INITIAL blockchain_state (для работы сервера)
                 BlockchainStateEntry st = new BlockchainStateEntry();
                 st.setBlockchainName(req.getBlockchainName());
                 st.setLogin(req.getLogin());

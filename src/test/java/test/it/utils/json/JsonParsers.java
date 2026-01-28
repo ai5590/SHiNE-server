@@ -113,4 +113,50 @@ public final class JsonParsers {
 
         return null;
     }
+
+    // ---------------- GetUser helpers ----------------
+
+    public static Boolean exists(String json) {
+        try {
+            JsonNode root = MAPPER.readTree(json);
+            JsonNode payload = root.get("payload");
+            if (payload != null && payload.has("exists")) return payload.get("exists").asBoolean();
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public static String userLogin(String json) {
+        return getPayloadText(json, "login");
+    }
+
+    public static String userBlockchainName(String json) {
+        return getPayloadText(json, "blockchainName");
+    }
+
+    public static String userSolanaKey(String json) {
+        return getPayloadText(json, "solanaKey");
+    }
+
+    public static String userBlockchainKey(String json) {
+        return getPayloadText(json, "blockchainKey");
+    }
+
+    public static String userDeviceKey(String json) {
+        return getPayloadText(json, "deviceKey");
+    }
+
+    private static String getPayloadText(String json, String field) {
+        try {
+            JsonNode root = MAPPER.readTree(json);
+            JsonNode payload = root.get("payload");
+            if (payload != null && payload.has(field) && !payload.get(field).isNull()) {
+                return payload.get(field).asText();
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }

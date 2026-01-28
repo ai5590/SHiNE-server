@@ -28,6 +28,9 @@ import server.logic.ws_protocol.JSON.handlers.blockchain.entyties.Net_AddBlock_R
 import server.logic.ws_protocol.JSON.handlers.tempToTest.Net_AddUser_Handler;
 import server.logic.ws_protocol.JSON.handlers.tempToTest.entyties.Net_AddUser_Request;
 
+import server.logic.ws_protocol.JSON.handlers.tempToTest.Net_GetUser_Handler;
+import server.logic.ws_protocol.JSON.handlers.tempToTest.entyties.Net_GetUser_Request;
+
 import server.logic.ws_protocol.JSON.handlers.userParams.Net_GetUserParam_Handler;
 import server.logic.ws_protocol.JSON.handlers.userParams.Net_ListUserParams_Handler;
 import server.logic.ws_protocol.JSON.handlers.userParams.Net_UpsertUserParam_Handler;
@@ -50,6 +53,7 @@ public final class JsonHandlerRegistry {
     // Map.of(...) поддерживает максимум 10 пар => используем Map.ofEntries(...)
     private static final Map<String, JsonMessageHandler> HANDLERS = Map.ofEntries(
             Map.entry("AddUser",            new Net_AddUser_Handler()),
+            Map.entry("GetUser",            new Net_GetUser_Handler()),
 
             // --- auth ---
             Map.entry("AuthChallenge",      new Net_AuthChallenge_Handler()),
@@ -75,6 +79,7 @@ public final class JsonHandlerRegistry {
 
     private static final Map<String, Class<? extends Net_Request>> REQUEST_TYPES = Map.ofEntries(
             Map.entry("AddUser",            Net_AddUser_Request.class),
+            Map.entry("GetUser",            Net_GetUser_Request.class),
 
             // --- auth ---
             Map.entry("AuthChallenge",      Net_AuthChallenge_Request.class),
