@@ -60,6 +60,21 @@ public final class JsonBuilders {
                 """.formatted(requestId, login);
     }
 
+    // ---------------- SearchUsers ----------------
+
+    public static String searchUsers(String prefix) {
+        String requestId = TestIds.next("searchusers");
+        return """
+                {
+                  "op": "SearchUsers",
+                  "requestId": "%s",
+                  "payload": {
+                    "prefix": "%s"
+                  }
+                }
+                """.formatted(requestId, prefix);
+    }
+
     // ---------------- AuthChallenge ----------------
 
     public static String authChallenge(String login) {

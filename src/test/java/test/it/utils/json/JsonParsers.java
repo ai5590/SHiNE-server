@@ -147,6 +147,25 @@ public final class JsonParsers {
         return getPayloadText(json, "deviceKey");
     }
 
+    // ---------------- SearchUsers helpers ----------------
+
+    public static List<String> searchLogins(String json) {
+        List<String> res = new ArrayList<>();
+        try {
+            JsonNode root = MAPPER.readTree(json);
+            JsonNode payload = root.get("payload");
+            if (payload == null) return res;
+
+            JsonNode arr = payload.get("logins");
+            if (arr == null || !arr.isArray()) return res;
+
+            for (JsonNode x : arr) {
+                if (x != null && !x.isNull()) res.add(x.asText());
+            }
+        } catch (Exception ignored) {}
+        return res;
+    }
+
     private static String getPayloadText(String json, String field) {
         try {
             JsonNode root = MAPPER.readTree(json);

@@ -7,6 +7,7 @@ import test.it.utils.log.TestResult;
 import test.it.utils.ws.WsSession;
 
 import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * - теперь AddUser может вернуть 409 не только USER_ALREADY_EXISTS,
  *   но и BLOCKCHAIN_ALREADY_EXISTS / BLOCKCHAIN_STATE_ALREADY_EXISTS.
  * - дополнительно проверяем GetUser (status=200 всегда).
+ * - добавлен SearchUsers: поиск по префиксу (первые 3 символа).
  */
 public class IT_01_AddUser {
 
@@ -48,7 +50,7 @@ public class IT_01_AddUser {
             checkAddUser200or409(r, resp3);
             checkGetUserMustExist(r, ws, TestConfig.LOGIN3(), t);
 
-            // Доп: проверяем case-insensitive поиск
+            // Доп: проверяем case-insensitive поиск в GetUser
             String mixed = mixCase(TestConfig.LOGIN());
             r.ok("GetUser case-insensitive: запрос=" + mixed + " (должен найти " + TestConfig.LOGIN() + ")");
             checkGetUserMustExist(r, ws, mixed, t);
@@ -57,6 +59,12 @@ public class IT_01_AddUser {
             String missing = "NoSuchUser_987654321";
             r.ok("GetUser missing: " + missing);
             checkGetUserMustNotExist(r, ws, missing, t);
+
+            // SearchUsers: один раз ищем по первым трём символам логина USER1
+            String prefix3 = first3(TestConfig.LOGIN());
+            String prefix3Mixed = mixCase(prefix3);
+            r.ok("SearchUsers: prefix(3)='" + prefix3Mixed + "' (должен вернуть список и содержать " + TestConfig.LOGIN() + ")");
+            checkSearchUsersMustContain(r, ws, prefix3Mixed, TestConfig.LOGIN(), t);
 
         } catch (Throwable e) {
             r.fail("IT_01_AddUser упал: " + e.getMessage());
@@ -183,6 +191,37 @@ public class IT_01_AddUser {
         r.ok("GetUser: exists=false (ok)");
     }
 
+    private static void checkSearchUsersMustContain(TestResult r, WsSession ws, String prefix, String expectedLogin, Duration t) {
+        String resp = ws.call("SearchUsers#" + prefix, JsonBuilders.searchUsers(prefix), t);
+
+        int st = JsonParsers.status(resp);
+        if (st != 200) {
+            r.fail("SearchUsers: ожидали status=200, получили " + st + ", resp=" + resp);
+            fail("SearchUsers unexpected status=" + st);
+        }
+
+        List<String> logins = JsonParsers.searchLogins(resp);
+        if (logins == null || logins.isEmpty()) {
+            r.fail("SearchUsers: ожидали непустой список, resp=" + resp);
+            fail("SearchUsers expected non-empty list");
+        }
+
+        // ВАЖНО: ожидаемый логин должен быть в ответе в регистре БД (каноничный expectedLogin)
+        boolean found = false;
+        for (String s : logins) {
+            if (expectedLogin.equals(s)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            r.fail("SearchUsers: ожидаемый логин не найден. expected=" + expectedLogin + ", got=" + logins + ", resp=" + resp);
+            fail("SearchUsers expected login not found");
+        }
+
+        r.ok("SearchUsers: ok, prefix=" + prefix + ", results=" + logins.size() + ", contains=" + expectedLogin);
+    }
+
     private static String canonicalLogin(String anyCaseLogin) {
         if (anyCaseLogin == null) return null;
         String x = anyCaseLogin.trim();
@@ -202,6 +241,13 @@ public class IT_01_AddUser {
         if (x.length() < 2) return x;
         // простой "микс" без рандома, чтобы тест был детерминированный
         return Character.toUpperCase(x.charAt(0)) + x.substring(1).toLowerCase();
+    }
+
+    private static String first3(String s) {
+        if (s == null) return "";
+        String x = s.trim();
+        if (x.length() <= 3) return x;
+        return x.substring(0, 3);
     }
 
     private static boolean isBlank(String s) {
