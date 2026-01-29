@@ -20,10 +20,9 @@ import java.sql.ResultSet;
 import java.util.List;
 
 /**
- * GetFriendsLists — получить 3 списка (для того что бы построить граф связей друзей пользователя):
+ * GetFriendsLists — получить 2 списка:
  *  - out_friends: кому login поставил FRIEND
  *  - in_friends: кто поставил FRIEND этому login
- *  - mutual_friends: FRIEND в обе стороны
  *
  * ВАЖНО:
  * - login в запросе может быть любым регистром
@@ -70,10 +69,9 @@ public class Net_GetFriendsLists_Handler implements JsonMessageHandler {
 
                 int relType = (int) MsgSubType.CONNECTION_FRIEND;
 
-                // 2) Три списка (все логины канонические)
+                // 2) Два списка (логины канонические)
                 List<String> outFriends = dao.listOutgoingByRelTypeCanonical(c, canonicalLogin, relType);
                 List<String> inFriends  = dao.listIncomingByRelTypeCanonical(c, canonicalLogin, relType);
-                List<String> mutual     = dao.listMutualByRelTypeCanonical(c, canonicalLogin, relType);
 
                 Net_GetFriendsLists_Response resp = new Net_GetFriendsLists_Response();
                 resp.setOp(req.getOp());
@@ -83,7 +81,6 @@ public class Net_GetFriendsLists_Handler implements JsonMessageHandler {
                 resp.setLogin(canonicalLogin);
                 resp.setOut_friends(outFriends);
                 resp.setIn_friends(inFriends);
-                resp.setMutual_friends(mutual);
 
                 return resp;
             }
