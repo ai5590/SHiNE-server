@@ -119,3 +119,26 @@ tasks.register('itCleanRun', JavaExec) {
 
     dependsOn testClasses
 }
+
+tasks.register('itDeployServer', JavaExec) {
+    group = "build"
+    description = "Build → upload to server → clean remote data → restart service → run IT against server"
+
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "test.it.IT_DeployRestartAndRunRemoteMain"
+
+    // можно переопределить при запуске:
+    // ./gradlew itDeployServer -Dit.remoteHost=... -Dit.wsUri=...
+    systemProperty "it.remoteHost", System.getProperty("it.remoteHost", "10.147.20.7")
+    systemProperty "it.remoteUser", System.getProperty("it.remoteUser", "user")
+    systemProperty "it.remoteDir",  System.getProperty("it.remoteDir", "/home/user/docker/shine-server")
+    systemProperty "it.remoteDataDir", System.getProperty("it.remoteDataDir", "/home/user/docker/shine-server/data")
+    systemProperty "it.service", System.getProperty("it.service", "shine-server")
+    systemProperty "it.localJar", System.getProperty("it.localJar", "build/libs/shine-server.jar")
+
+    systemProperty "it.wsUri", System.getProperty("it.wsUri", "wss://shineup.me/ws")
+    systemProperty "it.login", System.getProperty("it.login", "anya24")
+
+    dependsOn testClasses
+}
+

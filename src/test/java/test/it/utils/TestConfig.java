@@ -22,7 +22,12 @@ public final class TestConfig {
 
     private TestConfig() {}
 
-    public static final String WS_URI = "ws://localhost:7070/ws";
+    public static final String WS_URI_LOCAL = "ws://localhost:7070/ws";
+    public static final String WS_URI_Server = "wss://shineup.me/ws";
+
+    // по умолчанию LOCAL, но можно переопределить: -Dit.wsUri=...
+    public static final String WS_URI = System.getProperty("it.wsUri", WS_URI_LOCAL);
+
     public static final long TEST_BCH_LIMIT = 50_000_000L;
     public static final String TEST_CLIENT_INFO = "it-tests";
 
