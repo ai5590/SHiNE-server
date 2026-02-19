@@ -42,11 +42,13 @@ import server.logic.ws_protocol.JSON.handlers.userParams.entyties.Net_GetUserPar
 import server.logic.ws_protocol.JSON.handlers.userParams.entyties.Net_ListUserParams_Request;
 import server.logic.ws_protocol.JSON.handlers.userParams.entyties.Net_UpsertUserParam_Request;
 
-// --- subscriptions ---
-
 // --- NEW: connections friends lists ---
 import server.logic.ws_protocol.JSON.handlers.connections.Net_GetFriendsLists_Handler;
 import server.logic.ws_protocol.JSON.handlers.connections.entyties.Net_GetFriendsLists_Request;
+
+// --- NEW: Ping ---
+import server.logic.ws_protocol.JSON.handlers.system.Net_Ping_Handler;
+import server.logic.ws_protocol.JSON.handlers.system.entyties.Net_Ping_Request;
 
 import java.util.Map;
 
@@ -80,7 +82,10 @@ public final class JsonHandlerRegistry {
             Map.entry("ListUserParams",     new Net_ListUserParams_Handler()),
 
             // --- connections ---
-            Map.entry("GetFriendsLists",    new Net_GetFriendsLists_Handler())
+            Map.entry("GetFriendsLists",    new Net_GetFriendsLists_Handler()),
+
+            // --- system ---
+            Map.entry("Ping",               new Net_Ping_Handler())
 
             // --- subscriptions ---
 //            Map.entry("ListSubscribedChannels", new Net_GetSubscribedChannels_Handler())
@@ -109,9 +114,11 @@ public final class JsonHandlerRegistry {
             Map.entry("GetUserParam",       Net_GetUserParam_Request.class),
             Map.entry("ListUserParams",     Net_ListUserParams_Request.class),
 
-
             // --- connections ---
-            Map.entry("GetFriendsLists",    Net_GetFriendsLists_Request.class)
+            Map.entry("GetFriendsLists",    Net_GetFriendsLists_Request.class),
+
+            // --- system ---
+            Map.entry("Ping",               Net_Ping_Request.class)
     );
 
     private JsonHandlerRegistry() { }
