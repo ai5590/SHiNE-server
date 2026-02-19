@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.logic.ws_protocol.Base64Ws;
 import server.logic.ws_protocol.JSON.ConnectionContext;
+import server.logic.ws_protocol.JSON.entyties.Net_Exception_Response;
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
 import server.logic.ws_protocol.JSON.entyties.Net_Response;
 import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
@@ -29,21 +30,10 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * Net_AddBlock_Handler — единый хэндлер добавления блока (JSON).
  *
- * Новый порядок валидации (ТЗ):
- *  1) Достаём из blockchain_state: last_block_number, last_block_hash
- *  2) Проверяем:
- *      - incoming.blockNumber == last+1
- *      - incoming.prevHash32 == last_hash (для genesis last_hash = 32 нулей)
- *  3) Проверяем подпись Ed25519.verify(hash32(preimage), signature64, pubKey)
- *  4) Если тип имеет линию:
- *      - если prevLineNumber != null:
- *           достаём hash блока prevLineNumber из blocks
- *           сравниваем с prevLineHash32 из body
- *  5) Сохраняем блок в blocks + обновляем blockchain_state
- *
- * Важно:
- * - Сетевой протокол AddBlock пока оставляем старые поля (globalNumber/prevGlobalHash),
- *   но внутренняя логика использует НОВЫЙ формат блока.
+ * Изменение (v3):
+ * - ВСЕ ошибки теперь возвращаются в стандартном формате Net_Exception_Response:
+ *   status != 200, payload: { code, message, serverLastGlobalNumber, serverLastGlobalHash }
+ * - Успех — как и раньше Net_AddBlock_Response (status=200).
  */
 public final class Net_AddBlock_Handler implements JsonMessageHandler {
 
@@ -70,26 +60,77 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
                     req.getBlockBytesB64()
             );
 
-            Net_AddBlock_Response resp = new Net_AddBlock_Response();
-            resp.setOp(req.getOp());
-            resp.setRequestId(req.getRequestId());
-
+            // ✅ УСПЕХ: как раньше
             if (r.isOk()) {
+                Net_AddBlock_Response resp = new Net_AddBlock_Response();
+                resp.setOp(req.getOp());
+                resp.setRequestId(req.getRequestId());
                 resp.setStatus(WireCodes.Status.OK);
+
                 resp.setReasonCode(null);
-            } else {
-                resp.setStatus(r.httpStatus);
-                resp.setReasonCode(r.reasonCode);
+                resp.setServerLastGlobalNumber(r.serverLastBlockNumber);
+                resp.setServerLastGlobalHash(r.serverLastBlockHashHex);
+
+                return resp;
             }
 
-            resp.setServerLastGlobalNumber(r.serverLastBlockNumber);
-            resp.setServerLastGlobalHash(r.serverLastBlockHashHex);
-
-            return resp;
+            // ✅ ОШИБКА: стандартный формат (code + message) + доп.поля для ресинка
+            return error(req, r.httpStatus, r.reasonCode, r.serverLastBlockNumber, r.serverLastBlockHashHex);
 
         } finally {
             lock.unlock();
         }
+    }
+
+    private Net_Response error(Net_AddBlock_Request req,
+                               int status,
+                               String reasonCode,
+                               int serverLastNum,
+                               String serverLastHashHex) {
+
+        AddBlockExceptionResponse resp = new AddBlockExceptionResponse();
+        resp.setOp(req.getOp());
+        resp.setRequestId(req.getRequestId());
+        resp.setStatus(status);
+
+        // code — машинный
+        resp.setCode(reasonCode != null ? reasonCode : "add_block_error");
+        // message — человеческий (можешь улучшать тексты как угодно)
+        resp.setMessage(humanMessage(reasonCode));
+
+        // полезно клиенту для ресинка
+        resp.setServerLastGlobalNumber(serverLastNum);
+        resp.setServerLastGlobalHash(serverLastHashHex);
+
+        return resp;
+    }
+
+    private static String humanMessage(String code) {
+        if (code == null) return "Ошибка добавления блока";
+
+        return switch (code) {
+            case "empty_blockchain_name" -> "Пустое имя блокчейна";
+            case "bad_blockchain_name" -> "Некорректное имя блокчейна";
+            case "db_error" -> "Ошибка базы данных";
+            case "blockchain_state_not_found" -> "Состояние блокчейна не найдено";
+            case "state_last_hash_invalid" -> "Повреждено состояние блокчейна: неверный last_block_hash";
+            case "bad_block_base64" -> "Некорректный base64 блока";
+            case "limit_exceeded" -> "Превышен лимит размера блокчейна";
+            case "limit_check_failed" -> "Ошибка проверки лимита размера";
+            case "bad_block_format" -> "Некорректный формат блока";
+            case "bad_block_body" -> "Некорректное тело блока";
+            case "bad_block_number" -> "Некорректный номер блока";
+            case "req_global_mismatch" -> "Номер блока в запросе не совпадает с номером в блоке";
+            case "bad_prev_hash" -> "Некорректный prevHash (цепочка не совпадает)";
+            case "bad_blockchain_key_len" -> "Некорректный ключ блокчейна в состоянии (ожидалось 32 байта)";
+            case "signature_verify_failed" -> "Ошибка проверки подписи блока";
+            case "bad_signature" -> "Некорректная подпись блока";
+            case "prev_line_block_not_found" -> "Не найден блок prevLineNumber для проверки линии";
+            case "bad_prev_line_hash" -> "Некорректный prevLineHash";
+            case "db_error_prev_line_check" -> "Ошибка БД при проверке prevLine";
+            case "internal_error" -> "Внутренняя ошибка сервера при записи блока";
+            default -> "Ошибка: " + code;
+        };
     }
 
     private AddBlockResult addBlock(
@@ -127,9 +168,18 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
         }
 
         final int serverLastNum = st.getLastBlockNumber();
-        final byte[] serverLastHash32 = (serverLastNum < 0)
-                ? new byte[32]
-                : require32OrThrow(st.getLastBlockHash(), "state.last_block_hash is null/invalid");
+
+        final byte[] serverLastHash32;
+        try {
+            serverLastHash32 = (serverLastNum < 0)
+                    ? new byte[32]
+                    : require32OrThrow(st.getLastBlockHash(), "state.last_block_hash is null/invalid");
+        } catch (Exception e) {
+            // ✅ Раньше тут мог вылететь неожиданный 500 через внешний try/catch.
+            log.error("AddBlock: state_last_hash_invalid (login={}, blockchainName={}, serverLastNum={})",
+                    login, blockchainName, serverLastNum, e);
+            return new AddBlockResult(WireCodes.Status.INTERNAL_ERROR, "state_last_hash_invalid", serverLastNum, "");
+        }
 
         final String serverLastHashHex = toHex(serverLastHash32);
 
@@ -215,7 +265,7 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
         } catch (Exception e) {
             log.warn("AddBlock: signature_verify_failed (login={}, blockchainName={}, blockNumber={})",
                     login, blockchainName, block.blockNumber, e);
-            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_signature", serverLastNum, serverLastHashHex);
+            return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "signature_verify_failed", serverLastNum, serverLastHashHex);
         }
 
         if (!sigOk) {
@@ -349,6 +399,31 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
             out[i * 2 + 1] = HEX[v & 0x0F];
         }
         return new String(out);
+    }
+
+    /**
+     * Спец-ответ ошибки AddBlock: стандартный code/message + поля для ресинка.
+     * В wire-формате это окажется внутри payload.
+     */
+    public static final class AddBlockExceptionResponse extends Net_Exception_Response {
+        private Integer serverLastGlobalNumber;
+        private String serverLastGlobalHash;
+
+        public Integer getServerLastGlobalNumber() {
+            return serverLastGlobalNumber;
+        }
+
+        public void setServerLastGlobalNumber(Integer serverLastGlobalNumber) {
+            this.serverLastGlobalNumber = serverLastGlobalNumber;
+        }
+
+        public String getServerLastGlobalHash() {
+            return serverLastGlobalHash;
+        }
+
+        public void setServerLastGlobalHash(String serverLastGlobalHash) {
+            this.serverLastGlobalHash = serverLastGlobalHash;
+        }
     }
 
     private static final class AddBlockResult {
