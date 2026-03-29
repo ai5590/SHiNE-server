@@ -1,7 +1,7 @@
 import { navigate, getRoute, PRE_AUTH_PAGES } from './router.js?v=20260327192619';
 import { renderToolbar } from './components/toolbar.js?v=20260327192619';
 import { renderPageLabel } from './components/page-label.js?v=20260327192619';
-import { state, togglePageLabel } from './state.js?v=20260327192619';
+import { authService, authorizeSession, refreshSessions, state, togglePageLabel } from './state.js?v=20260327192619';
 
 import * as startView from './pages/start-view.js?v=20260327192619';
 import * as entrySettingsView from './pages/entry-settings-view.js?v=20260327192619';
@@ -113,10 +113,28 @@ function renderApp() {
   }
 }
 
-if (!window.location.hash) {
-  navigate(state.session.isAuthorized ? 'profile-view' : 'start-view');
-} else {
-  renderApp();
+async function tryAutoLogin() {
+  if (!state.session.login || !state.session.sessionId) return;
+  try {
+    await authService.reconnect(state.entrySettings.shineServer);
+    const resumed = await authService.resumeSession(state.session.login, state.session.sessionId);
+    authorizeSession(resumed);
+    await refreshSessions();
+  } catch {
+    // silent fallback to auth screens
+  }
 }
 
-window.addEventListener('hashchange', renderApp);
+async function init() {
+  await tryAutoLogin();
+
+  if (!window.location.hash) {
+    navigate(state.session.isAuthorized ? 'profile-view' : 'start-view');
+  } else {
+    renderApp();
+  }
+
+  window.addEventListener('hashchange', renderApp);
+}
+
+init();

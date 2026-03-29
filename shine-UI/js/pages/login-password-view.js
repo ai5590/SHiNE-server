@@ -75,6 +75,7 @@ export function render({ navigate }) {
     try {
       await authService.reconnect(state.entrySettings.shineServer);
       const result = await authService.createSessionForExistingUser(state.loginDraft.login, state.loginDraft.password);
+      await authService.persistSessionMaterial(state.loginDraft.login, result.sessionMaterial);
       authorizeSession(result);
       await refreshSessions();
       setAuthInfo('Успешный вход выполнен.');

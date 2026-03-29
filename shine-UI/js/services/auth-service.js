@@ -4,10 +4,11 @@ import {
   exportEd25519PublicKeyB64,
   exportPkcs8B64,
   generateEd25519Pair,
+  importPkcs8Ed25519,
   randomBase64,
   signBase64,
 } from './crypto-utils.js?v=20260327192619';
-import { saveEncryptedUserSecrets, saveSessionMaterial } from './key-vault.js?v=20260327192619';
+import { loadSessionMaterial, saveEncryptedUserSecrets, saveSessionMaterial } from './key-vault.js?v=20260327192619';
 
 const BCH_SUFFIX = '001';
 
@@ -156,6 +157,48 @@ export class AuthService {
 
   async persistSessionMaterial(login, sessionMaterial) {
     await saveSessionMaterial(login, sessionMaterial);
+  }
+
+
+  async resumeSession(login, preferredSessionId = '') {
+    const cleanLogin = (login || '').trim();
+    if (!cleanLogin) throw new Error('Нет login для авто-входа');
+
+    const sessionMaterial = await loadSessionMaterial(cleanLogin);
+    if (!sessionMaterial?.sessionId || !sessionMaterial?.sessionKey || !sessionMaterial?.sessionPrivPkcs8) {
+      throw new Error('На устройстве нет сохраненного ключа сессии');
+    }
+
+    const targetSessionId = preferredSessionId || sessionMaterial.sessionId;
+    const privateKey = await importPkcs8Ed25519(sessionMaterial.sessionPrivPkcs8);
+
+    const challengeResp = await this.ws.request('SessionChallenge', { sessionId: targetSessionId });
+    if (challengeResp.status !== 200) throw opError('SessionChallenge', challengeResp);
+
+    const nonce = challengeResp?.payload?.nonce;
+    if (!nonce) throw new Error('SessionChallenge: не вернулся nonce');
+
+    const timeMs = Date.now();
+    const preimage = `SESSION_LOGIN:${targetSessionId}:${timeMs}:${nonce}`;
+    const signatureB64 = await signBase64(privateKey, preimage);
+
+    const loginResp = await this.ws.request('SessionLogin', {
+      sessionId: targetSessionId,
+      sessionKey: sessionMaterial.sessionKey,
+      timeMs,
+      signatureB64,
+      clientInfo: makeClientInfo(),
+    });
+    if (loginResp.status !== 200) throw opError('SessionLogin', loginResp);
+
+    const storagePwd = loginResp?.payload?.storagePwd;
+    if (!storagePwd) throw new Error('SessionLogin: не вернулся storagePwd');
+
+    return {
+      login: cleanLogin,
+      sessionId: targetSessionId,
+      storagePwd,
+    };
   }
 
   async listSessions() {
