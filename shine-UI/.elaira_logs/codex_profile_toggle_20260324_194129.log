@@ -1,0 +1,1509 @@
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /home/player/docker/shine-UI
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 019d20b9-0f17-71d1-b203-e6ee9d881c58
+--------
+user
+Project: static UI site for Shine, located at /home/player/docker/shine-UI. Task: modify the existing profile page. There are already 2 existing UI elements related to account status/features; do not create new duplicated elements if suitable ones already exist. Update their behavior so that when the user clicks each of these two existing elements, a menu, popup, modal, or dropdown appears that clearly explains that these controls are used to enable and disable the corresponding functions. The wording should feel natural in Russian UI. Keep the implementation simple and consistent with the current project style. If there is no existing modal system, create a lightweight one in plain HTML/CSS/JS appropriate for a static site. Make sure the interaction works in browser without backend. Update only what is necessary. At the end, print a short summary of changed files.
+mcp startup: no servers
+codex
+Изменю профильную страницу точечно: сначала найду эти два существующих элемента статуса/функций и проверю, есть ли в проекте уже готовый механизм модалок или всплывающих меню, чтобы не дублировать UI.
+exec
+/bin/bash -lc 'rg --files js/pages js/components styles' in /home/player/docker/shine-UI succeeded in 0ms:
+styles/main.css
+styles/components.css
+styles/layout.css
+js/components/header.js
+js/components/page-label.js
+js/components/toolbar.js
+js/pages/channel-view.js
+js/pages/wallet-view.js
+js/pages/messages-list.js
+js/pages/settings-view.js
+js/pages/chat-view.js
+js/pages/notifications-view.js
+js/pages/profile-view.js
+js/pages/network-view.js
+js/pages/channels-list.js
+exec
+/bin/bash -lc 'rg -n "профил|статус|функц|toggle|switch|premium|verified|online|visibility|notifications|privacy|feature|status" js/pages js/components styles index.html' in /home/player/docker/shine-UI succeeded in 0ms:
+js/components/toolbar.js:7:  { pageId: 'notifications-view', label: 'Уведомления', icon: '🔔' },
+js/pages/wallet-view.js:9:  let statusText = 'Данные демонстрационные';
+js/pages/wallet-view.js:11:  const status = document.createElement('p');
+js/pages/wallet-view.js:12:  status.className = 'meta-muted';
+js/pages/wallet-view.js:15:    statusText = text;
+js/pages/wallet-view.js:16:    status.textContent = statusText;
+js/pages/wallet-view.js:67:    updateStatus('Демо-функция: перевод будет добавлен позже');
+js/pages/wallet-view.js:71:    updateStatus('Демо-функция: пополнение будет добавлено позже');
+js/pages/wallet-view.js:74:  updateStatus(statusText);
+js/pages/wallet-view.js:76:  screen.append(card, actions, status);
+js/pages/notifications-view.js:2:import { notifications } from '../mock-data.js';
+js/pages/notifications-view.js:5:export const pageMeta = { id: 'notifications-view', title: 'Уведомления' };
+js/pages/notifications-view.js:8:  const active = state.notificationsTab;
+js/pages/notifications-view.js:9:  const items = notifications[active] || [];
+js/pages/notifications-view.js:29:    <button class="tab-btn ${state.notificationsTab === 'replies' ? 'active' : ''}" data-tab="replies">Ответы</button>
+js/pages/notifications-view.js:30:    <button class="tab-btn ${state.notificationsTab === 'events' ? 'active' : ''}" data-tab="events">События</button>
+js/pages/notifications-view.js:39:      state.notificationsTab = btn.dataset.tab;
+codex
+Нашёл профильный экран. Сейчас открою его и связанные стили, чтобы определить, какие именно два элемента уже используются и можно ли встроить простую подсказку без отдельной тяжёлой инфраструктуры.
+exec
+/bin/bash -lc "sed -n '1,240p' js/pages/profile-view.js" in /home/player/docker/shine-UI succeeded in 0ms:
+import { renderHeader } from '../components/header.js';
+import { profile } from '../mock-data.js';
+
+export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+
+export function render({ navigate }) {
+  const screen = document.createElement('section');
+  screen.className = 'stack';
+
+  screen.append(
+    renderHeader({
+      title: 'Профиль',
+      rightActions: [
+        { label: 'Кошелёк', onClick: () => navigate('wallet-view') },
+        { label: 'Настройки', onClick: () => navigate('settings-view') },
+      ],
+    })
+  );
+
+  const card = document.createElement('div');
+exec
+/bin/bash -lc "sed -n '1,260p' styles/components.css" in /home/player/docker/shine-UI succeeded in 0ms:
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 8px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.header-actions,
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 74px;
+exec
+/bin/bash -lc "sed -n '1,260p' styles/main.css" in /home/player/docker/shine-UI succeeded in 0ms:
+:root {
+  --bg-0: #080b12;
+  --bg-1: #101624;
+  --bg-2: #171f32;
+  --card: #1a2436;
+  --card-soft: #202d45;
+  --line: #2a3854;
+  --text: #ebf1ff;
+  --text-muted: #99a8cb;
+  --accent: #53d8fb;
+  --accent-soft: rgba(83, 216, 251, 0.17);
+  --danger: #ff718f;
+  --ok: #84f4a1;
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --radius-sm: 9px;
+  --shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+  --font-main: "Manrope", "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+codex
+В профиле нашлись два уже существующих элемента: два бейджа в правом верхнем блоке карточки. Глобальной системы модалок нет, поэтому добавлю лёгкий локальный попап для этой страницы и привяжу его именно к этим двум существующим бейджам без новых дублирующих контролов.
+exec
+/bin/bash -lc "sed -n '1,220p' js/mock-data.js" in /home/player/docker/shine-UI succeeded in 0ms:
+export const profile = {
+  login: '@shine.alex',
+  name: 'Алексей Смирнов',
+  avatarInitials: 'АС',
+  phone: '+7 (916) 221-45-88',
+  address: 'Москва, Пресненская наб., 12',
+  email: 'alex.shine@demo.local',
+  socials: '@alexshine / t.me/alexshine',
+  badges: ['Официальный аккаунт', 'Сияющий'],
+};
+
+export const wallet = {
+  balanceSOL: '182.4571',
+  publicAddress: '9sVAXJ2CqP3BrtC6AFeQHhcuWjN1kUyhY7L8pkQJxMZe',
+  updatedAt: 'сегодня, 14:42',
+};
+
+export const directMessages = [
+  {
+    id: 'u1',
+exec
+/bin/bash -lc "sed -n '1,220p' js/app.js" in /home/player/docker/shine-UI succeeded in 0ms:
+import { navigate, getRoute } from './router.js';
+import { renderToolbar } from './components/toolbar.js';
+import { renderPageLabel } from './components/page-label.js';
+
+import * as profileView from './pages/profile-view.js';
+import * as walletView from './pages/wallet-view.js';
+import * as settingsView from './pages/settings-view.js';
+import * as messagesList from './pages/messages-list.js';
+import * as chatView from './pages/chat-view.js';
+import * as channelsList from './pages/channels-list.js';
+import * as channelView from './pages/channel-view.js';
+import * as networkView from './pages/network-view.js';
+import * as notificationsView from './pages/notifications-view.js';
+
+const routes = {
+  'profile-view': profileView,
+  'wallet-view': walletView,
+  'settings-view': settingsView,
+  'messages-list': messagesList,
+  'chat-view': chatView,
+exec
+/bin/bash -lc "sed -n '1,220p' js/router.js" in /home/player/docker/shine-UI succeeded in 0ms:
+const ROOT_PAGES = ['messages-list', 'channels-list', 'network-view', 'notifications-view', 'profile-view'];
+
+export function getRoute() {
+  const raw = window.location.hash.replace(/^#\/?/, '');
+  if (!raw) {
+    return { pageId: 'profile-view', params: {} };
+  }
+
+  const [pageId, dynamicId] = raw.split('/');
+
+  if (pageId === 'chat-view') {
+    return { pageId, params: { chatId: dynamicId || '' } };
+  }
+
+  if (pageId === 'channel-view') {
+    return { pageId, params: { channelId: dynamicId || '' } };
+  }
+
+  return { pageId, params: {} };
+}
+codex
+Вношу минимальные правки в профиль: превращу оба существующих бейджа в кликабельные триггеры и добавлю один переиспользуемый попап с русскими пояснениями для каждого из них.
+file update
+M /home/player/docker/shine-UI/js/pages/profile-view.js
+@@ -6,2 +6,13 @@
+ export function render({ navigate }) {
++  const badgeHelp = {
++    official: {
++      title: 'Официальный аккаунт',
++      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
++    },
++    shine: {
++      title: 'Сияющий',
++      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
++    },
++  };
++
+   const screen = document.createElement('section');
+@@ -25,4 +36,4 @@
+       <div class="stack" style="justify-items:end; text-align:right;">
+-        <div class="badge">✔ ${profile.badges[0]}</div>
+-        <div class="badge alt">✨ ${profile.badges[1]}</div>
++        <button class="badge profile-badge-trigger" type="button" data-badge="official">✔ ${profile.badges[0]}</button>
++        <button class="badge alt profile-badge-trigger" type="button" data-badge="shine">✨ ${profile.badges[1]}</button>
+       </div>
+@@ -41,3 +52,53 @@
+ 
+-  screen.append(card);
++  const modal = document.createElement('div');
++  modal.className = 'profile-help-modal';
++  modal.hidden = true;
++  modal.innerHTML = `
++    <div class="profile-help-backdrop" data-close="true"></div>
++    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title">
++      <div class="row" style="align-items:flex-start;">
++        <div>
++          <div class="meta-muted" style="margin-bottom:4px;">Управление функцией</div>
++          <h3 id="profile-help-title" style="font-size:18px;"></h3>
++        </div>
++        <button class="icon-btn profile-help-close" type="button" aria-label="Закрыть">✕</button>
++      </div>
++      <p class="profile-help-text"></p>
++    </div>
++  `;
++
++  const titleEl = modal.querySelector('#profile-help-title');
++  const textEl = modal.querySelector('.profile-help-text');
++
++  function closeModal() {
++    modal.hidden = true;
++  }
++
++  function openModal(type) {
++    const content = badgeHelp[type];
++    if (!content) return;
++
++    titleEl.textContent = content.title;
++    textEl.textContent = content.text;
++    modal.hidden = false;
++  }
++
++  card.querySelectorAll('.profile-badge-trigger').forEach((button) => {
++    button.addEventListener('click', () => openModal(button.dataset.badge));
++  });
++
++  modal.addEventListener('click', (event) => {
++    const target = event.target;
++    if (target instanceof HTMLElement && (target.dataset.close === 'true' || target.classList.contains('profile-help-close'))) {
++      closeModal();
++    }
++  });
++
++  modal.addEventListener('keydown', (event) => {
++    if (event.key === 'Escape') {
++      closeModal();
++    }
++  });
++
++  screen.append(card, modal);
+   return screen;
+apply_patch(auto_approved=true) exited 0 in 33ms:
+Success. Updated the following files:
+M /home/player/docker/shine-UI/js/pages/profile-view.js
+file update:
+diff --git a//home/player/docker/shine-UI/js/pages/profile-view.js b//home/player/docker/shine-UI/js/pages/profile-view.js
+index 7007e0833f41d9b318fbedabb84ee7d44a42a97e..0ca25dc4432aa0f6a17686bf267fd89bdc32fa91
+--- a//home/player/docker/shine-UI/js/pages/profile-view.js
++++ b//home/player/docker/shine-UI/js/pages/profile-view.js
+@@ -4,6 +4,17 @@
+ export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+ 
+ export function render({ navigate }) {
++  const badgeHelp = {
++    official: {
++      title: 'Официальный аккаунт',
++      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
++    },
++    shine: {
++      title: 'Сияющий',
++      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
++    },
++  };
++
+   const screen = document.createElement('section');
+   screen.className = 'stack';
+ 
+@@ -23,8 +34,8 @@
+     <div class="row">
+       <div class="avatar large">${profile.avatarInitials}</div>
+       <div class="stack" style="justify-items:end; text-align:right;">
+-        <div class="badge">✔ ${profile.badges[0]}</div>
+-        <div class="badge alt">✨ ${profile.badges[1]}</div>
++        <button class="badge profile-badge-trigger" type="button" data-badge="official">✔ ${profile.badges[0]}</button>
++        <button class="badge alt profile-badge-trigger" type="button" data-badge="shine">✨ ${profile.badges[1]}</button>
+       </div>
+     </div>
+     <div>
+@@ -39,6 +50,56 @@
+     </div>
+   `;
+ 
+-  screen.append(card);
++  const modal = document.createElement('div');
++  modal.className = 'profile-help-modal';
++  modal.hidden = true;
++  modal.innerHTML = `
++    <div class="profile-help-backdrop" data-close="true"></div>
++    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title">
++      <div class="row" style="align-items:flex-start;">
++        <div>
++          <div class="meta-muted" style="margin-bottom:4px;">Управление функцией</div>
++          <h3 id="profile-help-title" style="font-size:18px;"></h3>
++        </div>
++        <button class="icon-btn profile-help-close" type="button" aria-label="Закрыть">✕</button>
++      </div>
++      <p class="profile-help-text"></p>
++    </div>
++  `;
++
++  const titleEl = modal.querySelector('#profile-help-title');
++  const textEl = modal.querySelector('.profile-help-text');
++
++  function closeModal() {
++    modal.hidden = true;
++  }
++
++  function openModal(type) {
++    const content = badgeHelp[type];
++    if (!content) return;
++
++    titleEl.textContent = content.title;
++    textEl.textContent = content.text;
++    modal.hidden = false;
++  }
++
++  card.querySelectorAll('.profile-badge-trigger').forEach((button) => {
++    button.addEventListener('click', () => openModal(button.dataset.badge));
++  });
++
++  modal.addEventListener('click', (event) => {
++    const target = event.target;
++    if (target instanceof HTMLElement && (target.dataset.close === 'true' || target.classList.contains('profile-help-close'))) {
++      closeModal();
++    }
++  });
++
++  modal.addEventListener('keydown', (event) => {
++    if (event.key === 'Escape') {
++      closeModal();
++    }
++  });
++
++  screen.append(card, modal);
+   return screen;
+ }
+
+file update:
+diff --git a//home/player/docker/shine-UI/js/pages/profile-view.js b//home/player/docker/shine-UI/js/pages/profile-view.js
+index 7007e0833f41d9b318fbedabb84ee7d44a42a97e..0ca25dc4432aa0f6a17686bf267fd89bdc32fa91
+--- a//home/player/docker/shine-UI/js/pages/profile-view.js
++++ b//home/player/docker/shine-UI/js/pages/profile-view.js
+@@ -4,6 +4,17 @@
+ export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+ 
+ export function render({ navigate }) {
++  const badgeHelp = {
++    official: {
++      title: 'Официальный аккаунт',
++      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
++    },
++    shine: {
++      title: 'Сияющий',
++      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
++    },
++  };
++
+   const screen = document.createElement('section');
+   screen.className = 'stack';
+ 
+@@ -23,8 +34,8 @@
+     <div class="row">
+       <div class="avatar large">${profile.avatarInitials}</div>
+       <div class="stack" style="justify-items:end; text-align:right;">
+-        <div class="badge">✔ ${profile.badges[0]}</div>
+-        <div class="badge alt">✨ ${profile.badges[1]}</div>
++        <button class="badge profile-badge-trigger" type="button" data-badge="official">✔ ${profile.badges[0]}</button>
++        <button class="badge alt profile-badge-trigger" type="button" data-badge="shine">✨ ${profile.badges[1]}</button>
+       </div>
+     </div>
+     <div>
+@@ -39,6 +50,56 @@
+     </div>
+   `;
+ 
+-  screen.append(card);
++  const modal = document.createElement('div');
++  modal.className = 'profile-help-modal';
++  modal.hidden = true;
++  modal.innerHTML = `
++    <div class="profile-help-backdrop" data-close="true"></div>
++    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title">
++      <div class="row" style="align-items:flex-start;">
++        <div>
++          <div class="meta-muted" style="margin-bottom:4px;">Управление функцией</div>
++          <h3 id="profile-help-title" style="font-size:18px;"></h3>
++        </div>
++        <button class="icon-btn profile-help-close" type="button" aria-label="Закрыть">✕</button>
++      </div>
++      <p class="profile-help-text"></p>
++    </div>
++  `;
++
++  const titleEl = modal.querySelector('#profile-help-title');
++  const textEl = modal.querySelector('.profile-help-text');
++
++  function closeModal() {
++    modal.hidden = true;
++  }
++
++  function openModal(type) {
++    const content = badgeHelp[type];
++    if (!content) return;
++
++    titleEl.textContent = content.title;
++    textEl.textContent = content.text;
++    modal.hidden = false;
++  }
++
++  card.querySelectorAll('.profile-badge-trigger').forEach((button) => {
++    button.addEventListener('click', () => openModal(button.dataset.badge));
++  });
++
++  modal.addEventListener('click', (event) => {
++    const target = event.target;
++    if (target instanceof HTMLElement && (target.dataset.close === 'true' || target.classList.contains('profile-help-close'))) {
++      closeModal();
++    }
++  });
++
++  modal.addEventListener('keydown', (event) => {
++    if (event.key === 'Escape') {
++      closeModal();
++    }
++  });
++
++  screen.append(card, modal);
+   return screen;
+ }
+
+file update
+M /home/player/docker/shine-UI/styles/components.css
+@@ -89,2 +89,6 @@
+ 
++.badge.profile-badge-trigger {
++  cursor: pointer;
++}
++
+ .badge.alt {
+@@ -95,2 +99,36 @@
+ 
++.profile-help-modal[hidden] {
++  display: none;
++}
++
++.profile-help-modal {
++  position: fixed;
++  inset: 0;
++  z-index: 20;
++}
++
++.profile-help-backdrop {
++  position: absolute;
++  inset: 0;
++  background: rgba(5, 9, 16, 0.72);
++  backdrop-filter: blur(4px);
++}
++
++.profile-help-dialog {
++  position: absolute;
++  left: 16px;
++  right: 16px;
++  bottom: 24px;
++  display: grid;
++  gap: 12px;
++  padding: 16px;
++  box-shadow: var(--shadow);
++}
++
++.profile-help-text {
++  color: #d8e3ff;
++  line-height: 1.45;
++  font-size: 14px;
++}
++
+ .list-item {
+apply_patch(auto_approved=true) exited 0 in 32ms:
+Success. Updated the following files:
+M /home/player/docker/shine-UI/styles/components.css
+file update:
+diff --git a//home/player/docker/shine-UI/js/pages/profile-view.js b//home/player/docker/shine-UI/js/pages/profile-view.js
+index 7007e0833f41d9b318fbedabb84ee7d44a42a97e..0ca25dc4432aa0f6a17686bf267fd89bdc32fa91
+--- a//home/player/docker/shine-UI/js/pages/profile-view.js
++++ b//home/player/docker/shine-UI/js/pages/profile-view.js
+@@ -4,6 +4,17 @@
+ export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+ 
+ export function render({ navigate }) {
++  const badgeHelp = {
++    official: {
++      title: 'Официальный аккаунт',
++      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
++    },
++    shine: {
++      title: 'Сияющий',
++      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
++    },
++  };
++
+   const screen = document.createElement('section');
+   screen.className = 'stack';
+ 
+@@ -23,8 +34,8 @@
+     <div class="row">
+       <div class="avatar large">${profile.avatarInitials}</div>
+       <div class="stack" style="justify-items:end; text-align:right;">
+-        <div class="badge">✔ ${profile.badges[0]}</div>
+-        <div class="badge alt">✨ ${profile.badges[1]}</div>
++        <button class="badge profile-badge-trigger" type="button" data-badge="official">✔ ${profile.badges[0]}</button>
++        <button class="badge alt profile-badge-trigger" type="button" data-badge="shine">✨ ${profile.badges[1]}</button>
+       </div>
+     </div>
+     <div>
+@@ -39,6 +50,56 @@
+     </div>
+   `;
+ 
+-  screen.append(card);
++  const modal = document.createElement('div');
++  modal.className = 'profile-help-modal';
++  modal.hidden = true;
++  modal.innerHTML = `
++    <div class="profile-help-backdrop" data-close="true"></div>
++    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title">
++      <div class="row" style="align-items:flex-start;">
++        <div>
++          <div class="meta-muted" style="margin-bottom:4px;">Управление функцией</div>
++          <h3 id="profile-help-title" style="font-size:18px;"></h3>
++        </div>
++        <button class="icon-btn profile-help-close" type="button" aria-label="Закрыть">✕</button>
++      </div>
++      <p class="profile-help-text"></p>
++    </div>
++  `;
++
++  const titleEl = modal.querySelector('#profile-help-title');
++  const textEl = modal.querySelector('.profile-help-text');
++
++  function closeModal() {
++    modal.hidden = true;
++  }
++
++  function openModal(type) {
++    const content = badgeHelp[type];
++    if (!content) return;
++
++    titleEl.textContent = content.title;
++    textEl.textContent = content.text;
++    modal.hidden = false;
++  }
++
++  card.querySelectorAll('.profile-badge-trigger').forEach((button) => {
++    button.addEventListener('click', () => openModal(button.dataset.badge));
++  });
++
++  modal.addEventListener('click', (event) => {
++    const target = event.target;
++    if (target instanceof HTMLElement && (target.dataset.close === 'true' || target.classList.contains('profile-help-close'))) {
++      closeModal();
++    }
++  });
++
++  modal.addEventListener('keydown', (event) => {
++    if (event.key === 'Escape') {
++      closeModal();
++    }
++  });
++
++  screen.append(card, modal);
+   return screen;
+ }
+diff --git a//home/player/docker/shine-UI/styles/components.css b//home/player/docker/shine-UI/styles/components.css
+index faa813fb5d384f1a4cfafd860398c8843a4b8841..1c33cf1eb9f441e3974dc9d2d44f5d4ee61b260f
+--- a//home/player/docker/shine-UI/styles/components.css
++++ b//home/player/docker/shine-UI/styles/components.css
+@@ -87,12 +87,50 @@
+   font-weight: 600;
+ }
+ 
++.badge.profile-badge-trigger {
++  cursor: pointer;
++}
++
+ .badge.alt {
+   border-color: rgba(83, 216, 251, 0.35);
+   color: #dff8ff;
+   background: rgba(83, 216, 251, 0.11);
+ }
+ 
++.profile-help-modal[hidden] {
++  display: none;
++}
++
++.profile-help-modal {
++  position: fixed;
++  inset: 0;
++  z-index: 20;
++}
++
++.profile-help-backdrop {
++  position: absolute;
++  inset: 0;
++  background: rgba(5, 9, 16, 0.72);
++  backdrop-filter: blur(4px);
++}
++
++.profile-help-dialog {
++  position: absolute;
++  left: 16px;
++  right: 16px;
++  bottom: 24px;
++  display: grid;
++  gap: 12px;
++  padding: 16px;
++  box-shadow: var(--shadow);
++}
++
++.profile-help-text {
++  color: #d8e3ff;
++  line-height: 1.45;
++  font-size: 14px;
++}
++
+ .list-item {
+   display: grid;
+   grid-template-columns: 44px 1fr auto;
+
+file update:
+diff --git a//home/player/docker/shine-UI/js/pages/profile-view.js b//home/player/docker/shine-UI/js/pages/profile-view.js
+index 7007e0833f41d9b318fbedabb84ee7d44a42a97e..0ca25dc4432aa0f6a17686bf267fd89bdc32fa91
+--- a//home/player/docker/shine-UI/js/pages/profile-view.js
++++ b//home/player/docker/shine-UI/js/pages/profile-view.js
+@@ -4,6 +4,17 @@
+ export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+ 
+ export function render({ navigate }) {
++  const badgeHelp = {
++    official: {
++      title: 'Официальный аккаунт',
++      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
++    },
++    shine: {
++      title: 'Сияющий',
++      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
++    },
++  };
++
+   const screen = document.createElement('section');
+   screen.className = 'stack';
+ 
+@@ -23,8 +34,8 @@
+     <div class="row">
+       <div class="avatar large">${profile.avatarInitials}</div>
+       <div class="stack" style="justify-items:end; text-align:right;">
+-        <div class="badge">✔ ${profile.badges[0]}</div>
+-        <div class="badge alt">✨ ${profile.badges[1]}</div>
++        <button class="badge profile-badge-trigger" type="button" data-badge="official">✔ ${profile.badges[0]}</button>
++        <button class="badge alt profile-badge-trigger" type="button" data-badge="shine">✨ ${profile.badges[1]}</button>
+       </div>
+     </div>
+     <div>
+@@ -39,6 +50,56 @@
+     </div>
+   `;
+ 
+-  screen.append(card);
++  const modal = document.createElement('div');
++  modal.className = 'profile-help-modal';
++  modal.hidden = true;
++  modal.innerHTML = `
++    <div class="profile-help-backdrop" data-close="true"></div>
++    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title">
++      <div class="row" style="align-items:flex-start;">
++        <div>
++          <div class="meta-muted" style="margin-bottom:4px;">Управление функцией</div>
++          <h3 id="profile-help-title" style="font-size:18px;"></h3>
++        </div>
++        <button class="icon-btn profile-help-close" type="button" aria-label="Закрыть">✕</button>
++      </div>
++      <p class="profile-help-text"></p>
++    </div>
++  `;
++
++  const titleEl = modal.querySelector('#profile-help-title');
++  const textEl = modal.querySelector('.profile-help-text');
++
++  function closeModal() {
++    modal.hidden = true;
++  }
++
++  function openModal(type) {
++    const content = badgeHelp[type];
++    if (!content) return;
++
++    titleEl.textContent = content.title;
++    textEl.textContent = content.text;
++    modal.hidden = false;
++  }
++
++  card.querySelectorAll('.profile-badge-trigger').forEach((button) => {
++    button.addEventListener('click', () => openModal(button.dataset.badge));
++  });
++
++  modal.addEventListener('click', (event) => {
++    const target = event.target;
++    if (target instanceof HTMLElement && (target.dataset.close === 'true' || target.classList.contains('profile-help-close'))) {
++      closeModal();
++    }
++  });
++
++  modal.addEventListener('keydown', (event) => {
++    if (event.key === 'Escape') {
++      closeModal();
++    }
++  });
++
++  screen.append(card, modal);
+   return screen;
+ }
+diff --git a//home/player/docker/shine-UI/styles/components.css b//home/player/docker/shine-UI/styles/components.css
+index faa813fb5d384f1a4cfafd860398c8843a4b8841..1c33cf1eb9f441e3974dc9d2d44f5d4ee61b260f
+--- a//home/player/docker/shine-UI/styles/components.css
++++ b//home/player/docker/shine-UI/styles/components.css
+@@ -87,12 +87,50 @@
+   font-weight: 600;
+ }
+ 
++.badge.profile-badge-trigger {
++  cursor: pointer;
++}
++
+ .badge.alt {
+   border-color: rgba(83, 216, 251, 0.35);
+   color: #dff8ff;
+   background: rgba(83, 216, 251, 0.11);
+ }
+ 
++.profile-help-modal[hidden] {
++  display: none;
++}
++
++.profile-help-modal {
++  position: fixed;
++  inset: 0;
++  z-index: 20;
++}
++
++.profile-help-backdrop {
++  position: absolute;
++  inset: 0;
++  background: rgba(5, 9, 16, 0.72);
++  backdrop-filter: blur(4px);
++}
++
++.profile-help-dialog {
++  position: absolute;
++  left: 16px;
++  right: 16px;
++  bottom: 24px;
++  display: grid;
++  gap: 12px;
++  padding: 16px;
++  box-shadow: var(--shadow);
++}
++
++.profile-help-text {
++  color: #d8e3ff;
++  line-height: 1.45;
++  font-size: 14px;
++}
++
+ .list-item {
+   display: grid;
+   grid-template-columns: 44px 1fr auto;
+
+codex
+Добавлю ещё одну небольшую доработку для надёжности: попап должен закрываться по `Esc`, поэтому дам диалогу фокус при открытии, без глобальных обработчиков и лишней инфраструктуры.
+file update
+M /home/player/docker/shine-UI/js/pages/profile-view.js
+@@ -57,3 +57,3 @@
+     <div class="profile-help-backdrop" data-close="true"></div>
+-    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title">
++    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title" tabindex="-1">
+       <div class="row" style="align-items:flex-start;">
+@@ -71,2 +71,3 @@
+   const textEl = modal.querySelector('.profile-help-text');
++  const dialogEl = modal.querySelector('.profile-help-dialog');
+ 
+@@ -83,2 +84,3 @@
+     modal.hidden = false;
++    dialogEl.focus();
+   }
+apply_patch(auto_approved=true) exited 0 in 32ms:
+Success. Updated the following files:
+M /home/player/docker/shine-UI/js/pages/profile-view.js
+file update:
+diff --git a//home/player/docker/shine-UI/js/pages/profile-view.js b//home/player/docker/shine-UI/js/pages/profile-view.js
+index 7007e0833f41d9b318fbedabb84ee7d44a42a97e..0458f140b40b0f2ee7388566def145ce1575e428
+--- a//home/player/docker/shine-UI/js/pages/profile-view.js
++++ b//home/player/docker/shine-UI/js/pages/profile-view.js
+@@ -4,6 +4,17 @@
+ export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+ 
+ export function render({ navigate }) {
++  const badgeHelp = {
++    official: {
++      title: 'Официальный аккаунт',
++      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
++    },
++    shine: {
++      title: 'Сияющий',
++      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
++    },
++  };
++
+   const screen = document.createElement('section');
+   screen.className = 'stack';
+ 
+@@ -23,8 +34,8 @@
+     <div class="row">
+       <div class="avatar large">${profile.avatarInitials}</div>
+       <div class="stack" style="justify-items:end; text-align:right;">
+-        <div class="badge">✔ ${profile.badges[0]}</div>
+-        <div class="badge alt">✨ ${profile.badges[1]}</div>
++        <button class="badge profile-badge-trigger" type="button" data-badge="official">✔ ${profile.badges[0]}</button>
++        <button class="badge alt profile-badge-trigger" type="button" data-badge="shine">✨ ${profile.badges[1]}</button>
+       </div>
+     </div>
+     <div>
+@@ -39,6 +50,58 @@
+     </div>
+   `;
+ 
+-  screen.append(card);
++  const modal = document.createElement('div');
++  modal.className = 'profile-help-modal';
++  modal.hidden = true;
++  modal.innerHTML = `
++    <div class="profile-help-backdrop" data-close="true"></div>
++    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title" tabindex="-1">
++      <div class="row" style="align-items:flex-start;">
++        <div>
++          <div class="meta-muted" style="margin-bottom:4px;">Управление функцией</div>
++          <h3 id="profile-help-title" style="font-size:18px;"></h3>
++        </div>
++        <button class="icon-btn profile-help-close" type="button" aria-label="Закрыть">✕</button>
++      </div>
++      <p class="profile-help-text"></p>
++    </div>
++  `;
++
++  const titleEl = modal.querySelector('#profile-help-title');
++  const textEl = modal.querySelector('.profile-help-text');
++  const dialogEl = modal.querySelector('.profile-help-dialog');
++
++  function closeModal() {
++    modal.hidden = true;
++  }
++
++  function openModal(type) {
++    const content = badgeHelp[type];
++    if (!content) return;
++
++    titleEl.textContent = content.title;
++    textEl.textContent = content.text;
++    modal.hidden = false;
++    dialogEl.focus();
++  }
++
++  card.querySelectorAll('.profile-badge-trigger').forEach((button) => {
++    button.addEventListener('click', () => openModal(button.dataset.badge));
++  });
++
++  modal.addEventListener('click', (event) => {
++    const target = event.target;
++    if (target instanceof HTMLElement && (target.dataset.close === 'true' || target.classList.contains('profile-help-close'))) {
++      closeModal();
++    }
++  });
++
++  modal.addEventListener('keydown', (event) => {
++    if (event.key === 'Escape') {
++      closeModal();
++    }
++  });
++
++  screen.append(card, modal);
+   return screen;
+ }
+diff --git a//home/player/docker/shine-UI/styles/components.css b//home/player/docker/shine-UI/styles/components.css
+index faa813fb5d384f1a4cfafd860398c8843a4b8841..1c33cf1eb9f441e3974dc9d2d44f5d4ee61b260f
+--- a//home/player/docker/shine-UI/styles/components.css
++++ b//home/player/docker/shine-UI/styles/components.css
+@@ -87,12 +87,50 @@
+   font-weight: 600;
+ }
+ 
++.badge.profile-badge-trigger {
++  cursor: pointer;
++}
++
+ .badge.alt {
+   border-color: rgba(83, 216, 251, 0.35);
+   color: #dff8ff;
+   background: rgba(83, 216, 251, 0.11);
+ }
+ 
++.profile-help-modal[hidden] {
++  display: none;
++}
++
++.profile-help-modal {
++  position: fixed;
++  inset: 0;
++  z-index: 20;
++}
++
++.profile-help-backdrop {
++  position: absolute;
++  inset: 0;
++  background: rgba(5, 9, 16, 0.72);
++  backdrop-filter: blur(4px);
++}
++
++.profile-help-dialog {
++  position: absolute;
++  left: 16px;
++  right: 16px;
++  bottom: 24px;
++  display: grid;
++  gap: 12px;
++  padding: 16px;
++  box-shadow: var(--shadow);
++}
++
++.profile-help-text {
++  color: #d8e3ff;
++  line-height: 1.45;
++  font-size: 14px;
++}
++
+ .list-item {
+   display: grid;
+   grid-template-columns: 44px 1fr auto;
+
+file update:
+diff --git a//home/player/docker/shine-UI/js/pages/profile-view.js b//home/player/docker/shine-UI/js/pages/profile-view.js
+index 7007e0833f41d9b318fbedabb84ee7d44a42a97e..0458f140b40b0f2ee7388566def145ce1575e428
+--- a//home/player/docker/shine-UI/js/pages/profile-view.js
++++ b//home/player/docker/shine-UI/js/pages/profile-view.js
+@@ -4,6 +4,17 @@
+ export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+ 
+ export function render({ navigate }) {
++  const badgeHelp = {
++    official: {
++      title: 'Официальный аккаунт',
++      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
++    },
++    shine: {
++      title: 'Сияющий',
++      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
++    },
++  };
++
+   const screen = document.createElement('section');
+   screen.className = 'stack';
+ 
+@@ -23,8 +34,8 @@
+     <div class="row">
+       <div class="avatar large">${profile.avatarInitials}</div>
+       <div class="stack" style="justify-items:end; text-align:right;">
+-        <div class="badge">✔ ${profile.badges[0]}</div>
+-        <div class="badge alt">✨ ${profile.badges[1]}</div>
++        <button class="badge profile-badge-trigger" type="button" data-badge="official">✔ ${profile.badges[0]}</button>
++        <button class="badge alt profile-badge-trigger" type="button" data-badge="shine">✨ ${profile.badges[1]}</button>
+       </div>
+     </div>
+     <div>
+@@ -39,6 +50,58 @@
+     </div>
+   `;
+ 
+-  screen.append(card);
++  const modal = document.createElement('div');
++  modal.className = 'profile-help-modal';
++  modal.hidden = true;
++  modal.innerHTML = `
++    <div class="profile-help-backdrop" data-close="true"></div>
++    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title" tabindex="-1">
++      <div class="row" style="align-items:flex-start;">
++        <div>
++          <div class="meta-muted" style="margin-bottom:4px;">Управление функцией</div>
++          <h3 id="profile-help-title" style="font-size:18px;"></h3>
++        </div>
++        <button class="icon-btn profile-help-close" type="button" aria-label="Закрыть">✕</button>
++      </div>
++      <p class="profile-help-text"></p>
++    </div>
++  `;
++
++  const titleEl = modal.querySelector('#profile-help-title');
++  const textEl = modal.querySelector('.profile-help-text');
++  const dialogEl = modal.querySelector('.profile-help-dialog');
++
++  function closeModal() {
++    modal.hidden = true;
++  }
++
++  function openModal(type) {
++    const content = badgeHelp[type];
++    if (!content) return;
++
++    titleEl.textContent = content.title;
++    textEl.textContent = content.text;
++    modal.hidden = false;
++    dialogEl.focus();
++  }
++
++  card.querySelectorAll('.profile-badge-trigger').forEach((button) => {
++    button.addEventListener('click', () => openModal(button.dataset.badge));
++  });
++
++  modal.addEventListener('click', (event) => {
++    const target = event.target;
++    if (target instanceof HTMLElement && (target.dataset.close === 'true' || target.classList.contains('profile-help-close'))) {
++      closeModal();
++    }
++  });
++
++  modal.addEventListener('keydown', (event) => {
++    if (event.key === 'Escape') {
++      closeModal();
++    }
++  });
++
++  screen.append(card, modal);
+   return screen;
+ }
+diff --git a//home/player/docker/shine-UI/styles/components.css b//home/player/docker/shine-UI/styles/components.css
+index faa813fb5d384f1a4cfafd860398c8843a4b8841..1c33cf1eb9f441e3974dc9d2d44f5d4ee61b260f
+--- a//home/player/docker/shine-UI/styles/components.css
++++ b//home/player/docker/shine-UI/styles/components.css
+@@ -87,12 +87,50 @@
+   font-weight: 600;
+ }
+ 
++.badge.profile-badge-trigger {
++  cursor: pointer;
++}
++
+ .badge.alt {
+   border-color: rgba(83, 216, 251, 0.35);
+   color: #dff8ff;
+   background: rgba(83, 216, 251, 0.11);
+ }
+ 
++.profile-help-modal[hidden] {
++  display: none;
++}
++
++.profile-help-modal {
++  position: fixed;
++  inset: 0;
++  z-index: 20;
++}
++
++.profile-help-backdrop {
++  position: absolute;
++  inset: 0;
++  background: rgba(5, 9, 16, 0.72);
++  backdrop-filter: blur(4px);
++}
++
++.profile-help-dialog {
++  position: absolute;
++  left: 16px;
++  right: 16px;
++  bottom: 24px;
++  display: grid;
++  gap: 12px;
++  padding: 16px;
++  box-shadow: var(--shadow);
++}
++
++.profile-help-text {
++  color: #d8e3ff;
++  line-height: 1.45;
++  font-size: 14px;
++}
++
+ .list-item {
+   display: grid;
+   grid-template-columns: 44px 1fr auto;
+
+exec
+/bin/bash -lc "sed -n '1,260p' js/pages/profile-view.js" in /home/player/docker/shine-UI succeeded in 0ms:
+import { renderHeader } from '../components/header.js';
+import { profile } from '../mock-data.js';
+
+export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+
+export function render({ navigate }) {
+  const badgeHelp = {
+    official: {
+      title: 'Официальный аккаунт',
+      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
+    },
+    shine: {
+      title: 'Сияющий',
+      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
+    },
+  };
+
+  const screen = document.createElement('section');
+  screen.className = 'stack';
+
+exec
+/bin/bash -lc "sed -n '1,240p' styles/components.css" in /home/player/docker/shine-UI succeeded in 0ms:
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 8px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.header-actions,
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 74px;
+exec
+/bin/bash -lc 'git diff -- js/pages/profile-view.js styles/components.css' in /home/player/docker/shine-UI exited 1 in 0ms:
+diff --git a/js/pages/profile-view.js b/styles/components.css
+index 0458f14..1c33cf1 100644
+--- a/js/pages/profile-view.js
++++ b/styles/components.css
+@@ -1,107 +1,351 @@
+-import { renderHeader } from '../components/header.js';
+-import { profile } from '../mock-data.js';
+-
+-export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+-
+-export function render({ navigate }) {
+-  const badgeHelp = {
+-    official: {
+-      title: 'Официальный аккаунт',
+-      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
+-    },
+-    shine: {
+-      title: 'Сияющий',
+-      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
+-    },
+file update:
+diff --git a//home/player/docker/shine-UI/js/pages/profile-view.js b//home/player/docker/shine-UI/js/pages/profile-view.js
+index 7007e0833f41d9b318fbedabb84ee7d44a42a97e..0458f140b40b0f2ee7388566def145ce1575e428
+--- a//home/player/docker/shine-UI/js/pages/profile-view.js
++++ b//home/player/docker/shine-UI/js/pages/profile-view.js
+@@ -4,6 +4,17 @@
+ export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+ 
+ export function render({ navigate }) {
++  const badgeHelp = {
++    official: {
++      title: 'Официальный аккаунт',
++      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
++    },
++    shine: {
++      title: 'Сияющий',
++      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
++    },
++  };
++
+   const screen = document.createElement('section');
+   screen.className = 'stack';
+ 
+@@ -23,8 +34,8 @@
+     <div class="row">
+       <div class="avatar large">${profile.avatarInitials}</div>
+       <div class="stack" style="justify-items:end; text-align:right;">
+-        <div class="badge">✔ ${profile.badges[0]}</div>
+-        <div class="badge alt">✨ ${profile.badges[1]}</div>
++        <button class="badge profile-badge-trigger" type="button" data-badge="official">✔ ${profile.badges[0]}</button>
++        <button class="badge alt profile-badge-trigger" type="button" data-badge="shine">✨ ${profile.badges[1]}</button>
+       </div>
+     </div>
+     <div>
+@@ -39,6 +50,58 @@
+     </div>
+   `;
+ 
+-  screen.append(card);
++  const modal = document.createElement('div');
++  modal.className = 'profile-help-modal';
++  modal.hidden = true;
++  modal.innerHTML = `
++    <div class="profile-help-backdrop" data-close="true"></div>
++    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title" tabindex="-1">
++      <div class="row" style="align-items:flex-start;">
++        <div>
++          <div class="meta-muted" style="margin-bottom:4px;">Управление функцией</div>
++          <h3 id="profile-help-title" style="font-size:18px;"></h3>
++        </div>
++        <button class="icon-btn profile-help-close" type="button" aria-label="Закрыть">✕</button>
++      </div>
++      <p class="profile-help-text"></p>
++    </div>
++  `;
++
++  const titleEl = modal.querySelector('#profile-help-title');
++  const textEl = modal.querySelector('.profile-help-text');
++  const dialogEl = modal.querySelector('.profile-help-dialog');
++
++  function closeModal() {
++    modal.hidden = true;
++  }
++
++  function openModal(type) {
++    const content = badgeHelp[type];
++    if (!content) return;
++
++    titleEl.textContent = content.title;
++    textEl.textContent = content.text;
++    modal.hidden = false;
++    dialogEl.focus();
++  }
++
++  card.querySelectorAll('.profile-badge-trigger').forEach((button) => {
++    button.addEventListener('click', () => openModal(button.dataset.badge));
++  });
++
++  modal.addEventListener('click', (event) => {
++    const target = event.target;
++    if (target instanceof HTMLElement && (target.dataset.close === 'true' || target.classList.contains('profile-help-close'))) {
++      closeModal();
++    }
++  });
++
++  modal.addEventListener('keydown', (event) => {
++    if (event.key === 'Escape') {
++      closeModal();
++    }
++  });
++
++  screen.append(card, modal);
+   return screen;
+ }
+diff --git a//home/player/docker/shine-UI/styles/components.css b//home/player/docker/shine-UI/styles/components.css
+index faa813fb5d384f1a4cfafd860398c8843a4b8841..1c33cf1eb9f441e3974dc9d2d44f5d4ee61b260f
+--- a//home/player/docker/shine-UI/styles/components.css
++++ b//home/player/docker/shine-UI/styles/components.css
+@@ -87,12 +87,50 @@
+   font-weight: 600;
+ }
+ 
++.badge.profile-badge-trigger {
++  cursor: pointer;
++}
++
+ .badge.alt {
+   border-color: rgba(83, 216, 251, 0.35);
+   color: #dff8ff;
+   background: rgba(83, 216, 251, 0.11);
+ }
+ 
++.profile-help-modal[hidden] {
++  display: none;
++}
++
++.profile-help-modal {
++  position: fixed;
++  inset: 0;
++  z-index: 20;
++}
++
++.profile-help-backdrop {
++  position: absolute;
++  inset: 0;
++  background: rgba(5, 9, 16, 0.72);
++  backdrop-filter: blur(4px);
++}
++
++.profile-help-dialog {
++  position: absolute;
++  left: 16px;
++  right: 16px;
++  bottom: 24px;
++  display: grid;
++  gap: 12px;
++  padding: 16px;
++  box-shadow: var(--shadow);
++}
++
++.profile-help-text {
++  color: #d8e3ff;
++  line-height: 1.45;
++  font-size: 14px;
++}
++
+ .list-item {
+   display: grid;
+   grid-template-columns: 44px 1fr auto;
+
+codex
+Изменил профильную страницу так, чтобы два уже существующих бейджа работали как триггеры подсказок, без добавления дублирующих элементов. По клику на `Официальный аккаунт` и `Сияющий` теперь открывается лёгкий pop-up с естественным русским текстом о том, что эти элементы используются для включения и отключения соответствующих функций. Закрытие работает по кнопке, по клику на фон и по `Esc`.
+
+Правки внесены в [js/pages/profile-view.js](/home/player/docker/shine-UI/js/pages/profile-view.js) и [styles/components.css](/home/player/docker/shine-UI/styles/components.css). Глобальную систему модалок не добавлял, сделал локальную и простую реализацию под текущий статический SPA-стек. В браузере дополнительный бэкенд не нужен.
+
+Краткая сводка файлов:
+- [js/pages/profile-view.js](/home/player/docker/shine-UI/js/pages/profile-view.js)
+- [styles/components.css](/home/player/docker/shine-UI/styles/components.css)
+
+Проверку в реальном браузере здесь не запускал.
+file update:
+diff --git a//home/player/docker/shine-UI/js/pages/profile-view.js b//home/player/docker/shine-UI/js/pages/profile-view.js
+index 7007e0833f41d9b318fbedabb84ee7d44a42a97e..0458f140b40b0f2ee7388566def145ce1575e428
+--- a//home/player/docker/shine-UI/js/pages/profile-view.js
++++ b//home/player/docker/shine-UI/js/pages/profile-view.js
+@@ -4,6 +4,17 @@
+ export const pageMeta = { id: 'profile-view', title: 'Профиль' };
+ 
+ export function render({ navigate }) {
++  const badgeHelp = {
++    official: {
++      title: 'Официальный аккаунт',
++      text: 'Эта настройка включает или отключает отметку официального аккаунта в профиле. Используйте её, когда нужно показать или скрыть подтверждённый статус.',
++    },
++    shine: {
++      title: 'Сияющий',
++      text: 'Этот переключатель включает или отключает режим «Сияющий». Он управляет отображением дополнительного визуального акцента для профиля.',
++    },
++  };
++
+   const screen = document.createElement('section');
+   screen.className = 'stack';
+ 
+@@ -23,8 +34,8 @@
+     <div class="row">
+       <div class="avatar large">${profile.avatarInitials}</div>
+       <div class="stack" style="justify-items:end; text-align:right;">
+-        <div class="badge">✔ ${profile.badges[0]}</div>
+-        <div class="badge alt">✨ ${profile.badges[1]}</div>
++        <button class="badge profile-badge-trigger" type="button" data-badge="official">✔ ${profile.badges[0]}</button>
++        <button class="badge alt profile-badge-trigger" type="button" data-badge="shine">✨ ${profile.badges[1]}</button>
+       </div>
+     </div>
+     <div>
+@@ -39,6 +50,58 @@
+     </div>
+   `;
+ 
+-  screen.append(card);
++  const modal = document.createElement('div');
++  modal.className = 'profile-help-modal';
++  modal.hidden = true;
++  modal.innerHTML = `
++    <div class="profile-help-backdrop" data-close="true"></div>
++    <div class="profile-help-dialog card" role="dialog" aria-modal="true" aria-labelledby="profile-help-title" tabindex="-1">
++      <div class="row" style="align-items:flex-start;">
++        <div>
++          <div class="meta-muted" style="margin-bottom:4px;">Управление функцией</div>
++          <h3 id="profile-help-title" style="font-size:18px;"></h3>
++        </div>
++        <button class="icon-btn profile-help-close" type="button" aria-label="Закрыть">✕</button>
++      </div>
++      <p class="profile-help-text"></p>
++    </div>
++  `;
++
++  const titleEl = modal.querySelector('#profile-help-title');
++  const textEl = modal.querySelector('.profile-help-text');
++  const dialogEl = modal.querySelector('.profile-help-dialog');
++
++  function closeModal() {
++    modal.hidden = true;
++  }
++
++  function openModal(type) {
++    const content = badgeHelp[type];
++    if (!content) return;
++
++    titleEl.textContent = content.title;
++    textEl.textContent = content.text;
++    modal.hidden = false;
++    dialogEl.focus();
++  }
++
++  card.querySelectorAll('.profile-badge-trigger').forEach((button) => {
++    button.addEventListener('click', () => openModal(button.dataset.badge));
++  });
++
++  modal.addEventListener('click', (event) => {
++    const target = event.target;
++    if (target instanceof HTMLElement && (target.dataset.close === 'true' || target.classList.contains('profile-help-close'))) {
++      closeModal();
++    }
++  });
++
++  modal.addEventListener('keydown', (event) => {
++    if (event.key === 'Escape') {
++      closeModal();
++    }
++  });
++
++  screen.append(card, modal);
+   return screen;
+ }
+diff --git a//home/player/docker/shine-UI/styles/components.css b//home/player/docker/shine-UI/styles/components.css
+index faa813fb5d384f1a4cfafd860398c8843a4b8841..1c33cf1eb9f441e3974dc9d2d44f5d4ee61b260f
+--- a//home/player/docker/shine-UI/styles/components.css
++++ b//home/player/docker/shine-UI/styles/components.css
+@@ -87,12 +87,50 @@
+   font-weight: 600;
+ }
+ 
++.badge.profile-badge-trigger {
++  cursor: pointer;
++}
++
+ .badge.alt {
+   border-color: rgba(83, 216, 251, 0.35);
+   color: #dff8ff;
+   background: rgba(83, 216, 251, 0.11);
+ }
+ 
++.profile-help-modal[hidden] {
++  display: none;
++}
++
++.profile-help-modal {
++  position: fixed;
++  inset: 0;
++  z-index: 20;
++}
++
++.profile-help-backdrop {
++  position: absolute;
++  inset: 0;
++  background: rgba(5, 9, 16, 0.72);
++  backdrop-filter: blur(4px);
++}
++
++.profile-help-dialog {
++  position: absolute;
++  left: 16px;
++  right: 16px;
++  bottom: 24px;
++  display: grid;
++  gap: 12px;
++  padding: 16px;
++  box-shadow: var(--shadow);
++}
++
++.profile-help-text {
++  color: #d8e3ff;
++  line-height: 1.45;
++  font-size: 14px;
++}
++
+ .list-item {
+   display: grid;
+   grid-template-columns: 44px 1fr auto;
+
+tokens used
+28 379
+Изменил профильную страницу так, чтобы два уже существующих бейджа работали как триггеры подсказок, без добавления дублирующих элементов. По клику на `Официальный аккаунт` и `Сияющий` теперь открывается лёгкий pop-up с естественным русским текстом о том, что эти элементы используются для включения и отключения соответствующих функций. Закрытие работает по кнопке, по клику на фон и по `Esc`.
+
+Правки внесены в [js/pages/profile-view.js](/home/player/docker/shine-UI/js/pages/profile-view.js) и [styles/components.css](/home/player/docker/shine-UI/styles/components.css). Глобальную систему модалок не добавлял, сделал локальную и простую реализацию под текущий статический SPA-стек. В браузере дополнительный бэкенд не нужен.
+
+Краткая сводка файлов:
+- [js/pages/profile-view.js](/home/player/docker/shine-UI/js/pages/profile-view.js)
+- [styles/components.css](/home/player/docker/shine-UI/styles/components.css)
+
+Проверку в реальном браузере здесь не запускал.
