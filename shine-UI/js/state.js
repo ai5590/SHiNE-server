@@ -37,7 +37,7 @@ export const state = {
   notificationsTab: 'replies',
   pageLabelCollapsed: false,
   session: {
-    isAuthorized: Boolean(storedSession?.isAuthorized),
+    isAuthorized: false,
     login: storedSession?.login || '',
     sessionId: storedSession?.sessionId || '',
     storagePwdInMemory: '',
@@ -59,9 +59,11 @@ export const state = {
     password: '',
     sessionId: '',
     storagePwd: '',
+    pendingKeyBundle: null,
+    pendingSessionMaterial: null,
   },
   loginDraft: {
-    login: '',
+    login: storedSession?.login || '',
     password: '',
   },
   registrationPayment: {

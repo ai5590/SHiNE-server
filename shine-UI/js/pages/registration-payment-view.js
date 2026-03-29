@@ -1,5 +1,11 @@
 import { renderHeader } from '../components/header.js?v=20260327192619';
-import { refreshRegistrationBalance, state } from '../state.js?v=20260327192619';
+import {
+  authService,
+  refreshRegistrationBalance,
+  setAuthError,
+  setAuthInfo,
+  state,
+} from '../state.js?v=20260327192619';
 
 export const pageMeta = { id: 'registration-payment-view', title: 'Оплата регистрации', showAppChrome: false };
 
@@ -66,8 +72,28 @@ export function render({ navigate }) {
   submitButton.className = 'primary-btn';
   submitButton.type = 'button';
   submitButton.textContent = 'Зарегистрироваться';
-  submitButton.addEventListener('click', () => {
-    navigate('registration-keys-view');
+  submitButton.addEventListener('click', async () => {
+    try {
+      submitButton.disabled = true;
+      submitButton.textContent = 'Регистрация...';
+
+      await authService.reconnect(state.entrySettings.shineServer);
+      const result = await authService.registerUser(state.registrationDraft.login, state.registrationDraft.password);
+      state.registrationDraft.sessionId = result.sessionId;
+      state.registrationDraft.storagePwd = result.storagePwd;
+      state.registrationDraft.pendingKeyBundle = result.keyBundle;
+      state.registrationDraft.pendingSessionMaterial = result.sessionMaterial;
+
+      setAuthInfo(`Отлично, вы зарегистрировались: ${result.login}`);
+      window.alert('Отлично, вы зарегистрировались');
+      navigate('registration-keys-view');
+    } catch (error) {
+      setAuthError(error.message);
+      window.alert(error.message);
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = 'Зарегистрироваться';
+    }
   });
 
   card.innerHTML = `

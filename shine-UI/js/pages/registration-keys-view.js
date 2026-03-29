@@ -1,5 +1,6 @@
 import { renderHeader } from '../components/header.js?v=20260327192619';
 import {
+  authService,
   authorizeSession,
   refreshSessions,
   setAuthError,
@@ -21,11 +22,24 @@ export function render({ navigate }) {
 
   const title = document.createElement('p');
   title.className = 'auth-copy';
-  title.textContent = `Поздравляю, логин ${displayLogin} зарегистрирован.`;
+  title.textContent = `Отлично, логин ${displayLogin} зарегистрирован.`;
 
   const question = document.createElement('p');
   question.className = 'auth-copy';
-  question.textContent = 'Ключи считаются из пароля (SHA-256 + суффиксы root.key/dev.key/bch.key). В IndexedDB сохраняются только выбранные ключи и всегда device key.';
+  question.textContent = 'Какие ключи сохранить в зашифрованном контейнере IndexedDB?';
+
+  const rootToggle = document.createElement('input');
+  rootToggle.type = 'checkbox';
+  rootToggle.checked = state.keyStorage.saveRoot;
+
+  const blockchainToggle = document.createElement('input');
+  blockchainToggle.type = 'checkbox';
+  blockchainToggle.checked = state.keyStorage.saveBlockchain;
+
+  const deviceToggle = document.createElement('input');
+  deviceToggle.type = 'checkbox';
+  deviceToggle.checked = true;
+  deviceToggle.disabled = true;
 
   const rootRow = document.createElement('label');
   rootRow.className = 'checkbox-row';
@@ -37,7 +51,7 @@ export function render({ navigate }) {
 
   const deviceRow = document.createElement('label');
   deviceRow.className = 'checkbox-row';
-  deviceRow.innerHTML = '<input type="checkbox" checked disabled /> <span>device key</span>';
+  deviceRow.append(deviceToggle, document.createTextNode('device key (всегда)'));
 
   card.append(title, question, rootRow, deviceRow, blockchainRow);
 
@@ -56,13 +70,34 @@ export function render({ navigate }) {
   okButton.textContent = 'OK';
   okButton.addEventListener('click', async () => {
     try {
+      if (!state.registrationDraft.pendingKeyBundle || !state.registrationDraft.pendingSessionMaterial) {
+        throw new Error('Сначала завершите шаг регистрации на предыдущем экране');
+      }
+
+      state.keyStorage.saveRoot = rootToggle.checked;
+      state.keyStorage.saveBlockchain = blockchainToggle.checked;
+
+      await authService.persistSelectedKeys(
+        state.registrationDraft.login,
+        state.registrationDraft.storagePwd,
+        state.registrationDraft.pendingKeyBundle,
+        {
+          saveRoot: state.keyStorage.saveRoot,
+          saveBlockchain: state.keyStorage.saveBlockchain,
+        },
+      );
+      await authService.persistSessionMaterial(
+        state.registrationDraft.login,
+        state.registrationDraft.pendingSessionMaterial,
+      );
+
       authorizeSession({
         login: state.registrationDraft.login,
         sessionId: state.registrationDraft.sessionId,
         storagePwd: state.registrationDraft.storagePwd,
       });
       await refreshSessions();
-      setAuthInfo('Регистрация завершена, список сессий загружен.');
+      setAuthInfo('Ключи сохранены, регистрация завершена.');
       navigate('profile-view');
     } catch (error) {
       setAuthError(error.message);

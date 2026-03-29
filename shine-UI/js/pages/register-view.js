@@ -1,12 +1,5 @@
 import { renderHeader } from '../components/header.js?v=20260327192619';
-import {
-  authService,
-  clearAuthMessages,
-  setAuthBusy,
-  setAuthError,
-  setAuthInfo,
-  state,
-} from '../state.js?v=20260327192619';
+import { authService, state } from '../state.js?v=20260327192619';
 
 export const pageMeta = { id: 'register-view', title: 'Зарегистрироваться', showAppChrome: false };
 
@@ -39,20 +32,6 @@ export function render({ navigate }) {
   checkButton.className = 'ghost-btn';
   checkButton.type = 'button';
   checkButton.textContent = 'Проверить логин';
-
-  const saveRootRow = document.createElement('label');
-  saveRootRow.className = 'checkbox-row';
-  saveRootRow.innerHTML = `<input type="checkbox" ${state.keyStorage.saveRoot ? 'checked' : ''} /> <span>Сохранить root key</span>`;
-  const saveRootInput = saveRootRow.querySelector('input');
-
-  const saveBchRow = document.createElement('label');
-  saveBchRow.className = 'checkbox-row';
-  saveBchRow.innerHTML = `<input type="checkbox" ${state.keyStorage.saveBlockchain ? 'checked' : ''} /> <span>Сохранить blockchain key</span>`;
-  const saveBchInput = saveBchRow.querySelector('input');
-
-  const saveDevRow = document.createElement('label');
-  saveDevRow.className = 'checkbox-row';
-  saveDevRow.innerHTML = '<input type="checkbox" checked disabled /> <span>device key сохраняется всегда</span>';
 
   async function runAvailabilityCheck() {
     const login = loginInput.value.trim();
@@ -87,7 +66,7 @@ export function render({ navigate }) {
   `;
   form.children[0].append(loginInput);
   form.children[1].append(passwordInput);
-  form.append(checkButton, statusText, saveRootRow, saveBchRow, saveDevRow);
+  form.append(checkButton, statusText);
 
   const actions = document.createElement('div');
   actions.className = 'auth-footer-actions';
@@ -105,49 +84,19 @@ export function render({ navigate }) {
   nextButton.addEventListener('click', async () => {
     const isFree = await runAvailabilityCheck();
     if (!isFree) {
-      setAuthError('Выберите свободный логин');
+      window.alert('Выберите свободный логин');
       return;
     }
 
     state.registrationDraft.login = loginInput.value.trim();
     state.registrationDraft.password = passwordInput.value;
-    state.keyStorage.saveRoot = saveRootInput.checked;
-    state.keyStorage.saveBlockchain = saveBchInput.checked;
-    state.keyStorage.saveDevice = true;
 
     if (!state.registrationDraft.password) {
       window.alert('Введите пароль');
       return;
     }
 
-    setAuthBusy(true);
-    nextButton.disabled = true;
-    nextButton.textContent = 'Создание...';
-    setAuthError('');
-
-    try {
-      await authService.reconnect(state.entrySettings.shineServer);
-      const result = await authService.register(
-        state.registrationDraft.login,
-        state.registrationDraft.password,
-        {
-          saveRoot: state.keyStorage.saveRoot,
-          saveBlockchain: state.keyStorage.saveBlockchain,
-          saveDevice: true,
-        },
-      );
-      state.registrationDraft.sessionId = result.sessionId;
-      state.registrationDraft.storagePwd = result.storagePwd;
-      setAuthInfo(`Пользователь ${result.login} зарегистрирован`);
-      navigate('registration-keys-view');
-    } catch (error) {
-      setAuthError(error.message);
-      window.alert(error.message);
-    } finally {
-      setAuthBusy(false);
-      nextButton.disabled = false;
-      nextButton.textContent = 'Далее';
-    }
+    navigate('registration-payment-view');
   });
 
   actions.append(backButton, nextButton);
