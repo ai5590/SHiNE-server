@@ -43,11 +43,11 @@ export function render({ navigate }) {
 
   const rootRow = document.createElement('label');
   rootRow.className = 'checkbox-row';
-  rootRow.append(rootToggle, document.createTextNode('root key'));
+  rootRow.innerHTML = `<input type="checkbox" ${state.keyStorage.saveRoot ? 'checked' : ''} disabled /> <span>root key</span>`;
 
   const blockchainRow = document.createElement('label');
   blockchainRow.className = 'checkbox-row';
-  blockchainRow.append(blockchainToggle, document.createTextNode('blockchain key'));
+  blockchainRow.innerHTML = `<input type="checkbox" ${state.keyStorage.saveBlockchain ? 'checked' : ''} disabled /> <span>blockchain key</span>`;
 
   const deviceRow = document.createElement('label');
   deviceRow.className = 'checkbox-row';
@@ -110,7 +110,7 @@ export function render({ navigate }) {
   screen.append(
     renderHeader({
       title: 'Сохранение ключей',
-      leftAction: { label: '←', onClick: () => navigate('registration-payment-view') },
+      leftAction: { label: '←', onClick: () => navigate('start-view') },
     }),
     card,
     actions,

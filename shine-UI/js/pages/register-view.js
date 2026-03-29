@@ -7,6 +7,8 @@ export function render({ navigate }) {
   const screen = document.createElement('section');
   screen.className = 'stack';
 
+  clearAuthMessages();
+
   const form = document.createElement('div');
   form.className = 'card stack';
 
