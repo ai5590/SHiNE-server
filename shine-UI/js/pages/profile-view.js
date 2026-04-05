@@ -1,5 +1,6 @@
 import { renderHeader } from '../components/header.js?v=20260403081123';
 import { profile } from '../mock-data.js?v=20260403081123';
+import { state } from '../state.js?v=20260403081123';
 
 export const pageMeta = { id: 'profile-view', title: 'Профиль' };
 
@@ -40,7 +41,7 @@ export function render({ navigate }) {
     </div>
     <div>
       <h2 style="font-size:22px; margin-bottom:2px;">${profile.name}</h2>
-      <p class="meta-muted">${profile.login}</p>
+      <p class="meta-muted">${state.session.login || profile.login}</p>
     </div>
     <div class="stack" style="gap:8px;">
       <div class="card" style="padding:10px;"><span class="meta-muted">Телефон:</span> ${profile.phone}</div>

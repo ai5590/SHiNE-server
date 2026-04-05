@@ -38,7 +38,7 @@ export function render({ navigate, route }) {
   if (!isContact) {
     const warning = document.createElement('div');
     warning.className = 'card stack';
-    warning.innerHTML = '<p class="meta-muted">Пользователь не в контактах. Можно отвечать, если он уже писал вам.</p>';
+    warning.innerHTML = '<p class="meta-muted">Пользователь не в контактах. Можно писать ему сразу (MVP).</p>';
     const btn = document.createElement('button');
     btn.className = 'primary-btn';
     btn.type = 'button';

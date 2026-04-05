@@ -2,8 +2,6 @@ package server.logic.ws_protocol.JSON.messages;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import server.logic.ws_protocol.JSON.ActiveConnectionsRegistry;
 import server.logic.ws_protocol.JSON.ConnectionContext;
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
@@ -16,14 +14,11 @@ import server.logic.ws_protocol.JSON.push.WsEventSender;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.JSON.utils.NetIdGenerator;
 import server.logic.ws_protocol.WireCodes;
-import shine.db.MsgSubType;
-import shine.db.dao.ConnectionsStateDAO;
 import shine.db.dao.DirectMessagesDAO;
 import shine.db.dao.PushTokensDAO;
 import shine.db.entities.DirectMessageEntry;
 import shine.db.entities.PushTokenEntry;
 
-import java.sql.Connection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,7 +26,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 public class Net_SendDirectMessage_Handler implements JsonMessageHandler {
-    private static final Logger log = LoggerFactory.getLogger(Net_SendDirectMessage_Handler.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Override
@@ -122,20 +116,8 @@ public class Net_SendDirectMessage_Handler implements JsonMessageHandler {
         return resp;
     }
 
-    private boolean canSend(String from, String to) throws Exception {
-        if (from.equalsIgnoreCase(to)) return true;
-        try (Connection c = shine.db.SqliteDbController.getInstance().getConnection()) {
-            List<String> contacts = ConnectionsStateDAO.getInstance().listOutgoingByRelTypeCanonical(c, from, MsgSubType.CONNECTION_CONTACT);
-            if (contacts.stream().anyMatch(v -> v.equalsIgnoreCase(to))) {
-                return true;
-            }
-            if (DirectMessagesDAO.getInstance().existsFromTo(to, from)) {
-                return true;
-            }
-            return false;
-        } catch (Exception e) {
-            log.warn("canSend fallback false due error", e);
-            return false;
-        }
+    private boolean canSend(String from, String to) {
+        return from != null && !from.isBlank() && to != null && !to.isBlank();
     }
 }
+
