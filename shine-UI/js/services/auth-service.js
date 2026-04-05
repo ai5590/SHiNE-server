@@ -264,6 +264,13 @@ export class AuthService {
     return response.payload || {};
   }
 
+
+  async addCloseFriend(toLogin) {
+    const response = await this.ws.request('AddCloseFriend', { toLogin });
+    if (response.status !== 200) throw opError('AddCloseFriend', response);
+    return response.payload || {};
+  }
+
   async getUserConnectionsGraph(login) {
     const response = await this.ws.request('GetUserConnectionsGraph', { login });
     if (response.status !== 200) throw opError('GetUserConnectionsGraph', response);

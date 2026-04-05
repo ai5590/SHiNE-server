@@ -125,4 +125,32 @@ public final class ConnectionsStateDAO {
         }
         return out;
     }
+
+    public void upsertRelation(Connection c,
+                               String login,
+                               int relType,
+                               String toLogin,
+                               String toBchName,
+                               Integer toBlockNumber,
+                               byte[] toBlockHash) throws SQLException {
+        String sql = """
+            INSERT INTO connections_state (login, rel_type, to_login, to_bch_name, to_block_number, to_block_hash)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(login, rel_type, to_login) DO UPDATE SET
+                to_bch_name=excluded.to_bch_name,
+                to_block_number=excluded.to_block_number,
+                to_block_hash=excluded.to_block_hash
+            """;
+
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, login);
+            ps.setInt(2, relType);
+            ps.setString(3, toLogin);
+            ps.setString(4, toBchName);
+            if (toBlockNumber == null) ps.setNull(5, java.sql.Types.INTEGER); else ps.setInt(5, toBlockNumber);
+            ps.setBytes(6, toBlockHash);
+            ps.executeUpdate();
+        }
+    }
+
 }

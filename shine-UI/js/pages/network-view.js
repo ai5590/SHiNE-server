@@ -10,6 +10,65 @@ function makeNode(name, cls = '') {
   return n;
 }
 
+function showAddCloseFriendModal({ onAdded }) {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal" id="close-friend-modal">
+      <div class="modal-card stack">
+        <h3 style="font-size:18px;">Добавить близкого друга</h3>
+        <input class="input" id="close-friend-query" placeholder="Логин или начало логина" maxlength="80" />
+        <div class="row" style="gap:8px;">
+          <button class="primary-btn" id="close-friend-search">Поиск</button>
+          <button class="ghost-btn" id="close-friend-back">Назад</button>
+        </div>
+        <div class="stack" id="close-friend-results"></div>
+      </div>
+    </div>
+  `;
+
+  const close = () => { root.innerHTML = ''; };
+  root.querySelector('#close-friend-back').addEventListener('click', close);
+
+  root.querySelector('#close-friend-search').addEventListener('click', async () => {
+    const query = root.querySelector('#close-friend-query').value.trim();
+    const holder = root.querySelector('#close-friend-results');
+    holder.innerHTML = '<p class="meta-muted">Поиск...</p>';
+
+    try {
+      const logins = await authService.searchUsers(query);
+      holder.innerHTML = '';
+      if (!logins.length) {
+        holder.innerHTML = '<p class="meta-muted">Пользователи не найдены.</p>';
+        return;
+      }
+
+      logins.forEach((login) => {
+        const row = document.createElement('article');
+        row.className = 'list-item';
+        row.innerHTML = `
+          <div class="avatar">${(login[0] || '?').toUpperCase()}</div>
+          <div><strong>${login}</strong><p class="meta-muted" style="margin-top:4px;">Пользователь</p></div>
+          <div class="meta-muted">Добавить</div>
+        `;
+        row.addEventListener('click', async () => {
+          const yes = window.confirm(`Добавить ${login} в близкие друзья?`);
+          if (!yes) return;
+          try {
+            await authService.addCloseFriend(login);
+            close();
+            if (typeof onAdded === 'function') await onAdded();
+          } catch (e) {
+            window.alert(`Ошибка добавления: ${e.message || 'unknown'}`);
+          }
+        });
+        holder.append(row);
+      });
+    } catch (e) {
+      holder.innerHTML = `<p class="meta-muted">Ошибка поиска: ${e.message || 'unknown'}</p>`;
+    }
+  });
+}
+
 export function render() {
   const screen = document.createElement('section');
   screen.className = 'stack';
@@ -62,14 +121,20 @@ export function render() {
       right.forEach((name, i) => svg.append(mk(name, 'right', i, right.length)));
       board.prepend(svg);
 
-      note.textContent = 'Нажмите на любой узел, чтобы построить связи выбранного пользователя.';
+      note.textContent = 'Нажмите на узел, чтобы перестроить связи вокруг выбранного пользователя.';
     } catch (e) {
       note.textContent = `Ошибка загрузки связей: ${e.message || 'unknown'}`;
     }
   };
 
+  const addBtn = document.createElement('button');
+  addBtn.className = 'primary-btn';
+  addBtn.type = 'button';
+  addBtn.textContent = 'Добавить близкого друга';
+  addBtn.addEventListener('click', () => showAddCloseFriendModal({ onAdded: () => load() }));
+
   load();
 
-  screen.append(renderHeader({ title: 'Связи' }), board, note);
+  screen.append(renderHeader({ title: 'Связи' }), addBtn, board, note);
   return screen;
 }
