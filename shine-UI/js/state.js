@@ -41,6 +41,8 @@ function createInitialState({ withStoredSession = true } = {}) {
   const storedSession = withStoredSession ? loadStoredSession() : null;
   return {
     chats: clone(chatMessages),
+    contacts: [],
+    incomingDedup: {},
     notificationsTab: 'replies',
     pageLabelCollapsed: false,
     session: {
@@ -119,6 +121,20 @@ export function addChatMessage(chatId, text) {
   const message = text.trim();
   if (!message) return;
   getChatMessages(chatId).push({ from: 'out', text: message });
+}
+
+
+export function addIncomingMessage(chatId, text, messageId = '') {
+  const msg = text?.trim();
+  if (!msg) return false;
+  if (messageId && state.incomingDedup[messageId]) return false;
+  if (messageId) state.incomingDedup[messageId] = true;
+  getChatMessages(chatId).push({ from: 'in', text: msg, messageId });
+  return true;
+}
+
+export function setContacts(list) {
+  state.contacts = Array.isArray(list) ? [...list] : [];
 }
 
 export function togglePageLabel() {

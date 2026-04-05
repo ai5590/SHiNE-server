@@ -21,6 +21,7 @@ export class WsJsonClient {
     this.ws = null;
     this.pending = new Map();
     this.openPromise = null;
+    this.eventListeners = new Map();
   }
 
   async open() {
@@ -53,6 +54,7 @@ export class WsJsonClient {
       });
     }).finally(() => {
       this.openPromise = null;
+    this.eventListeners = new Map();
     });
 
     return this.openPromise;
@@ -116,12 +118,38 @@ export class WsJsonClient {
     }
 
     const requestId = data?.requestId;
-    if (!requestId) return;
+    const isEvent = data?.event === true || (requestId && !this.pending.has(requestId));
+    if (isEvent) {
+      this.emitEvent(data?.op || '', data);
+      return;
+    }
 
+    if (!requestId) return;
     const slot = this.pending.get(requestId);
     if (!slot) return;
     this.pending.delete(requestId);
     slot.resolve(data);
+  }
+
+  onEvent(op, callback) {
+    if (!op || typeof callback !== 'function') return () => {};
+    if (!this.eventListeners.has(op)) {
+      this.eventListeners.set(op, new Set());
+    }
+    const set = this.eventListeners.get(op);
+    set.add(callback);
+    return () => {
+      set.delete(callback);
+      if (!set.size) this.eventListeners.delete(op);
+    };
+  }
+
+  emitEvent(op, data) {
+    const listeners = this.eventListeners.get(op);
+    if (!listeners) return;
+    listeners.forEach((cb) => {
+      try { cb(data); } catch {}
+    });
   }
 
   failPending(message) {

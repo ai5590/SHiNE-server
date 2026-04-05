@@ -1,6 +1,6 @@
 import { renderHeader } from '../components/header.js?v=20260403081123';
 import { directMessages } from '../mock-data.js?v=20260403081123';
-import { addChatMessage, getChatMessages } from '../state.js?v=20260403081123';
+import { addChatMessage, getChatMessages, authService, state } from '../state.js?v=20260403081123';
 
 export const pageMeta = { id: 'chat-view', title: 'Чат' };
 
@@ -18,7 +18,11 @@ function renderLog(list, chatId) {
 
 export function render({ navigate, route }) {
   const chatId = route.params.chatId || 'u1';
-  const contact = directMessages.find((d) => d.id === chatId) || directMessages[0];
+  const contact = directMessages.find((d) => d.id === chatId) || {
+    id: chatId,
+    name: chatId,
+    initials: (chatId[0] || '?').toUpperCase(),
+  };
 
   const screen = document.createElement('section');
   screen.className = 'stack';
@@ -29,6 +33,23 @@ export function render({ navigate, route }) {
       leftAction: { label: '←', onClick: () => navigate('messages-list') },
     })
   );
+
+  const isContact = state.contacts.includes(chatId);
+  if (!isContact) {
+    const warning = document.createElement('div');
+    warning.className = 'card stack';
+    warning.innerHTML = '<p class="meta-muted">Пользователь не в контактах. Можно писать ему сразу (MVP).</p>';
+    const btn = document.createElement('button');
+    btn.className = 'primary-btn';
+    btn.type = 'button';
+    btn.textContent = 'Добавить в контакты';
+    btn.addEventListener('click', () => {
+      state.contacts = [...state.contacts, chatId];
+      warning.remove();
+    });
+    warning.append(btn);
+    screen.append(warning);
+  }
 
   const wrap = document.createElement('div');
   wrap.className = 'chat-wrap';
@@ -43,12 +64,22 @@ export function render({ navigate, route }) {
     <button class="primary-btn" type="submit">Отправить</button>
   `;
 
-  form.addEventListener('submit', (event) => {
+  form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const input = form.elements.message;
-    addChatMessage(chatId, input.value);
+    const text = input.value.trim();
+    if (!text) return;
+
+    addChatMessage(chatId, text);
     input.value = '';
     renderLog(log, chatId);
+
+    try {
+      await authService.sendDirectMessage(chatId, text);
+    } catch (e) {
+      addChatMessage(chatId, `Ошибка отправки: ${e.message || 'unknown'}`);
+      renderLog(log, chatId);
+    }
   });
 
   renderLog(log, chatId);

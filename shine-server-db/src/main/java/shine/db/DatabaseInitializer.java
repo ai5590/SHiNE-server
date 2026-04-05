@@ -328,6 +328,54 @@ public final class DatabaseInitializer {
                 ON message_stats (to_login);
                 """);
 
+            // 9) direct_messages
+            st.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS direct_messages (
+                    message_id     TEXT    NOT NULL PRIMARY KEY,
+                    from_login     TEXT    NOT NULL,
+                    to_login       TEXT    NOT NULL,
+                    text           TEXT    NOT NULL,
+                    created_at_ms  INTEGER NOT NULL,
+                    FOREIGN KEY (from_login) REFERENCES solana_users(login),
+                    FOREIGN KEY (to_login) REFERENCES solana_users(login)
+                );
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_direct_messages_to_login
+                ON direct_messages (to_login, created_at_ms);
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_direct_messages_from_login
+                ON direct_messages (from_login, created_at_ms);
+                """);
+
+            // 10) user_push_tokens
+            st.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS user_push_tokens (
+                    token_id       TEXT    NOT NULL PRIMARY KEY,
+                    login          TEXT    NOT NULL,
+                    session_id     TEXT    NOT NULL,
+                    provider       TEXT    NOT NULL,
+                    token          TEXT    NOT NULL,
+                    platform       TEXT,
+                    user_agent     TEXT,
+                    updated_at_ms  INTEGER NOT NULL,
+                    FOREIGN KEY (login) REFERENCES solana_users(login)
+                );
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_user_push_tokens_login
+                ON user_push_tokens (login);
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_user_push_tokens_login_session
+                ON user_push_tokens (login, session_id);
+                """);
+
             DatabaseTriggersInstaller.createAllTriggers(st);
         }
     }

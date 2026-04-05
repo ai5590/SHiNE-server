@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <link rel="manifest" href="./manifest.webmanifest" />
     <title>Shine UI Demo</title>
     <link rel="stylesheet" href="./styles/main.css?v=20260403081123" />
     <link rel="stylesheet" href="./styles/layout.css?v=20260403081123" />
@@ -11,10 +12,21 @@
   <body>
     <div class="app-shell">
       <main id="app-screen" class="screen-content"></main>
-      <div id="page-label-slot" class="page-label-slot"></div>
       <div id="toolbar-slot" class="toolbar-slot"></div>
     </div>
     <div id="modal-root"></div>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+    <script>
+      window.__SHINE_FIREBASE_CONFIG__ = {
+        apiKey: '',
+        authDomain: '',
+        projectId: '',
+        messagingSenderId: '',
+        appId: ''
+      };
+      window.__SHINE_FIREBASE_VAPID_KEY__ = '';
+    </script>
     <script type="module" src="./js/app.js?v=20260403081123"></script>
   </body>
 </html>

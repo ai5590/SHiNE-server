@@ -235,6 +235,54 @@ export class AuthService {
     return response.payload || {};
   }
 
+
+  onEvent(op, handler) {
+    return this.ws.onEvent(op, handler);
+  }
+
+  async upsertPushToken({ tokenId, token, provider = 'fcm', platform = 'web', userAgent = navigator.userAgent || '' }) {
+    const response = await this.ws.request('UpsertPushToken', { tokenId, token, provider, platform, userAgent });
+    if (response.status !== 200) throw opError('UpsertPushToken', response);
+    return response.payload || {};
+  }
+
+  async sendDirectMessage(toLogin, text) {
+    const response = await this.ws.request('SendDirectMessage', { toLogin, text });
+    if (response.status !== 200) throw opError('SendDirectMessage', response);
+    return response.payload || {};
+  }
+
+  async ackIncomingMessage(eventId, messageId) {
+    const response = await this.ws.request('AckIncomingMessage', { eventId, messageId });
+    if (response.status !== 200) throw opError('AckIncomingMessage', response);
+    return response.payload || {};
+  }
+
+  async listContacts() {
+    const response = await this.ws.request('ListContacts', {});
+    if (response.status !== 200) throw opError('ListContacts', response);
+    return response.payload || {};
+  }
+
+
+  async addCloseFriend(toLogin) {
+    const response = await this.ws.request('AddCloseFriend', { toLogin });
+    if (response.status !== 200) throw opError('AddCloseFriend', response);
+    return response.payload || {};
+  }
+
+  async getUserConnectionsGraph(login) {
+    const response = await this.ws.request('GetUserConnectionsGraph', { login });
+    if (response.status !== 200) throw opError('GetUserConnectionsGraph', response);
+    return response.payload || {};
+  }
+
+  async searchUsers(prefix) {
+    const response = await this.ws.request('SearchUsers', { prefix });
+    if (response.status !== 200) throw opError('SearchUsers', response);
+    return response.payload?.logins || [];
+  }
+
   async reportClientError(details) {
     try {
       const response = await this.ws.request('ClientErrorLog', details || {}, 3000);

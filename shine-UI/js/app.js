@@ -1,7 +1,7 @@
 import { navigate, getRoute, PRE_AUTH_PAGES } from './router.js?v=20260403081123';
 import { renderToolbar } from './components/toolbar.js?v=20260403081123';
-import { renderPageLabel } from './components/page-label.js?v=20260403081123';
 import { captureClientError, setClientErrorTransport } from './services/client-error-reporter.js?v=20260403081123';
+import { initPwaPush } from './services/pwa-push-service.js?v=20260403081123';
 import {
   authService,
   authorizeSession,
@@ -10,7 +10,8 @@ import {
   setSessionResetHandler,
   state,
   terminateCurrentSession,
-  togglePageLabel,
+  addIncomingMessage,
+  setContacts,
 } from './state.js?v=20260403081123';
 
 import * as startView from './pages/start-view.js?v=20260403081123';
@@ -77,7 +78,6 @@ const routes = {
 };
 
 const screenEl = document.getElementById('app-screen');
-const labelEl = document.getElementById('page-label-slot');
 const toolbarEl = document.getElementById('toolbar-slot');
 
 let currentCleanup = null;
@@ -140,16 +140,9 @@ function renderApp() {
   const showAppChrome = page.pageMeta?.showAppChrome !== false;
   screenEl.classList.toggle('no-app-chrome', !showAppChrome);
 
-  labelEl.innerHTML = '';
   toolbarEl.innerHTML = '';
 
   if (showAppChrome) {
-    labelEl.append(
-      renderPageLabel(page.pageMeta.title, page.pageMeta.id, state.pageLabelCollapsed, () => {
-        togglePageLabel();
-        renderApp();
-      }),
-    );
     toolbarEl.append(renderToolbar(page.pageMeta.id, navigate));
   }
 }
@@ -161,6 +154,10 @@ async function tryAutoLogin() {
     const resumed = await authService.resumeSession(state.session.login, state.session.sessionId);
     authorizeSession(resumed);
     await refreshSessions();
+    try {
+      const contacts = await authService.listContacts();
+      setContacts(contacts.contacts || []);
+    } catch {}
   } catch (error) {
     if (isSessionInvalidError(error)) {
       await terminateCurrentSession({
@@ -174,7 +171,30 @@ async function init() {
   setSessionResetHandler(() => {
     navigate('start-view');
   });
+
+  authService.onEvent('SessionRevoked', async () => {
+    await terminateCurrentSession({ infoMessage: 'Сессия закрыта с другого устройства.' });
+  });
+
+  authService.onEvent('IncomingDirectMessage', async (evt) => {
+    const payload = evt?.payload || {};
+    const fromLogin = payload.fromLogin || 'unknown';
+    const messageId = payload.messageId || '';
+    const eventId = payload.eventId || evt?.requestId || '';
+    const added = addIncomingMessage(fromLogin, payload.text || '', messageId);
+    if (added && Notification.permission === 'granted') {
+      try {
+        new Notification(`Сообщение от ${fromLogin}`, { body: payload.text || '' });
+      } catch {}
+    }
+    if (eventId) {
+      try { await authService.ackIncomingMessage(eventId, messageId); } catch {}
+    }
+  });
   await tryAutoLogin();
+  if (state.session.isAuthorized) {
+    await initPwaPush({ authService });
+  }
 
   if (!window.location.hash) {
     navigate(state.session.isAuthorized ? 'profile-view' : 'start-view');

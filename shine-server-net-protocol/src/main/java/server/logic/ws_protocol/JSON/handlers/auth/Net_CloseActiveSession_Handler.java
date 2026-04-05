@@ -1,5 +1,7 @@
 package server.logic.ws_protocol.JSON.handlers.auth;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.logic.ws_protocol.JSON.ActiveConnectionsRegistry;
@@ -10,6 +12,8 @@ import server.logic.ws_protocol.JSON.handlers.JsonMessageHandler;
 import server.logic.ws_protocol.JSON.handlers.auth.entyties.Net_CloseActiveSession_Request;
 import server.logic.ws_protocol.JSON.handlers.auth.entyties.Net_CloseActiveSession_Response;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
+import server.logic.ws_protocol.JSON.push.WsEventSender;
+import server.logic.ws_protocol.JSON.utils.NetIdGenerator;
 import server.logic.ws_protocol.WireCodes;
 import server.ws.WsConnectionUtils;
 import shine.db.dao.ActiveSessionsDAO;
@@ -32,6 +36,7 @@ import java.sql.SQLException;
 public class Net_CloseActiveSession_Handler implements JsonMessageHandler {
 
     private static final Logger log = LoggerFactory.getLogger(Net_CloseActiveSession_Handler.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Override
     public Net_Response handle(Net_Request baseReq, ConnectionContext ctx) throws Exception {
@@ -121,6 +126,14 @@ public class Net_CloseActiveSession_Handler implements JsonMessageHandler {
                 ActiveConnectionsRegistry.getInstance().getBySessionId(targetSessionId);
 
         if (ctxToClose == null) return;
+
+        String eventId = NetIdGenerator.eventId("evt");
+        ObjectNode payload = MAPPER.createObjectNode();
+        payload.put("eventId", eventId);
+        payload.put("sessionId", targetSessionId);
+        payload.put("reason", "closed_from_another_device");
+        payload.put("timeMs", System.currentTimeMillis());
+        WsEventSender.sendEvent(ctxToClose, "SessionRevoked", eventId, payload);
 
         if (isCurrentSession && ctxToClose == currentCtx) {
             new Thread(() -> {

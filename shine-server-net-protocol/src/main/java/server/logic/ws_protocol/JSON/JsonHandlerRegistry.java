@@ -51,6 +51,18 @@ import server.logic.ws_protocol.JSON.handlers.channels.Net_ListSubscriptionsFeed
 import server.logic.ws_protocol.JSON.handlers.channels.entyties.Net_GetChannelMessages_Request;
 import server.logic.ws_protocol.JSON.handlers.channels.entyties.Net_GetMessageThread_Request;
 import server.logic.ws_protocol.JSON.handlers.channels.entyties.Net_ListSubscriptionsFeed_Request;
+import server.logic.ws_protocol.JSON.handlers.connections.Net_GetUserConnectionsGraph_Handler;
+import server.logic.ws_protocol.JSON.handlers.connections.Net_AddCloseFriend_Handler;
+import server.logic.ws_protocol.JSON.handlers.connections.Net_ListContacts_Handler;
+import server.logic.ws_protocol.JSON.handlers.connections.entyties.Net_GetUserConnectionsGraph_Request;
+import server.logic.ws_protocol.JSON.handlers.connections.entyties.Net_AddCloseFriend_Request;
+import server.logic.ws_protocol.JSON.handlers.connections.entyties.Net_ListContacts_Request;
+import server.logic.ws_protocol.JSON.messages.Net_AckIncomingMessage_Handler;
+import server.logic.ws_protocol.JSON.messages.Net_SendDirectMessage_Handler;
+import server.logic.ws_protocol.JSON.messages.Net_UpsertPushToken_Handler;
+import server.logic.ws_protocol.JSON.messages.entyties.Net_AckIncomingMessage_Request;
+import server.logic.ws_protocol.JSON.messages.entyties.Net_SendDirectMessage_Request;
+import server.logic.ws_protocol.JSON.messages.entyties.Net_UpsertPushToken_Request;
 
 // --- NEW: Ping ---
 import server.logic.ws_protocol.JSON.handlers.system.Net_GetServerInfo_Handler;
@@ -96,6 +108,14 @@ public final class JsonHandlerRegistry {
             Map.entry("ListSubscriptionsFeed", new Net_ListSubscriptionsFeed_Handler()),
             Map.entry("GetChannelMessages", new Net_GetChannelMessages_Handler()),
             Map.entry("GetMessageThread", new Net_GetMessageThread_Handler()),
+            Map.entry("ListContacts", new Net_ListContacts_Handler()),
+            Map.entry("GetUserConnectionsGraph", new Net_GetUserConnectionsGraph_Handler()),
+            Map.entry("AddCloseFriend", new Net_AddCloseFriend_Handler()),
+
+            // --- direct messages / push ---
+            Map.entry("UpsertPushToken", new Net_UpsertPushToken_Handler()),
+            Map.entry("SendDirectMessage", new Net_SendDirectMessage_Handler()),
+            Map.entry("AckIncomingMessage", new Net_AckIncomingMessage_Handler()),
 
             // --- system ---
             Map.entry("Ping",               new Net_Ping_Handler()),
@@ -134,6 +154,14 @@ public final class JsonHandlerRegistry {
             Map.entry("ListSubscriptionsFeed", Net_ListSubscriptionsFeed_Request.class),
             Map.entry("GetChannelMessages", Net_GetChannelMessages_Request.class),
             Map.entry("GetMessageThread", Net_GetMessageThread_Request.class),
+            Map.entry("ListContacts", Net_ListContacts_Request.class),
+            Map.entry("GetUserConnectionsGraph", Net_GetUserConnectionsGraph_Request.class),
+            Map.entry("AddCloseFriend", Net_AddCloseFriend_Request.class),
+
+            // --- direct messages / push ---
+            Map.entry("UpsertPushToken", Net_UpsertPushToken_Request.class),
+            Map.entry("SendDirectMessage", Net_SendDirectMessage_Request.class),
+            Map.entry("AckIncomingMessage", Net_AckIncomingMessage_Request.class),
 
             // --- system ---
             Map.entry("Ping",               Net_Ping_Request.class),
