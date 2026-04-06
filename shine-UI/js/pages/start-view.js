@@ -1,4 +1,4 @@
-import { clearStartHint, state } from '../state.js?v=20260403081123';
+import { clearStartHint, state } from '../state.js?v=20260405171816';
 
 export const pageMeta = { id: 'start-view', title: 'Старт', showAppChrome: false };
 

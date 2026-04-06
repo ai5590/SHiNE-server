@@ -129,7 +129,7 @@ public final class ActiveSessionsDAO {
                 client_info_from_request,
                 user_language
             FROM active_sessions
-            WHERE login = ?
+            WHERE login = ? COLLATE NOCASE
             """;
 
         List<ActiveSessionEntry> result = new ArrayList<>();

@@ -1,11 +1,11 @@
-import { renderHeader } from '../components/header.js?v=20260403081123';
+import { renderHeader } from '../components/header.js?v=20260405171816';
 import {
   authService,
   clearAuthMessages,
   setAuthBusy,
   setAuthError,
   state,
-} from '../state.js?v=20260403081123';
+} from '../state.js?v=20260405171816';
 
 export const pageMeta = { id: 'login-password-view', title: 'Войти по логину', showAppChrome: false };
 

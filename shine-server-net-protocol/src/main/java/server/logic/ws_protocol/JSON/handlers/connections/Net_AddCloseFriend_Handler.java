@@ -74,7 +74,7 @@ public class Net_AddCloseFriend_Handler implements JsonMessageHandler {
     }
 
     private String findPrimaryBlockchain(Connection c, String login) throws Exception {
-        String sql = "SELECT blockchain_name FROM blockchain_state WHERE login=? ORDER BY blockchain_name LIMIT 1";
+        String sql = "SELECT blockchain_name FROM blockchain_state WHERE login = ? COLLATE NOCASE ORDER BY blockchain_name LIMIT 1";
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, login);
             try (ResultSet rs = ps.executeQuery()) {

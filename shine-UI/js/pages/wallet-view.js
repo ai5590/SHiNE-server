@@ -1,5 +1,5 @@
-import { renderHeader } from '../components/header.js?v=20260403081123';
-import { wallet } from '../mock-data.js?v=20260403081123';
+import { renderHeader } from '../components/header.js?v=20260405171816';
+import { wallet } from '../mock-data.js?v=20260405171816';
 
 export const pageMeta = { id: 'wallet-view', title: 'Кошелёк' };
 

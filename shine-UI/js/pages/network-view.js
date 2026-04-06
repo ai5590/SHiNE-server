@@ -1,5 +1,5 @@
-import { renderHeader } from '../components/header.js?v=20260403081123';
-import { authService, state } from '../state.js?v=20260403081123';
+import { renderHeader } from '../components/header.js?v=20260405171816';
+import { authService, state } from '../state.js?v=20260405171816';
 
 export const pageMeta = { id: 'network-view', title: 'Связи' };
 

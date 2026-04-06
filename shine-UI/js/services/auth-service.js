@@ -1,4 +1,4 @@
-import { WsJsonClient } from './ws-client.js?v=20260403081123';
+import { WsJsonClient } from './ws-client.js?v=20260405171816';
 import {
   deriveEd25519FromPassword,
   exportEd25519PublicKeyB64,
@@ -7,8 +7,8 @@ import {
   importPkcs8Ed25519,
   randomBase64,
   signBase64,
-} from './crypto-utils.js?v=20260403081123';
-import { loadSessionMaterial, saveEncryptedUserSecrets, saveSessionMaterial } from './key-vault.js?v=20260403081123';
+} from './crypto-utils.js?v=20260405171816';
+import { loadSessionMaterial, saveEncryptedUserSecrets, saveSessionMaterial } from './key-vault.js?v=20260405171816';
 
 const BCH_SUFFIX = '001';
 

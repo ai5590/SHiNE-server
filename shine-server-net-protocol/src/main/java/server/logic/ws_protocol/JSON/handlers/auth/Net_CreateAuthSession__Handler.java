@@ -75,8 +75,8 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
         SolanaUserEntry userFromContext = ctx.getSolanaUser();
         String loginFromContext = userFromContext.getLogin();
-        String login = req.getLogin();
-        if (login == null || login.isBlank()) {
+        String loginFromReq = req.getLogin();
+        if (loginFromReq == null || loginFromReq.isBlank()) {
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.BAD_REQUEST,
@@ -86,7 +86,8 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             closeConnectionAfterErrorResponse(ctx, 4001, "Auth failed: empty login");
             return err;
         }
-        if (!login.equals(loginFromContext)) {
+        loginFromReq = loginFromReq.trim();
+        if (!loginFromReq.equalsIgnoreCase(loginFromContext)) {
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.BAD_REQUEST,
@@ -99,7 +100,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
         SolanaUserEntry user;
         try {
-            user = SolanaUsersDAO.getInstance().getByLogin(login);
+            user = SolanaUsersDAO.getInstance().getByLogin(loginFromContext);
         } catch (SQLException e) {
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
@@ -121,7 +122,8 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
             return err;
         }
 
-        if (login == null || login.isBlank()) {
+        String canonicalLogin = user.getLogin();
+        if (canonicalLogin == null || canonicalLogin.isBlank()) {
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.SERVER_DATA_ERROR,
@@ -273,7 +275,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         boolean sigOk;
         try {
             sigOk = verifyCreateSessionSignature(
-                    login,
+                    loginFromReq,
                     sessionKey,
                     storagePwd,
                     authNonce,
@@ -342,7 +344,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
         try {
             activeSessionEntry = new ActiveSessionEntry(
                     sessionId,
-                    login,
+                    canonicalLogin,
                     sessionKey,               // session_key (pubkey string as-is)
                     storagePwd,
                     now,
@@ -358,7 +360,7 @@ public class Net_CreateAuthSession__Handler implements JsonMessageHandler {
 
             dao.insert(activeSessionEntry);
         } catch (SQLException e) {
-            log.error("Ошибка БД при создании новой сессии для login={}", login, e);
+            log.error("Ошибка БД при создании новой сессии для login={}", canonicalLogin, e);
             Net_Response err = NetExceptionResponseFactory.error(
                     req,
                     WireCodes.Status.SERVER_DATA_ERROR,

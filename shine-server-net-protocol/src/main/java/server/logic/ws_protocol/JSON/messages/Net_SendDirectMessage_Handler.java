@@ -16,8 +16,10 @@ import server.logic.ws_protocol.JSON.utils.NetIdGenerator;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.dao.DirectMessagesDAO;
 import shine.db.dao.PushTokensDAO;
+import shine.db.dao.SolanaUsersDAO;
 import shine.db.entities.DirectMessageEntry;
 import shine.db.entities.PushTokenEntry;
+import shine.db.entities.SolanaUserEntry;
 
 import java.util.HashSet;
 import java.util.List;
@@ -39,8 +41,14 @@ public class Net_SendDirectMessage_Handler implements JsonMessageHandler {
         }
 
         String from = ctx.getLogin();
-        String to = req.getToLogin().trim();
+        String toRequest = req.getToLogin().trim();
         String text = req.getText().trim();
+
+        SolanaUserEntry targetUser = SolanaUsersDAO.getInstance().getByLogin(toRequest);
+        if (targetUser == null) {
+            return NetExceptionResponseFactory.error(req, 404, "USER_NOT_FOUND", "Пользователь не найден");
+        }
+        String to = targetUser.getLogin();
 
         if (!canSend(from, to)) {
             return NetExceptionResponseFactory.error(req, WireCodes.Status.UNVERIFIED, "NO_PERMISSION", "Можно писать только контактам или тем, кто уже писал вам");
@@ -120,4 +128,3 @@ public class Net_SendDirectMessage_Handler implements JsonMessageHandler {
         return from != null && !from.isBlank() && to != null && !to.isBlank();
     }
 }
-

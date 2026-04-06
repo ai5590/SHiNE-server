@@ -89,7 +89,7 @@ public final class UserParamsDAO {
                 device_key,
                 signature
             FROM users_params
-            WHERE login = ? AND param = ?
+            WHERE login = ? COLLATE NOCASE AND param = ?
             LIMIT 1
             """;
 
@@ -120,7 +120,7 @@ public final class UserParamsDAO {
                 device_key,
                 signature
             FROM users_params
-            WHERE login = ?
+            WHERE login = ? COLLATE NOCASE
             ORDER BY time_ms DESC
             """;
 

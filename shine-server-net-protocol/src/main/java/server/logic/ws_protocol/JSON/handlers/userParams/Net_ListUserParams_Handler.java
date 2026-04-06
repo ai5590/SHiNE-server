@@ -11,7 +11,9 @@ import server.logic.ws_protocol.JSON.handlers.userParams.entyties.Net_ListUserPa
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.SqliteDbController;
+import shine.db.dao.SolanaUsersDAO;
 import shine.db.dao.UserParamsDAO;
+import shine.db.entities.SolanaUserEntry;
 import shine.db.entities.UserParamEntry;
 
 import java.sql.Connection;
@@ -61,7 +63,8 @@ public class Net_ListUserParams_Handler implements JsonMessageHandler {
             resp.setRequestId(req.getRequestId());
             resp.setStatus(WireCodes.Status.OK);
 
-            resp.setLogin(login);
+            SolanaUserEntry user = SolanaUsersDAO.getInstance().getByLogin(login);
+            resp.setLogin(user != null && user.getLogin() != null ? user.getLogin() : login);
 
             List<Net_ListUserParams_Response.Item> items = new ArrayList<>();
             for (UserParamEntry e : entries) {

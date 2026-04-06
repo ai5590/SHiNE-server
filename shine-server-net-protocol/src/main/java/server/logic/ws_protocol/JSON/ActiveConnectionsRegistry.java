@@ -3,6 +3,7 @@ package server.logic.ws_protocol.JSON;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -27,7 +28,7 @@ public final class ActiveConnectionsRegistry {
     // sessionId (String) -> ConnectionContext
     private final ConcurrentHashMap<String, ConnectionContext> bySessionId = new ConcurrentHashMap<>();
 
-    // login (String) -> множество ConnectionContext для этого пользователя
+    // lowercase(login) -> множество ConnectionContext для этого пользователя
     private final ConcurrentHashMap<String, Set<ConnectionContext>> byLogin = new ConcurrentHashMap<>();
 
     /**
@@ -50,11 +51,12 @@ public final class ActiveConnectionsRegistry {
         if (prev != null && prev != ctx) {
             String prevLogin = prev.getLogin();
             if (prevLogin != null && !prevLogin.isBlank()) {
-                Set<ConnectionContext> prevSet = byLogin.get(prevLogin);
+                String prevKey = toLoginKey(prevLogin);
+                Set<ConnectionContext> prevSet = byLogin.get(prevKey);
                 if (prevSet != null) {
                     prevSet.remove(prev);
                     if (prevSet.isEmpty()) {
-                        byLogin.remove(prevLogin);
+                        byLogin.remove(prevKey);
                     }
                 }
             }
@@ -63,7 +65,7 @@ public final class ActiveConnectionsRegistry {
         }
 
         byLogin
-                .computeIfAbsent(login, id -> new CopyOnWriteArraySet<>())
+                .computeIfAbsent(toLoginKey(login), id -> new CopyOnWriteArraySet<>())
                 .add(ctx);
 
         log.debug("registered ctx (login={}, sessionId={})", login, sessionId);
@@ -89,11 +91,12 @@ public final class ActiveConnectionsRegistry {
         }
 
         if (login != null && !login.isBlank()) {
-            Set<ConnectionContext> set = byLogin.get(login);
+            String key = toLoginKey(login);
+            Set<ConnectionContext> set = byLogin.get(key);
             if (set != null) {
                 set.remove(ctx);
                 if (set.isEmpty()) {
-                    byLogin.remove(login);
+                    byLogin.remove(key);
                 }
             }
         }
@@ -112,11 +115,12 @@ public final class ActiveConnectionsRegistry {
 
         String login = ctx.getLogin();
         if (login != null && !login.isBlank()) {
-            Set<ConnectionContext> set = byLogin.get(login);
+            String key = toLoginKey(login);
+            Set<ConnectionContext> set = byLogin.get(key);
             if (set != null) {
                 set.remove(ctx);
                 if (set.isEmpty()) {
-                    byLogin.remove(login);
+                    byLogin.remove(key);
                 }
             }
         }
@@ -137,7 +141,11 @@ public final class ActiveConnectionsRegistry {
      */
     public Set<ConnectionContext> getByLogin(String login) {
         if (login == null || login.isBlank()) return Set.of();
-        Set<ConnectionContext> set = byLogin.get(login);
+        Set<ConnectionContext> set = byLogin.get(toLoginKey(login));
         return (set == null) ? Set.of() : set; // CopyOnWriteArraySet можно отдавать как есть
+    }
+
+    private static String toLoginKey(String login) {
+        return login.trim().toLowerCase(Locale.ROOT);
     }
 }
