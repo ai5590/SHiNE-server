@@ -289,6 +289,52 @@ export class AuthService {
     return response.payload?.logins || [];
   }
 
+
+
+  async getUserParam(login, param) {
+    const cleanLogin = (login || '').trim();
+    const cleanParam = (param || '').trim();
+    if (!cleanLogin || !cleanParam) throw new Error('Не переданы login/param');
+
+    const response = await this.ws.request('GetUserParam', { login: cleanLogin, param: cleanParam });
+    if (response.status === 200) return response.payload || {};
+
+    if (response.status === 404 || response.status === 204) return {};
+
+    throw opError('GetUserParam', response);
+  }
+
+  async addUserParamBlock({ login, param, value, timeMs = Date.now(), storagePwd }) {
+    const cleanLogin = (login || '').trim();
+    const cleanParam = (param || '').trim();
+    if (!cleanLogin || !cleanParam) throw new Error('Не переданы login/param');
+    if (!storagePwd) throw new Error('Не передан storagePwd для подписи блокчейна');
+
+    const user = await this.getUser(cleanLogin);
+    const blockchainKey = String(user?.blockchainKey || '').trim();
+    if (!blockchainKey) throw new Error('GetUser не вернул blockchainKey');
+
+    const savedKeys = await loadEncryptedUserSecrets(cleanLogin, storagePwd);
+    const blockchainPrivatePkcs8 = savedKeys?.blockchainKey;
+    if (!blockchainPrivatePkcs8) throw new Error('На устройстве нет сохраненного приватного blockchainKey');
+
+    const privateKey = await importPkcs8Ed25519(blockchainPrivatePkcs8);
+    const cleanValue = String(value ?? '');
+    const signText = `${USER_PARAMETER_PREFIX}${cleanLogin}${cleanParam}${timeMs}${cleanValue}`;
+    const signature = await signBase64(privateKey, signText);
+
+    const response = await this.ws.request('AddUserParamBlock', {
+      login: cleanLogin,
+      param: cleanParam,
+      time_ms: Number(timeMs),
+      value: cleanValue,
+      blockchain_key: blockchainKey,
+      signature,
+    });
+
+    if (response.status !== 200) throw opError('AddUserParamBlock', response);
+    return response.payload || {};
+  }
   async listUserParams(login) {
     const cleanLogin = (login || '').trim();
     if (!cleanLogin) throw new Error('Не передан login');

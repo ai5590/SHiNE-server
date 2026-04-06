@@ -97,6 +97,24 @@
   background: rgba(83, 216, 251, 0.11);
 }
 
+.badge.profile-toggle-btn.is-no {
+  border-color: rgba(170, 180, 205, 0.3);
+  color: #c5cedd;
+  background: rgba(152, 164, 190, 0.14);
+}
+
+.badge.profile-toggle-btn.is-yes-official {
+  border-color: rgba(132, 244, 161, 0.5);
+  color: #ddffe7;
+  background: rgba(132, 244, 161, 0.2);
+}
+
+.badge.profile-toggle-btn.is-yes-shine {
+  border-color: rgba(183, 122, 255, 0.6);
+  color: #f4e7ff;
+  background: rgba(176, 102, 255, 0.22);
+}
+
 .profile-help-modal[hidden] {
   display: none;
 }
