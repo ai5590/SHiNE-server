@@ -8,6 +8,11 @@ export const profileFieldDefs = [
   { key: 'phone', readKeys: ['phone'], label: 'Phone', placeholder: '+7 ...' },
 ];
 
+export const profileToggleDefs = [
+  { key: 'official', label: 'Официальный' },
+  { key: 'shine', label: 'Сияющий' },
+];
+
 function normalizeItems(responsePayload) {
   const params = responsePayload?.params;
   if (!Array.isArray(params)) return [];
@@ -31,11 +36,24 @@ function getLatestByAliases(items, aliases) {
   return latest;
 }
 
-export async function loadProfileParams(login) {
+function parseToggleValue(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'true' || normalized === 'yes' || normalized === '1';
+}
+
+async function getStoragePwd() {
+  const storagePwd = state.session.storagePwdInMemory;
+  if (!storagePwd) {
+    throw new Error('Нет storagePwd в памяти сессии. Выполните вход заново.');
+  }
+  return storagePwd;
+}
+
+export async function loadProfileSnapshot(login) {
   const payload = await authService.listUserParams(login);
   const items = normalizeItems(payload);
 
-  return profileFieldDefs.map((field) => {
+  const fields = profileFieldDefs.map((field) => {
     const latest = getLatestByAliases(items, field.readKeys);
     return {
       key: field.key,
@@ -45,14 +63,23 @@ export async function loadProfileParams(login) {
       timeMs: latest?.timeMs || 0,
     };
   });
+
+  const toggles = profileToggleDefs.map((toggle) => {
+    const latest = getLatestByAliases(items, [toggle.key]);
+    return {
+      key: toggle.key,
+      label: toggle.label,
+      enabled: latest ? parseToggleValue(latest.value) : false,
+      rawValue: latest?.value || 'no',
+      timeMs: latest?.timeMs || 0,
+    };
+  });
+
+  return { fields, toggles };
 }
 
 export async function saveProfileParams(login, valuesByKey) {
-  const storagePwd = state.session.storagePwdInMemory;
-  if (!storagePwd) {
-    throw new Error('Нет storagePwd в памяти сессии. Выполните вход заново.');
-  }
-
+  const storagePwd = await getStoragePwd();
   const baseTime = Date.now();
 
   for (let i = 0; i < profileFieldDefs.length; i += 1) {
@@ -65,4 +92,15 @@ export async function saveProfileParams(login, valuesByKey) {
       storagePwd,
     });
   }
+}
+
+export async function saveProfileToggle(login, key, enabled) {
+  const storagePwd = await getStoragePwd();
+  await authService.upsertUserParam({
+    login,
+    param: key,
+    value: enabled ? 'yes' : 'no',
+    timeMs: Date.now(),
+    storagePwd,
+  });
 }
