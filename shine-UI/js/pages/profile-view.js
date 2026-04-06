@@ -1,6 +1,6 @@
-import { renderHeader } from '../components/header.js?v=20260405171816';
-import { profile } from '../mock-data.js?v=20260405171816';
-import { state } from '../state.js?v=20260405171816';
+import { renderHeader } from '../components/header.js?v=20260406221807';
+import { profile } from '../mock-data.js?v=20260406221807';
+import { state } from '../state.js?v=20260406221807';
 
 export const pageMeta = { id: 'profile-view', title: 'Профиль' };
 

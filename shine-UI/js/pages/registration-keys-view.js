@@ -1,4 +1,4 @@
-import { renderHeader } from '../components/header.js?v=20260405171816';
+import { renderHeader } from '../components/header.js?v=20260406221807';
 import {
   authService,
   authorizeSession,
@@ -6,7 +6,7 @@ import {
   setAuthError,
   setAuthInfo,
   state,
-} from '../state.js?v=20260405171816';
+} from '../state.js?v=20260406221807';
 
 export const pageMeta = { id: 'registration-keys-view', title: 'Сохранение ключей', showAppChrome: false };
 

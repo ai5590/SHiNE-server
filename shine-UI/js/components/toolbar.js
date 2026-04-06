@@ -1,4 +1,4 @@
-import { resolveToolbarActive } from '../router.js?v=20260405171816';
+import { resolveToolbarActive } from '../router.js?v=20260406221807';
 
 const ITEMS = [
   { pageId: 'messages-list', label: 'Личные сообщения', icon: '💬' },

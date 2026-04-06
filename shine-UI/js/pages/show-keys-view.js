@@ -1,6 +1,6 @@
-import { renderHeader } from '../components/header.js?v=20260405171816';
-import { state } from '../state.js?v=20260405171816';
-import { loadEncryptedUserSecrets } from '../services/key-vault.js?v=20260405171816';
+import { renderHeader } from '../components/header.js?v=20260406221807';
+import { state } from '../state.js?v=20260406221807';
+import { loadEncryptedUserSecrets } from '../services/key-vault.js?v=20260406221807';
 
 export const pageMeta = { id: 'show-keys-view', title: 'Показать ключи' };
 

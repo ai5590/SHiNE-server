@@ -1,6 +1,6 @@
-import { renderHeader } from '../components/header.js?v=20260405171816';
-import { directMessages } from '../mock-data.js?v=20260405171816';
-import { authService, ensureChat, setContacts, state } from '../state.js?v=20260405171816';
+import { renderHeader } from '../components/header.js?v=20260406221807';
+import { directMessages } from '../mock-data.js?v=20260406221807';
+import { authService, ensureChat, setContacts, state } from '../state.js?v=20260406221807';
 
 export const pageMeta = { id: 'contact-search-view', title: 'Поиск контактов' };
 
