@@ -1,4 +1,4 @@
-import { authService, state } from '../state.js?v=20260403081123';
+import { authService, state } from '../state.js?v=20260407105357';
 
 export const profileFieldDefs = [
   { key: 'first_name', readKeys: ['first_name'], label: 'Имя', placeholder: 'Введите имя' },

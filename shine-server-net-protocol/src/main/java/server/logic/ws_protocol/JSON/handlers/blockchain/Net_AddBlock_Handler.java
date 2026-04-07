@@ -6,6 +6,7 @@ import blockchain.MsgSubType;
 import blockchain.body.BodyHasLine;
 import blockchain.body.BodyHasTarget;
 import blockchain.body.CreateChannelBody;
+import blockchain.body.UserParamBody;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.logic.ws_protocol.Base64Ws;
@@ -21,8 +22,10 @@ import server.logic.ws_protocol.JSON.handlers.blockchain.entyties.Net_AddBlock_R
 import server.logic.ws_protocol.WireCodes;
 import shine.db.dao.BlockchainStateDAO;
 import shine.db.dao.BlocksDAO;
+import shine.db.dao.UserParamsDAO;
 import shine.db.entities.BlockchainStateEntry;
 import shine.db.entities.BlockEntry;
+import shine.db.entities.UserParamEntry;
 import utils.blockchain.BlockchainNameUtil;
 
 import java.util.Arrays;
@@ -45,8 +48,9 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
 
     private final BlocksDAO blocksDAO = BlocksDAO.getInstance();
     private final BlockchainStateDAO stateDAO = BlockchainStateDAO.getInstance();
+    private final UserParamsDAO userParamsDAO = UserParamsDAO.getInstance();
 
-    private final BlockchainWriter dbWriter = new BlockchainWriter(blocksDAO, stateDAO);
+    private final BlockchainWriter dbWriter = new BlockchainWriter(blocksDAO, stateDAO, userParamsDAO);
 
     @Override
     public Net_Response handle(Net_Request baseReq, ConnectionContext ctx) {
@@ -370,7 +374,22 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
                 be.setEditedByBlockNumber(be.getToBlockNumber());
             }
 
-            dbWriter.appendBlockAndState(blockchainName, block, st, be);
+            UserParamEntry upsertedParam = null;
+            if (block.body instanceof UserParamBody upBody) {
+                String effectiveLogin = (st.getLogin() != null && !st.getLogin().isBlank())
+                        ? st.getLogin()
+                        : login;
+                upsertedParam = new UserParamEntry(
+                        effectiveLogin,
+                        upBody.paramKey,
+                        block.timestamp * 1000L,
+                        upBody.paramValue,
+                        null,
+                        null
+                );
+            }
+
+            dbWriter.appendBlockAndState(blockchainName, block, st, be, upsertedParam);
 
         } catch (Exception e) {
             log.error("AddBlock: внутренняя ошибка при записи блока (login={}, blockchainName={}, blockNumber={})",

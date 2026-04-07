@@ -3,8 +3,10 @@ package server.logic.ws_protocol.JSON.handlers.blockchain.Net_AddBlock_Handler_u
 import blockchain.BchBlockEntry;
 import shine.db.dao.BlockchainStateDAO;
 import shine.db.dao.BlocksDAO;
+import shine.db.dao.UserParamsDAO;
 import shine.db.entities.BlockchainStateEntry;
 import shine.db.entities.BlockEntry;
+import shine.db.entities.UserParamEntry;
 import utils.files.FileStoreUtil;
 
 import java.sql.Connection;
@@ -21,17 +23,20 @@ public final class BlockchainWriter {
 
     private final BlocksDAO blocksDAO;
     private final BlockchainStateDAO stateDAO;
+    private final UserParamsDAO userParamsDAO;
     private final FileStoreUtil fs = FileStoreUtil.getInstance();
 
-    public BlockchainWriter(BlocksDAO blocksDAO, BlockchainStateDAO stateDAO) {
+    public BlockchainWriter(BlocksDAO blocksDAO, BlockchainStateDAO stateDAO, UserParamsDAO userParamsDAO) {
         this.blocksDAO = blocksDAO;
         this.stateDAO = stateDAO;
+        this.userParamsDAO = userParamsDAO;
     }
 
     public void appendBlockAndState(String blockchainName,
                                     BchBlockEntry block,
                                     BlockchainStateEntry st,
-                                    BlockEntry be) throws SQLException {
+                                    BlockEntry be,
+                                    UserParamEntry userParamEntry) throws SQLException {
 
         long nowMs = System.currentTimeMillis();
 
@@ -48,6 +53,11 @@ public final class BlockchainWriter {
                 st.setUpdatedAtMs(nowMs);
 
                 stateDAO.upsert(c, st);
+
+                // 2.1) Если блок — USER_PARAM, синхронизируем снимок в users_params в той же транзакции.
+                if (userParamEntry != null) {
+                    userParamsDAO.upsertIfNewer(c, userParamEntry);
+                }
 
                 c.commit();
             } catch (Exception e) {

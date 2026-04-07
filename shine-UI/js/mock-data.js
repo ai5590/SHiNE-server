@@ -1,6 +1,6 @@
 export const profile = {
   login: '@shine.alex',
-  name: 'Алексей сияющий',
+  name: '',
   avatarInitials: 'АС',
   phone: '+7 (916) 221-45-88',
   address: 'Москва, Пресненская наб., 12',

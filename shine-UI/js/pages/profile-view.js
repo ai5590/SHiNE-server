@@ -1,27 +1,27 @@
-import { renderHeader } from '../components/header.js?v=20260405171816';
-import { profile } from '../mock-data.js?v=20260405171816';
-import { state } from '../state.js?v=20260405171816';
+import { renderHeader } from '../components/header.js?v=20260407105357';
+import { profile } from '../mock-data.js?v=20260407105357';
+import { state } from '../state.js?v=20260407105357';
 import {
   loadProfileSnapshot,
   saveProfileParamBlock,
   saveProfileToggle,
-} from '../services/user-profile-params.js?v=20260405171816';
+} from '../services/user-profile-params.js?v=20260407105357';
 
 export const pageMeta = { id: 'profile-view', title: 'Профиль' };
-
-function getDisplayName(fields) {
-  const firstName = fields.find((field) => field.key === 'first_name')?.value?.trim() || '';
-  const lastName = fields.find((field) => field.key === 'last_name')?.value?.trim() || '';
-  const fullName = `${firstName} ${lastName}`.trim();
-  return fullName || profile.name;
-}
 
 function toggleText(enabled) {
   return enabled ? 'Yes' : 'No';
 }
 
+function showLocalErrorAlert(prefix, error) {
+  const message = error?.message || 'Неизвестная ошибка';
+  const stack = error?.stack ? `\n\nStack:\n${error.stack}` : '';
+  window.alert(`${prefix}: ${message}${stack}`);
+}
+
 export function render({ navigate }) {
   const login = state.session.login || profile.login;
+  const displayLogin = String(login || '').toUpperCase();
 
   const screen = document.createElement('section');
   screen.className = 'stack';
@@ -45,8 +45,7 @@ export function render({ navigate }) {
     <div class="row" style="gap:12px; align-items:center;">
       <div class="avatar large">${profile.avatarInitials}</div>
       <div>
-        <h2 style="font-size:22px; margin-bottom:2px;" data-profile-name="true">${profile.name}</h2>
-        <p class="meta-muted">${login}</p>
+        <h2 style="font-size:22px; margin-bottom:2px;" data-profile-login="true">${displayLogin}</h2>
       </div>
     </div>
     <button class="primary-btn" type="button" data-reload="true">Обновить</button>
@@ -59,13 +58,6 @@ export function render({ navigate }) {
     <button class="badge profile-toggle-btn is-no" type="button" data-toggle="shine">Сияющий: No</button>
   `;
 
-  const hint = document.createElement('div');
-  hint.className = 'card profile-data-help';
-  hint.innerHTML = `
-    <div class="meta-muted">Личные данные пользователя</div>
-    <p>Параметры читаются через API GetUserParam. Изменения записываются в блокчейн и после этого список сразу обновляется.</p>
-  `;
-
   const status = document.createElement('div');
   status.className = 'status-line';
   status.textContent = 'Загрузка параметров...';
@@ -73,7 +65,6 @@ export function render({ navigate }) {
   const listWrap = document.createElement('div');
   listWrap.className = 'stack profile-param-list';
 
-  const profileNameEl = topRow.querySelector('[data-profile-name="true"]');
   const reloadBtn = topRow.querySelector('[data-reload="true"]');
   const officialBtn = badgesRow.querySelector('[data-toggle="official"]');
   const shineBtn = badgesRow.querySelector('[data-toggle="shine"]');
@@ -105,15 +96,15 @@ export function render({ navigate }) {
   }
 
   function renderFields(fields) {
-    profileNameEl.textContent = getDisplayName(fields);
-
     listWrap.innerHTML = '';
     fields.forEach((field) => {
       const row = document.createElement('div');
       row.className = 'card profile-param-item row';
       const value = String(field.value || '').trim() || 'не заполнено';
+      const isNameField = field.key === 'first_name' || field.key === 'last_name';
+      const valueClass = isNameField ? 'profile-param-value profile-param-value-small' : 'profile-param-value';
       row.innerHTML = `
-        <div class="profile-param-value"><b>${field.label}</b>: ${value}</div>
+        <div class="${valueClass}"><b>${field.label}</b>: ${value}</div>
         <button class="ghost-btn" type="button" data-edit-field="${field.key}">Изменить</button>
       `;
       listWrap.append(row);
@@ -140,6 +131,7 @@ export function render({ navigate }) {
     } catch (error) {
       status.className = 'status-line is-unavailable';
       status.textContent = `Не удалось загрузить параметры: ${error.message || 'ошибка сети'}`;
+      showLocalErrorAlert('Ошибка загрузки параметров профиля', error);
     } finally {
       reloadBtn.disabled = false;
       officialBtn.disabled = false;
@@ -167,6 +159,7 @@ export function render({ navigate }) {
     } catch (error) {
       status.className = 'status-line is-unavailable';
       status.textContent = `Не удалось изменить ${toggleKey}: ${error.message || 'ошибка сети'}`;
+      showLocalErrorAlert(`Ошибка изменения ${toggleKey}`, error);
     }
   }
 
@@ -191,6 +184,7 @@ export function render({ navigate }) {
     } catch (error) {
       status.className = 'status-line is-unavailable';
       status.textContent = `Не удалось изменить ${field.key}: ${error.message || 'ошибка сети'}`;
+      showLocalErrorAlert(`Ошибка изменения ${field.key}`, error);
     }
   }
 
@@ -206,7 +200,7 @@ export function render({ navigate }) {
   officialBtn.addEventListener('click', () => onToggleClick('official'));
   shineBtn.addEventListener('click', () => onToggleClick('shine'));
 
-  card.append(topRow, badgesRow, hint, status, listWrap);
+  card.append(topRow, badgesRow, status, listWrap);
   screen.append(card);
 
   refreshProfileSnapshot();

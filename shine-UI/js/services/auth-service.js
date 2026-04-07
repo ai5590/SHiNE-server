@@ -1,4 +1,4 @@
-import { WsJsonClient } from './ws-client.js?v=20260405171816';
+import { WsJsonClient } from './ws-client.js?v=20260407105357';
 import {
   bytesToBase64,
   deriveEd25519FromPassword,
@@ -11,13 +11,13 @@ import {
   signBytes,
   signBase64,
   utf8Bytes,
-} from './crypto-utils.js?v=20260405171816';
+} from './crypto-utils.js?v=20260407105357';
 import {
   loadEncryptedUserSecrets,
   loadSessionMaterial,
   saveEncryptedUserSecrets,
   saveSessionMaterial,
-} from './key-vault.js?v=20260405171816';
+} from './key-vault.js?v=20260407105357';
 
 const BCH_SUFFIX = '001';
 
@@ -378,6 +378,12 @@ export class AuthService {
 
     const user = await this.getUser(cleanLogin);
     const blockchainName = String(user?.blockchainName || `${cleanLogin}-${BCH_SUFFIX}`).trim();
+    const freshNum = Number(user?.serverLastGlobalNumber);
+    const freshHash = String(user?.serverLastGlobalHash || '').trim().toLowerCase();
+    const freshCursor = {
+      serverLastGlobalNumber: Number.isFinite(freshNum) ? freshNum : -1,
+      serverLastGlobalHash: freshHash.length === 64 ? freshHash : '0'.repeat(64),
+    };
 
     const savedKeys = await loadEncryptedUserSecrets(cleanLogin, storagePwd);
     const blockchainPrivatePkcs8 = savedKeys?.blockchainKey;
@@ -391,11 +397,14 @@ export class AuthService {
       const blockNumber = Number(cursor?.serverLastGlobalNumber ?? -1) + 1;
       const prevBlockHash = String(cursor?.serverLastGlobalHash || '0'.repeat(64));
 
+      // Для USER_PARAM отправляем старт новой line-цепочки:
+      // prevLineNumber=-1, prevLineHash=0x00..00, thisLineNumber=-1.
+      // Этот формат соответствует BodyHasLine правилам на сервере.
       const bodyBytes = makeUserParamBodyBytes({
-        lineCode: Number(cursor?.serverLastGlobalNumber ?? 0),
-        prevLineNumber: Number(cursor?.serverLastGlobalNumber ?? 0),
-        prevLineHashHex: prevBlockHash,
-        thisLineNumber: 1,
+        lineCode: 0,
+        prevLineNumber: -1,
+        prevLineHashHex: '0'.repeat(64),
+        thisLineNumber: -1,
         key: cleanParam,
         value: cleanValue,
       });
@@ -426,7 +435,7 @@ export class AuthService {
       return response;
     };
 
-    let cursor = { serverLastGlobalNumber: -1, serverLastGlobalHash: '0'.repeat(64) };
+    let cursor = freshCursor;
     let response = await tryAdd(cursor);
     if (response.status !== 200) {
       const knownNum = Number(response?.payload?.serverLastGlobalNumber);

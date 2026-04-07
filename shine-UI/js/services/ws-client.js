@@ -1,4 +1,4 @@
-import { captureClientError } from './client-error-reporter.js?v=20260405171816';
+import { captureClientError } from './client-error-reporter.js?v=20260407105357';
 
 const DEFAULT_TIMEOUT_MS = 12000;
 

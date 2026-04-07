@@ -1,6 +1,6 @@
-import { renderHeader } from '../components/header.js?v=20260405171816';
-import { profile } from '../mock-data.js?v=20260405171816';
-import { state } from '../state.js?v=20260405171816';
+import { renderHeader } from '../components/header.js?v=20260407105357';
+import { profile } from '../mock-data.js?v=20260407105357';
+import { state } from '../state.js?v=20260407105357';
 
 export const pageMeta = { id: 'device-qr-view', title: 'Показать QR-код' };
 

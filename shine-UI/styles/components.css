@@ -177,6 +177,10 @@
   word-break: break-word;
 }
 
+.profile-param-value-small {
+  font-size: 13px;
+}
+
 .profile-param-time {
   font-size: 12px;
 }
@@ -408,6 +412,10 @@
 .avatar {
   width: 44px;
   height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   background: linear-gradient(130deg, #3c4f73, #243352);
   display: grid;

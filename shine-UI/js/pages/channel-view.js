@@ -1,6 +1,6 @@
-import { renderHeader } from '../components/header.js?v=20260405171816';
-import { channelPosts, channels } from '../mock-data.js?v=20260405171816';
-import { addLocalChannelPost, authService, getLocalChannelPosts, state } from '../state.js?v=20260405171816';
+import { renderHeader } from '../components/header.js?v=20260407105357';
+import { channelPosts, channels } from '../mock-data.js?v=20260407105357';
+import { addLocalChannelPost, authService, getLocalChannelPosts, state } from '../state.js?v=20260407105357';
 
 export const pageMeta = { id: 'channel-view', title: 'Канал' };
 

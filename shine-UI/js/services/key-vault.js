@@ -1,7 +1,7 @@
 import {
   decryptJsonWithStoragePwd,
   encryptJsonWithStoragePwd,
-} from './crypto-utils.js?v=20260405171816';
+} from './crypto-utils.js?v=20260407105357';
 
 const DB_NAME = 'shine-ui-auth';
 const DB_VERSION = 1;

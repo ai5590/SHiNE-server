@@ -1,5 +1,5 @@
-import { renderHeader } from '../components/header.js?v=20260405171816';
-import { checkServerAvailability, saveEntrySettings, state } from '../state.js?v=20260405171816';
+import { renderHeader } from '../components/header.js?v=20260407105357';
+import { checkServerAvailability, saveEntrySettings, state } from '../state.js?v=20260407105357';
 
 export const pageMeta = { id: 'server-settings-view', title: 'Настройки серверов' };
 

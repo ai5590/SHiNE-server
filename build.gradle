@@ -182,10 +182,18 @@ tasks.register('deployServer', JavaExec) {
     dependsOn testClasses
 }
 
-tasks.register('deployPWA', Exec) {
+tasks.register('deployWEB', Exec) {
     group = "!!deployment"
-    description = "Deploy PWA via deploy_shine-PWA.sh"
+    description = "Deploy WEB via deploy_shine-PWA.sh"
 
     workingDir = rootDir
     commandLine 'bash', file('deploy_shine-PWA.sh').absolutePath
+}
+
+tasks.register('deployAll') {
+    group = "!!deployment"
+    description = "Deploy server and WEB"
+
+    dependsOn tasks.named('deployServer')
+    dependsOn tasks.named('deployWEB')
 }

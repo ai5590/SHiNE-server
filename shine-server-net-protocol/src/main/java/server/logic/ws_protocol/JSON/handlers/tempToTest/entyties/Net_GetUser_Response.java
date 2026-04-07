@@ -39,6 +39,8 @@ public class Net_GetUser_Response extends Net_Response {
     private String solanaKey;
     private String blockchainKey;
     private String deviceKey;
+    private Integer serverLastGlobalNumber;
+    private String serverLastGlobalHash;
 
     public Boolean getExists() { return exists; }
     public void setExists(Boolean exists) { this.exists = exists; }
@@ -57,4 +59,10 @@ public class Net_GetUser_Response extends Net_Response {
 
     public String getDeviceKey() { return deviceKey; }
     public void setDeviceKey(String deviceKey) { this.deviceKey = deviceKey; }
+
+    public Integer getServerLastGlobalNumber() { return serverLastGlobalNumber; }
+    public void setServerLastGlobalNumber(Integer serverLastGlobalNumber) { this.serverLastGlobalNumber = serverLastGlobalNumber; }
+
+    public String getServerLastGlobalHash() { return serverLastGlobalHash; }
+    public void setServerLastGlobalHash(String serverLastGlobalHash) { this.serverLastGlobalHash = serverLastGlobalHash; }
 }
