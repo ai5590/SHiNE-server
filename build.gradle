@@ -197,3 +197,70 @@ tasks.register('deployAll') {
     dependsOn tasks.named('deployServer')
     dependsOn tasks.named('deployWEB')
 }
+
+tasks.register('startLocal', Exec) {
+    group = "!!run"
+    description = "Builds server, starts local WS server and local HTTP UI for end-to-end local testing"
+
+    dependsOn shadowJar
+
+    workingDir = rootDir
+    def wsPort = System.getProperty("localWsPort", "7070")
+    def webPort = System.getProperty("localWebPort", "8088")
+
+    commandLine 'bash', '-lc', """
+      set -euo pipefail
+      JAR_PATH="${file('build/libs/shine-server.jar').absolutePath}"
+      UI_DIR="${file('shine-UI').absolutePath}"
+      WS_PORT="${wsPort}"
+      WEB_PORT="${webPort}"
+
+      is_port_busy() {
+        local port="\$1"
+        if command -v ss >/dev/null 2>&1; then
+          ss -ltnH "sport = :\$port" | grep -q .
+        elif command -v lsof >/dev/null 2>&1; then
+          lsof -iTCP:"\$port" -sTCP:LISTEN >/dev/null 2>&1
+        else
+          return 1
+        fi
+      }
+
+      pick_free_port() {
+        local p="\$1"
+        while is_port_busy "\$p"; do
+          p=\$((p + 1))
+        done
+        echo "\$p"
+      }
+
+      WS_PORT="\$(pick_free_port "\$WS_PORT")"
+      WEB_PORT="\$(pick_free_port "\$WEB_PORT")"
+
+      echo "Starting SHiNE local stack..."
+      echo "WS server port: \$WS_PORT"
+      echo "UI HTTP port: \$WEB_PORT"
+      echo "Client URL: http://localhost:\$WEB_PORT/?localWsPort=\$WS_PORT"
+
+      java -Dserver.port="\$WS_PORT" -jar "\$JAR_PATH" &
+      SERVER_PID=\$!
+      trap 'kill \$SERVER_PID 2>/dev/null || true' EXIT INT TERM
+
+      CLIENT_URL="http://localhost:\$WEB_PORT/?localWsPort=\$WS_PORT"
+      if command -v xdg-open >/dev/null 2>&1; then
+        (xdg-open "\$CLIENT_URL" >/dev/null 2>&1 || true) &
+      elif command -v open >/dev/null 2>&1; then
+        (open "\$CLIENT_URL" >/dev/null 2>&1 || true) &
+      elif command -v cmd.exe >/dev/null 2>&1; then
+        (cmd.exe /c start "" "\$CLIENT_URL" >/dev/null 2>&1 || true) &
+      else
+        echo "Browser auto-open is not available on this host. Open manually: \$CLIENT_URL"
+      fi
+
+      if command -v python3 >/dev/null 2>&1; then
+        (cd "\$UI_DIR" && python3 -m http.server "\$WEB_PORT")
+      else
+        (cd "\$UI_DIR" && python -m http.server "\$WEB_PORT")
+      fi
+    """
+}

@@ -42,6 +42,8 @@ public final class AppConfig {
 
     /** Вернёт значение строки или null, если параметр не найден */
     public String getParam(String name) {
+        String fromSystem = System.getProperty(name);
+        if (fromSystem != null) return fromSystem;
         return properties.getProperty(name);
     }
 

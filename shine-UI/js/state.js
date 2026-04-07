@@ -11,6 +11,22 @@ const INVALID_SESSION_CODES = new Set([
   'SESSION_OF_ANOTHER_USER',
 ]);
 
+function readLocalWsOverrideUrl() {
+  try {
+    const value = new URLSearchParams(window.location.search).get('localWsPort');
+    const asNum = Number(value);
+    if (!Number.isFinite(asNum)) return '';
+    const port = Math.trunc(asNum);
+    if (port <= 0 || port > 65535) return '';
+    return `ws://localhost:${port}/ws`;
+  } catch {
+    return '';
+  }
+}
+
+const LOCAL_WS_OVERRIDE_URL = readLocalWsOverrideUrl();
+const DEFAULT_SHINE_SERVER = 'wss://shineup.me/ws';
+
 function loadStoredSession() {
   try {
     const raw = localStorage.getItem(SESSION_STORAGE_KEY);
@@ -39,6 +55,8 @@ function clearStoredSession() {
 
 function createInitialState({ withStoredSession = true } = {}) {
   const storedSession = withStoredSession ? loadStoredSession() : null;
+  const initialShineServer = LOCAL_WS_OVERRIDE_URL || DEFAULT_SHINE_SERVER;
+
   return {
     chats: clone(chatMessages),
     contacts: [],
@@ -55,7 +73,7 @@ function createInitialState({ withStoredSession = true } = {}) {
     entrySettings: {
       language: 'ru',
       solanaServer: 'https://api.mainnet-beta.solana.com',
-      shineServer: 'wss://shineup.me/ws',
+      shineServer: initialShineServer,
       arweaveServer: 'https://arweave.net',
       statuses: {
         solanaServer: 'idle',
@@ -155,9 +173,11 @@ export function checkServerAvailability(address) {
 }
 
 export async function saveEntrySettings(nextSettings) {
+  const forcedShineServer = LOCAL_WS_OVERRIDE_URL || nextSettings.shineServer;
   state.entrySettings = {
     ...state.entrySettings,
     ...nextSettings,
+    shineServer: forcedShineServer,
     statuses: {
       ...state.entrySettings.statuses,
       ...(nextSettings.statuses || {}),
