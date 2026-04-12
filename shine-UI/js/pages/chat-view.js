@@ -1,6 +1,6 @@
 import { renderHeader } from '../components/header.js';
 import { directMessages } from '../mock-data.js';
-import { addChatMessage, getChatMessages, authService } from '../state.js';
+import { addChatMessage, getChatMessages, authService, state } from '../state.js';
 
 export const pageMeta = { id: 'chat-view', title: 'Чат' };
 
@@ -66,7 +66,11 @@ export function render({ navigate, route }) {
     renderLog(log, chatId);
 
     try {
-      await authService.sendDirectMessage(chatId, text);
+      await authService.sendDirectMessage({
+        toLogin: chatId,
+        text,
+        storagePwd: state.session.storagePwdInMemory,
+      });
     } catch (e) {
       addChatMessage(chatId, `Ошибка отправки: ${e.message || 'unknown'}`);
       renderLog(log, chatId);
