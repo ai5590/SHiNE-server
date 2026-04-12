@@ -1,6 +1,6 @@
 import { renderHeader } from '../components/header.js';
 import { directMessages } from '../mock-data.js';
-import { addChatMessage, getChatMessages, authService, state } from '../state.js';
+import { addChatMessage, getChatMessages, authService } from '../state.js';
 
 export const pageMeta = { id: 'chat-view', title: 'Чат' };
 
@@ -31,25 +31,16 @@ export function render({ navigate, route }) {
     renderHeader({
       title: `Чат: ${contact.name}`,
       leftAction: { label: '←', onClick: () => navigate('messages-list') },
+      rightActions: [{
+        label: 'Позвонить',
+        onClick: () => {
+          const confirmed = window.confirm('Позвонить этому пользователю?');
+          if (!confirmed) return;
+          window.alert('Функция пока не реализована');
+        },
+      }],
     })
   );
-
-  const isContact = state.contacts.includes(chatId);
-  if (!isContact) {
-    const warning = document.createElement('div');
-    warning.className = 'card stack';
-    warning.innerHTML = '<p class="meta-muted">Пользователь не в контактах. Можно писать ему сразу (MVP).</p>';
-    const btn = document.createElement('button');
-    btn.className = 'primary-btn';
-    btn.type = 'button';
-    btn.textContent = 'Добавить в контакты';
-    btn.addEventListener('click', () => {
-      state.contacts = [...state.contacts, chatId];
-      warning.remove();
-    });
-    warning.append(btn);
-    screen.append(warning);
-  }
 
   const wrap = document.createElement('div');
   wrap.className = 'chat-wrap';

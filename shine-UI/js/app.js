@@ -39,6 +39,7 @@ import * as languageView from './pages/language-view.js';
 import * as messagesList from './pages/messages-list.js';
 import * as contactSearchView from './pages/contact-search-view.js';
 import * as chatView from './pages/chat-view.js';
+import * as userProfileView from './pages/user-profile-view.js';
 import * as channelsList from './pages/channels-list.js';
 import * as channelView from './pages/channel-view.js';
 import * as addChannelView from './pages/add-channel-view.js';
@@ -70,6 +71,7 @@ const routes = {
   'messages-list': messagesList,
   'contact-search-view': contactSearchView,
   'chat-view': chatView,
+  'user-profile-view': userProfileView,
   'channels-list': channelsList,
   'channel-view': channelView,
   'add-channel-view': addChannelView,

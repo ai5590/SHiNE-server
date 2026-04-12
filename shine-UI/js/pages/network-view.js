@@ -6,70 +6,16 @@ export const pageMeta = { id: 'network-view', title: 'Связи' };
 function makeNode(name, cls = '') {
   const n = document.createElement('div');
   n.className = `node ${cls}`.trim();
+  n.dataset.nodeLogin = name;
   n.innerHTML = `<div class="node-dot">${(name[0] || '?').toUpperCase()}</div><div class="node-label">${name}</div>`;
   return n;
 }
 
-function showAddCloseFriendModal({ onAdded }) {
-  const root = document.getElementById('modal-root');
-  root.innerHTML = `
-    <div class="modal" id="close-friend-modal">
-      <div class="modal-card stack">
-        <h3 style="font-size:18px;">Добавить близкого друга</h3>
-        <input class="input" id="close-friend-query" placeholder="Логин или начало логина" maxlength="80" />
-        <div class="row" style="gap:8px;">
-          <button class="primary-btn" id="close-friend-search">Поиск</button>
-          <button class="ghost-btn" id="close-friend-back">Назад</button>
-        </div>
-        <div class="stack" id="close-friend-results"></div>
-      </div>
-    </div>
-  `;
-
-  const close = () => { root.innerHTML = ''; };
-  root.querySelector('#close-friend-back').addEventListener('click', close);
-
-  root.querySelector('#close-friend-search').addEventListener('click', async () => {
-    const query = root.querySelector('#close-friend-query').value.trim();
-    const holder = root.querySelector('#close-friend-results');
-    holder.innerHTML = '<p class="meta-muted">Поиск...</p>';
-
-    try {
-      const logins = await authService.searchUsers(query);
-      holder.innerHTML = '';
-      if (!logins.length) {
-        holder.innerHTML = '<p class="meta-muted">Пользователи не найдены.</p>';
-        return;
-      }
-
-      logins.forEach((login) => {
-        const row = document.createElement('article');
-        row.className = 'list-item';
-        row.innerHTML = `
-          <div class="avatar">${(login[0] || '?').toUpperCase()}</div>
-          <div><strong>${login}</strong><p class="meta-muted" style="margin-top:4px;">Пользователь</p></div>
-          <div class="meta-muted">Добавить</div>
-        `;
-        row.addEventListener('click', async () => {
-          const yes = window.confirm(`Добавить ${login} в близкие друзья?`);
-          if (!yes) return;
-          try {
-            await authService.addCloseFriend(login);
-            close();
-            if (typeof onAdded === 'function') await onAdded();
-          } catch (e) {
-            window.alert(`Ошибка добавления: ${e.message || 'unknown'}`);
-          }
-        });
-        holder.append(row);
-      });
-    } catch (e) {
-      holder.innerHTML = `<p class="meta-muted">Ошибка поиска: ${e.message || 'unknown'}</p>`;
-    }
-  });
+function unique(list) {
+  return [...new Set((Array.isArray(list) ? list : []).filter(Boolean))];
 }
 
-export function render() {
+export function render({ navigate }) {
   const screen = document.createElement('section');
   screen.className = 'stack';
 
@@ -81,16 +27,99 @@ export function render() {
   note.className = 'meta-muted';
   note.textContent = 'Загрузка связей...';
 
-  const load = async (centerLogin) => {
+  let activeMenu = null;
+  let centerLogin = state.session.login || '';
+
+  function closeNodeMenu() {
+    if (!activeMenu) return;
+    activeMenu.remove();
+    activeMenu = null;
+  }
+
+  function openNodeMenu(node, login) {
+    closeNodeMenu();
+    const menu = document.createElement('div');
+    menu.className = 'node-menu card';
+    menu.innerHTML = '<button class="ghost-btn" type="button">Показать информацию о пользователе</button>';
+
+    const rect = node.getBoundingClientRect();
+    const boardRect = board.getBoundingClientRect();
+    const x = rect.left + rect.width / 2 - boardRect.left;
+    const y = rect.bottom - boardRect.top + 8;
+
+    menu.style.left = `${Math.max(8, Math.min(x - 120, boardRect.width - 248))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, boardRect.height - 58))}px`;
+
+    const btn = menu.querySelector('button');
+    btn.addEventListener('click', () => {
+      navigate(`user-profile-view/${encodeURIComponent(login)}/network-view`);
+      closeNodeMenu();
+    });
+
+    board.append(menu);
+    activeMenu = menu;
+  }
+
+  function bindNodeInteraction(node, login, onLongPress) {
+    let timerId = 0;
+    let startX = 0;
+    let startY = 0;
+    let longPressTriggered = false;
+
+    const clearTimer = () => {
+      if (timerId) {
+        window.clearTimeout(timerId);
+        timerId = 0;
+      }
+    };
+
+    node.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      startX = event.clientX;
+      startY = event.clientY;
+      longPressTriggered = false;
+      clearTimer();
+      timerId = window.setTimeout(async () => {
+        longPressTriggered = true;
+        closeNodeMenu();
+        await onLongPress(login);
+      }, 500);
+    });
+
+    node.addEventListener('pointermove', (event) => {
+      if (!timerId) return;
+      const dx = Math.abs(event.clientX - startX);
+      const dy = Math.abs(event.clientY - startY);
+      if (dx > 8 || dy > 8) clearTimer();
+    });
+
+    node.addEventListener('pointerleave', clearTimer);
+    node.addEventListener('pointercancel', clearTimer);
+
+    node.addEventListener('pointerup', (event) => {
+      if (event.button !== 0) return;
+      clearTimer();
+      if (longPressTriggered) return;
+      openNodeMenu(node, login);
+    });
+  }
+
+  async function load(nextCenterLogin = '') {
+    const targetCenter = nextCenterLogin || centerLogin || state.session.login;
+    centerLogin = targetCenter;
+    closeNodeMenu();
+    note.textContent = 'Загрузка связей...';
+
     try {
-      const graph = await authService.getUserConnectionsGraph(centerLogin || state.session.login);
+      const graph = await authService.getUserConnectionsGraph(targetCenter);
       board.innerHTML = '';
-      const center = makeNode(graph.login || state.session.login, 'center');
+
+      const center = makeNode(graph.login || targetCenter, 'center');
       center.style.left = '50%';
       center.style.top = '50%';
       board.append(center);
 
-      const all = [...new Set([...(graph.outFriends || []), ...(graph.inFriends || [])])];
+      const all = unique([...(graph.outFriends || []), ...(graph.inFriends || [])]);
       const left = all.slice(0, Math.ceil(all.length / 2));
       const right = all.slice(Math.ceil(all.length / 2));
 
@@ -99,7 +128,7 @@ export function render() {
         const y = 15 + ((idx + 1) * 70) / (Math.max(total, 1) + 1);
         node.style.left = side === 'left' ? '20%' : '80%';
         node.style.top = `${y}%`;
-        node.addEventListener('click', () => load(name));
+        bindNodeInteraction(node, name, load);
         board.append(node);
 
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -121,20 +150,33 @@ export function render() {
       right.forEach((name, i) => svg.append(mk(name, 'right', i, right.length)));
       board.prepend(svg);
 
-      note.textContent = 'Нажмите на узел, чтобы перестроить связи вокруг выбранного пользователя.';
+      note.textContent = 'Тап по узлу: информация о пользователе. Долгое нажатие: центрировать граф.';
     } catch (e) {
       note.textContent = `Ошибка загрузки связей: ${e.message || 'unknown'}`;
     }
+  }
+
+  const outsideTapHandler = (event) => {
+    if (!activeMenu) return;
+    if (!(event.target instanceof Node)) return;
+    if (activeMenu.contains(event.target)) return;
+    closeNodeMenu();
+  };
+  document.addEventListener('pointerdown', outsideTapHandler, true);
+  screen.cleanup = () => {
+    document.removeEventListener('pointerdown', outsideTapHandler, true);
   };
 
-  const addBtn = document.createElement('button');
-  addBtn.className = 'primary-btn';
-  addBtn.type = 'button';
-  addBtn.textContent = 'Добавить близкого друга';
-  addBtn.addEventListener('click', () => showAddCloseFriendModal({ onAdded: () => load() }));
+  board.addEventListener('pointerdown', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('.node')) return;
+    if (target.closest('.node-menu')) return;
+    closeNodeMenu();
+  });
 
   load();
 
-  screen.append(renderHeader({ title: 'Связи' }), addBtn, board, note);
+  screen.append(renderHeader({ title: 'Связи' }), board, note);
   return screen;
 }

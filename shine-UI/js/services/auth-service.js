@@ -20,6 +20,13 @@ import {
 } from './key-vault.js';
 
 const BCH_SUFFIX = '001';
+const ZERO_HASH_HEX = '0'.repeat(64);
+
+const CONNECTION_SUBTYPES = Object.freeze({
+  friend: { on: 10, off: 11 },
+  contact: { on: 20, off: 21 },
+  follow: { on: 30, off: 31 },
+});
 
 function normalizeServerUrl(url) {
   const value = (url || '').trim();
@@ -88,6 +95,10 @@ function int64Bytes(value) {
   return bytes;
 }
 
+function uint8Bytes(value) {
+  return new Uint8Array([Number(value) & 0xff]);
+}
+
 function makeUserParamBodyBytes({ lineCode, prevLineNumber, prevLineHashHex, thisLineNumber, key, value }) {
   const keyBytes = utf8Bytes(String(key || ''));
   const valueBytes = utf8Bytes(String(value || ''));
@@ -104,6 +115,39 @@ function makeUserParamBodyBytes({ lineCode, prevLineNumber, prevLineHashHex, thi
     keyBytes,
     int16Bytes(valueBytes.length),
     valueBytes,
+  );
+}
+
+function makeConnectionBodyBytes({
+  lineCode,
+  prevLineNumber,
+  prevLineHashHex,
+  thisLineNumber,
+  toBlockchainName,
+  toBlockNumber,
+  toBlockHashHex,
+}) {
+  const cleanBchName = String(toBlockchainName || '').trim();
+  if (!cleanBchName) throw new Error('Пустой toBlockchainName для CONNECTION');
+  const toBchBytes = utf8Bytes(cleanBchName);
+  if (!toBchBytes.length || toBchBytes.length > 255) {
+    throw new Error('toBlockchainName должен быть 1..255 байт UTF-8');
+  }
+
+  const prevHashBytes = hexToBytes(prevLineHashHex);
+  const toBlockHashBytes = hexToBytes(toBlockHashHex);
+  if (prevHashBytes.length !== 32) throw new Error('prevLineHash должен быть 32 байта');
+  if (toBlockHashBytes.length !== 32) throw new Error('toBlockHash должен быть 32 байта');
+
+  return concatBytes(
+    int32Bytes(lineCode),
+    int32Bytes(prevLineNumber),
+    prevHashBytes,
+    int32Bytes(thisLineNumber),
+    uint8Bytes(toBchBytes.length),
+    toBchBytes,
+    int32Bytes(toBlockNumber),
+    toBlockHashBytes,
   );
 }
 
@@ -368,6 +412,14 @@ export class AuthService {
     throw opError('GetUserParam', response);
   }
 
+  async setUserRelation({ login, toLogin, kind, enabled, storagePwd }) {
+    const cleanKind = String(kind || '').trim().toLowerCase();
+    const kinds = CONNECTION_SUBTYPES[cleanKind];
+    if (!kinds) throw new Error(`Неподдерживаемый тип связи: ${kind}`);
+    const subType = enabled ? kinds.on : kinds.off;
+    return this.addBlockConnection({ login, toLogin, subType, storagePwd });
+  }
+
   async addBlockUserParam({ login, param, value, storagePwd }) {
     const cleanLogin = (login || '').trim();
     const cleanParam = (param || '').trim();
@@ -382,7 +434,7 @@ export class AuthService {
     const freshHash = String(user?.serverLastGlobalHash || '').trim().toLowerCase();
     const freshCursor = {
       serverLastGlobalNumber: Number.isFinite(freshNum) ? freshNum : -1,
-      serverLastGlobalHash: freshHash.length === 64 ? freshHash : '0'.repeat(64),
+      serverLastGlobalHash: freshHash.length === 64 ? freshHash : ZERO_HASH_HEX,
     };
 
     const savedKeys = await loadEncryptedUserSecrets(cleanLogin, storagePwd);
@@ -395,7 +447,7 @@ export class AuthService {
 
     const tryAdd = async (cursor) => {
       const blockNumber = Number(cursor?.serverLastGlobalNumber ?? -1) + 1;
-      const prevBlockHash = String(cursor?.serverLastGlobalHash || '0'.repeat(64));
+      const prevBlockHash = String(cursor?.serverLastGlobalHash || ZERO_HASH_HEX);
 
       // Для USER_PARAM отправляем старт новой line-цепочки:
       // prevLineNumber=-1, prevLineHash=0x00..00, thisLineNumber=-1.
@@ -403,7 +455,7 @@ export class AuthService {
       const bodyBytes = makeUserParamBodyBytes({
         lineCode: 0,
         prevLineNumber: -1,
-        prevLineHashHex: '0'.repeat(64),
+        prevLineHashHex: ZERO_HASH_HEX,
         thisLineNumber: -1,
         key: cleanParam,
         value: cleanValue,
@@ -440,6 +492,94 @@ export class AuthService {
     if (response.status !== 200) {
       const knownNum = Number(response?.payload?.serverLastGlobalNumber);
       const knownHash = String(response?.payload?.serverLastGlobalHash || '');
+      if (Number.isFinite(knownNum) && knownHash.length === 64) {
+        cursor = { serverLastGlobalNumber: knownNum, serverLastGlobalHash: knownHash };
+        response = await tryAdd(cursor);
+      }
+    }
+
+    if (response.status !== 200) throw opError('AddBlock', response);
+    return response.payload || {};
+  }
+
+  async addBlockConnection({ login, toLogin, subType, storagePwd }) {
+    const cleanLogin = (login || '').trim();
+    const cleanToLogin = (toLogin || '').trim();
+    const cleanSubType = Number(subType);
+    if (!cleanLogin || !cleanToLogin) throw new Error('Не переданы login/toLogin для CONNECTION.');
+    if (!Number.isFinite(cleanSubType)) throw new Error('Не передан subType для CONNECTION.');
+    if (!storagePwd) throw new Error('Не передан storagePwd для подписи AddBlock.');
+    if (cleanLogin.toLowerCase() === cleanToLogin.toLowerCase()) {
+      throw new Error('Нельзя создать связь на самого себя.');
+    }
+
+    const user = await this.getUser(cleanLogin);
+    if (user?.exists === false) throw new Error('Текущий пользователь не найден.');
+    const blockchainName = String(user?.blockchainName || `${cleanLogin}-${BCH_SUFFIX}`).trim();
+    const freshNum = Number(user?.serverLastGlobalNumber);
+    const freshHash = String(user?.serverLastGlobalHash || '').trim().toLowerCase();
+    const freshCursor = {
+      serverLastGlobalNumber: Number.isFinite(freshNum) ? freshNum : -1,
+      serverLastGlobalHash: freshHash.length === 64 ? freshHash : ZERO_HASH_HEX,
+    };
+
+    const targetUser = await this.getUser(cleanToLogin);
+    if (!targetUser?.exists) throw new Error('Пользователь цели не найден.');
+    const toBlockchainName = String(targetUser?.blockchainName || `${cleanToLogin}-${BCH_SUFFIX}`).trim();
+
+    const savedKeys = await loadEncryptedUserSecrets(cleanLogin, storagePwd);
+    const blockchainPrivatePkcs8 = savedKeys?.blockchainKey;
+    if (!blockchainPrivatePkcs8) {
+      throw new Error('На устройстве нет сохраненного приватного blockchainKey');
+    }
+    const privateKey = await importPkcs8Ed25519(blockchainPrivatePkcs8);
+
+    const tryAdd = async (cursor) => {
+      const blockNumber = Number(cursor?.serverLastGlobalNumber ?? -1) + 1;
+      const prevBlockHash = String(cursor?.serverLastGlobalHash || ZERO_HASH_HEX);
+
+      // Для CONNECTION в UI-MVP всегда стартуем новую line-цепочку:
+      // prevLineNumber=-1, prevLineHash=0x00..00, thisLineNumber=-1.
+      // target для user-связей указывает на HEADER пользователя (blockNumber=0).
+      const bodyBytes = makeConnectionBodyBytes({
+        lineCode: 0,
+        prevLineNumber: -1,
+        prevLineHashHex: ZERO_HASH_HEX,
+        thisLineNumber: -1,
+        toBlockchainName,
+        toBlockNumber: 0,
+        toBlockHashHex: ZERO_HASH_HEX,
+      });
+
+      const preimage = concatBytes(
+        int16Bytes(0),
+        hexToBytes(prevBlockHash),
+        int32Bytes(2 + 32 + 4 + 4 + 8 + 2 + 2 + 2 + bodyBytes.length),
+        int32Bytes(blockNumber),
+        int64Bytes(Math.floor(Date.now() / 1000)),
+        int16Bytes(3),
+        int16Bytes(cleanSubType),
+        int16Bytes(1),
+        bodyBytes,
+      );
+
+      const hash32 = await sha256Bytes(preimage);
+      const signatureBytes = await signBytes(privateKey, hash32);
+      const fullBlock = concatBytes(preimage, int16Bytes(0x0100), signatureBytes);
+
+      return this.ws.request('AddBlock', {
+        blockchainName,
+        blockNumber,
+        prevBlockHash,
+        blockBytesB64: bytesToBase64(fullBlock),
+      });
+    };
+
+    let cursor = freshCursor;
+    let response = await tryAdd(cursor);
+    if (response.status !== 200) {
+      const knownNum = Number(response?.payload?.serverLastGlobalNumber);
+      const knownHash = String(response?.payload?.serverLastGlobalHash || '').trim().toLowerCase();
       if (Number.isFinite(knownNum) && knownHash.length === 64) {
         cursor = { serverLastGlobalNumber: knownNum, serverLastGlobalHash: knownHash };
         response = await tryAdd(cursor);
