@@ -1,49 +1,51 @@
-const LS_KEY = 'shine-ui-fcm-token-v1';
+const LS_KEY = 'shine-ui-webpush-subscription-v1';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 export async function initPwaPush({ authService }) {
-  if (!('serviceWorker' in navigator)) return;
-  try {
-    await navigator.serviceWorker.register('./firebase-messaging-sw.js');
-  } catch {
-    return;
-  }
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
 
-  if (!window.firebase || !window.firebase.messaging) return;
+  const vapidPublicKey = window.__SHINE_WEBPUSH_VAPID_PUBLIC_KEY__ || '';
+  if (!vapidPublicKey) return;
 
   try {
-    const config = window.__SHINE_FIREBASE_CONFIG__ || null;
-    if (!config) return;
-    if (!window.firebase.apps.length) {
-      window.firebase.initializeApp(config);
-    }
-    const messaging = window.firebase.messaging();
-
+    const registration = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return;
 
-    const vapidKey = window.__SHINE_FIREBASE_VAPID_KEY__ || '';
-    const token = await messaging.getToken({ vapidKey });
-    if (!token) return;
+    let sub = await registration.pushManager.getSubscription();
+    if (!sub) {
+      sub = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+      });
+    }
 
-    const prev = localStorage.getItem(LS_KEY);
-    if (prev === token) return;
+    const serialized = JSON.stringify(sub);
+    if (localStorage.getItem(LS_KEY) === serialized) return;
+    localStorage.setItem(LS_KEY, serialized);
 
-    localStorage.setItem(LS_KEY, token);
-    const tokenId = `tok-${new Date().toISOString().replace(/[-:.TZ]/g, '')}-${Math.random().toString(36).slice(2, 12)}`;
+    const json = sub.toJSON();
+    const endpoint = json.endpoint || '';
+    const p256dhKey = json.keys?.p256dh || '';
+    const authKey = json.keys?.auth || '';
+    if (!endpoint || !p256dhKey || !authKey) return;
+
     await authService.upsertPushToken({
-      tokenId,
-      token,
-      provider: 'fcm',
+      endpoint,
+      p256dhKey,
+      authKey,
       platform: 'web',
       userAgent: navigator.userAgent || '',
-    });
-
-    messaging.onMessage((payload) => {
-      const title = payload?.notification?.title || 'Новое сообщение';
-      const body = payload?.notification?.body || '';
-      try {
-        new Notification(title, { body });
-      } catch {}
     });
   } catch {
     // silent for MVP

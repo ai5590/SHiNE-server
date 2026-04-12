@@ -213,10 +213,22 @@ async function init() {
     const fromLogin = payload.fromLogin || 'unknown';
     const messageId = payload.messageId || '';
     const eventId = payload.eventId || evt?.requestId || '';
-    const added = addIncomingMessage(fromLogin, payload.text || '', messageId);
+    let text = payload.text || '';
+    if (!text && payload.blobB64) {
+      try {
+        const bytes = Uint8Array.from(atob(payload.blobB64), (ch) => ch.charCodeAt(0));
+        const msgLen = (bytes[bytes.length - 66] << 8) | bytes[bytes.length - 65];
+        const msgStart = bytes.length - 64 - msgLen;
+        const msgBytes = bytes.slice(msgStart, msgStart + msgLen);
+        text = new TextDecoder().decode(msgBytes);
+      } catch {
+        text = '[binary message]';
+      }
+    }
+    const added = addIncomingMessage(fromLogin, text, messageId);
     if (added && Notification.permission === 'granted') {
       try {
-        new Notification(`Сообщение от ${fromLogin}`, { body: payload.text || '' });
+        new Notification(`Сообщение от ${fromLogin}`, { body: text || '' });
       } catch {}
     }
     if (eventId) {
@@ -226,6 +238,14 @@ async function init() {
   await tryAutoLogin();
   if (state.session.isAuthorized) {
     await initPwaPush({ authService });
+    window.setInterval(async () => {
+      if (!state.session.isAuthorized) return;
+      try {
+        await authService.ws.request('Ping', { timeMs: Date.now() });
+      } catch {
+        // silent keep-alive
+      }
+    }, 60_000);
   }
 
   if (!window.location.hash) {

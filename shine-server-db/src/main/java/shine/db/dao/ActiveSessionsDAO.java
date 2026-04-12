@@ -217,6 +217,25 @@ public final class ActiveSessionsDAO {
         }
     }
 
+    public void updatePushSubscription(String sessionId, String endpoint, String p256dhKey, String authKey) throws SQLException {
+        try (Connection c = db.getConnection()) {
+            String sql = """
+                UPDATE active_sessions
+                SET push_endpoint = ?,
+                    push_p256dh_key = ?,
+                    push_auth_key = ?
+                WHERE session_id = ?
+                """;
+            try (PreparedStatement ps = c.prepareStatement(sql)) {
+                ps.setString(1, endpoint);
+                ps.setString(2, p256dhKey);
+                ps.setString(3, authKey);
+                ps.setString(4, sessionId);
+                ps.executeUpdate();
+            }
+        }
+    }
+
     // -------------------- DELETE --------------------
 
     public void deleteBySessionId(Connection c, String sessionId) throws SQLException {

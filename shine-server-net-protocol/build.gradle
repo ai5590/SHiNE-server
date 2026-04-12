@@ -23,6 +23,7 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'  // json
 
     implementation "org.slf4j:slf4j-api:2.0.16"          // вызов логгера
+    implementation 'nl.martijndwars:web-push:5.1.1'
 
     implementation project(':shine-server-config')       // модуль с настройками
     implementation project(":shine-server-log")          // модуль логирования и уведомления админов
@@ -39,5 +40,4 @@ java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 }
-
 

@@ -27,17 +27,9 @@
       <div id="toolbar-slot" class="toolbar-slot"></div>
     </div>
     <div id="modal-root"></div>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
     <script>
-      window.__SHINE_FIREBASE_CONFIG__ = {
-        apiKey: '',
-        authDomain: '',
-        projectId: '',
-        messagingSenderId: '',
-        appId: ''
-      };
-      window.__SHINE_FIREBASE_VAPID_KEY__ = '';
+      // Public VAPID key for Web Push (Base64URL)
+      window.__SHINE_WEBPUSH_VAPID_PUBLIC_KEY__ = '';
     </script>
     <script>
       (function attachAppWithBuildHash() {

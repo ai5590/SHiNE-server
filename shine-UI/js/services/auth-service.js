@@ -1,5 +1,6 @@
 import { WsJsonClient } from './ws-client.js';
 import {
+  base64ToBytes,
   bytesToBase64,
   deriveEd25519FromPassword,
   exportEd25519PublicKeyB64,
@@ -92,6 +93,27 @@ function int64Bytes(value) {
   const bytes = new Uint8Array(8);
   const view = new DataView(bytes.buffer);
   view.setBigInt64(0, BigInt(value), false);
+  return bytes;
+}
+
+function uint16Bytes(value) {
+  const bytes = new Uint8Array(2);
+  const view = new DataView(bytes.buffer);
+  view.setUint16(0, Number(value), false);
+  return bytes;
+}
+
+function uint32Bytes(value) {
+  const bytes = new Uint8Array(4);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, Number(value), false);
+  return bytes;
+}
+
+function uint64Bytes(value) {
+  const bytes = new Uint8Array(8);
+  const view = new DataView(bytes.buffer);
+  view.setBigUint64(0, BigInt(value), false);
   return bytes;
 }
 
@@ -354,14 +376,57 @@ export class AuthService {
     return this.ws.onEvent(op, handler);
   }
 
-  async upsertPushToken({ tokenId, token, provider = 'fcm', platform = 'web', userAgent = navigator.userAgent || '' }) {
-    const response = await this.ws.request('UpsertPushToken', { tokenId, token, provider, platform, userAgent });
+  async upsertPushToken({ endpoint, p256dhKey, authKey, sessionId, platform = 'web', userAgent = navigator.userAgent || '' }) {
+    const response = await this.ws.request('UpsertPushToken', { endpoint, p256dhKey, authKey, sessionId, platform, userAgent });
     if (response.status !== 200) throw opError('UpsertPushToken', response);
     return response.payload || {};
   }
 
-  async sendDirectMessage(toLogin, text) {
-    const response = await this.ws.request('SendDirectMessage', { toLogin, text });
+  async sendDirectMessage({ toLogin, text, storagePwd, targetSessionId = null, messageType = 1 }) {
+    const cleanToLogin = String(toLogin || '').trim();
+    const cleanText = String(text || '');
+    if (!cleanToLogin || !cleanText) throw new Error('Не передан toLogin/text');
+    if (!storagePwd) throw new Error('Не передан storagePwd для подписи');
+    if (!this.ws.login) throw new Error('Нет активной авторизованной сессии');
+
+    const secrets = await loadEncryptedUserSecrets(this.ws.login, storagePwd);
+    const devicePriv = secrets?.deviceKey;
+    if (!devicePriv) throw new Error('Не найден приватный deviceKey');
+    const privateKey = await importPkcs8Ed25519(devicePriv);
+
+    const prefix = utf8Bytes('SHiNE_msg');
+    const version = uint8Bytes(1);
+    const toBytes = utf8Bytes(cleanToLogin);
+    const fromBytes = utf8Bytes(this.ws.login);
+    if (toBytes.length < 1 || toBytes.length > 30) throw new Error('toLogin должен быть 1..30 ASCII-символов');
+    if (fromBytes.length < 1 || fromBytes.length > 30) throw new Error('fromLogin должен быть 1..30 ASCII-символов');
+    if (cleanText.length > 3000) throw new Error('Слишком длинное сообщение');
+
+    const mode = targetSessionId ? 1 : 0;
+    const targetBytes = targetSessionId ? utf8Bytes(String(targetSessionId)) : new Uint8Array(0);
+    if (mode === 1 && (targetBytes.length < 1 || targetBytes.length > 255)) {
+      throw new Error('targetSessionId должен быть 1..255 символов');
+    }
+    const bodyBytes = utf8Bytes(cleanText);
+
+    const preimage = concatBytes(
+      prefix,
+      version,
+      uint8Bytes(toBytes.length), toBytes,
+      uint8Bytes(fromBytes.length), fromBytes,
+      uint64Bytes(Date.now()),
+      uint32Bytes(Math.floor(Math.random() * 0x100000000)),
+      uint16Bytes(messageType),
+      uint8Bytes(mode),
+      mode === 1 ? concatBytes(uint8Bytes(targetBytes.length), targetBytes) : new Uint8Array(0),
+      uint16Bytes(bodyBytes.length),
+      bodyBytes,
+    );
+    const signature = await signBytes(privateKey, preimage);
+    const packet = concatBytes(preimage, signature);
+    const blobB64 = bytesToBase64(packet);
+
+    const response = await this.ws.request('SendDirectMessage', { blobB64 });
     if (response.status !== 200) throw opError('SendDirectMessage', response);
     return response.payload || {};
   }
