@@ -9,7 +9,6 @@ import server.logic.ws_protocol.JSON.handlers.connections.entyties.Net_AddCloseF
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
 import shine.db.MsgSubType;
-import shine.db.dao.ConnectionsStateDAO;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -42,15 +41,10 @@ public class Net_AddCloseFriend_Handler implements JsonMessageHandler {
                 return NetExceptionResponseFactory.error(req, 404, "BLOCKCHAIN_NOT_FOUND", "У пользователя нет blockchain");
             }
 
-            ConnectionsStateDAO.getInstance().upsertRelation(
-                    c,
-                    from,
-                    MsgSubType.CONNECTION_FRIEND,
-                    canonicalTo,
-                    targetBch,
-                    0,
-                    new byte[32]
-            );
+            // Idempotent insert for close-friend relation.
+            // Using INSERT OR IGNORE avoids ON CONFLICT(column list) mismatches
+            // across DB instances with different UNIQUE schemas.
+            insertCloseFriendIgnoreDuplicate(c, from, canonicalTo, targetBch);
 
             Net_AddCloseFriend_Response resp = new Net_AddCloseFriend_Response();
             resp.setOp(req.getOp());
@@ -80,6 +74,28 @@ public class Net_AddCloseFriend_Handler implements JsonMessageHandler {
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getString("blockchain_name") : null;
             }
+        }
+    }
+
+    private void insertCloseFriendIgnoreDuplicate(Connection c,
+                                                  String login,
+                                                  String toLogin,
+                                                  String toBchName) throws Exception {
+        String sql = """
+            INSERT OR IGNORE INTO connections_state (
+                login, rel_type, to_login, to_bch_name, to_block_number, to_block_hash
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """;
+
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, login);
+            ps.setInt(2, MsgSubType.CONNECTION_FRIEND);
+            ps.setString(3, toLogin);
+            ps.setString(4, toBchName);
+            ps.setInt(5, 0);
+            ps.setBytes(6, new byte[32]);
+            ps.executeUpdate();
         }
     }
 }

@@ -1,4 +1,4 @@
-import { clearStartHint, state } from '../state.js';
+﻿import { clearStartHint, state } from '../state.js';
 
 export const pageMeta = { id: 'start-view', title: 'Старт', showAppChrome: false };
 
@@ -39,6 +39,19 @@ export function render({ navigate }) {
   actions.append(loginButton, registerButton, settingsButton);
 
   screen.append(logo, title);
+
+  const help = document.createElement('div');
+  help.className = 'card auth-status-card';
+  help.innerHTML = `
+    <strong>Локальный тест SHiNE</strong>
+    <p class="meta-muted" style="margin-top:6px;">
+      1) Локально: <code>?localWsPort=7071</code>; через tunnel: <code>?wsUrl=wss://.../ws</code>.<br />
+      2) Зарегистрируйте пользователя A, затем пользователя B.<br />
+      3) Войдите под A, создайте 2 канала и сообщения.<br />
+      4) Войдите под B и проверьте каналы, лайк/анлайк и подписки/отписки.
+    </p>
+  `;
+  screen.append(help);
 
   if (state.startHint) {
     const notice = document.createElement('div');

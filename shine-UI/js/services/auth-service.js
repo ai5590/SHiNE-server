@@ -13,6 +13,12 @@ import {
   utf8Bytes,
 } from './crypto-utils.js';
 import {
+  channelNameErrorText,
+  normalizeChannelDisplayName,
+  toCanonicalChannelSlug,
+  validateChannelDisplayName,
+} from './channel-name-rules.js';
+import {
   loadEncryptedUserSecrets,
   loadSessionMaterial,
   saveEncryptedUserSecrets,
@@ -20,20 +26,50 @@ import {
 } from './key-vault.js';
 
 const BCH_SUFFIX = '001';
+const ZERO64 = '0'.repeat(64);
+
+const MSG_TYPE_TECH = 0;
+const MSG_TYPE_TEXT = 1;
+const MSG_TYPE_REACTION = 2;
+const MSG_TYPE_CONNECTION = 3;
+
+const MSG_SUBTYPE_TECH_CREATE_CHANNEL = 1;
+const MSG_SUBTYPE_TEXT_POST = 10;
+const MSG_SUBTYPE_TEXT_REPLY = 20;
+const MSG_SUBTYPE_REACTION_LIKE = 1;
+const MSG_SUBTYPE_REACTION_UNLIKE = 2;
+const MSG_SUBTYPE_CONNECTION_FOLLOW = 30;
+const MSG_SUBTYPE_CONNECTION_UNFOLLOW = 31;
 
 function normalizeServerUrl(url) {
   const value = (url || '').trim();
   if (!value) return 'wss://shineup.me/ws';
-  if (value.startsWith('ws://') || value.startsWith('wss://')) return value;
+  if (value.startsWith('ws://') || value.startsWith('wss://')) {
+    try {
+      const parsed = new URL(value);
+      if (!parsed.pathname || parsed.pathname === '/') parsed.pathname = '/ws';
+      return parsed.toString();
+    } catch {
+      return value;
+    }
+  }
   if (value.startsWith('https://') || value.startsWith('http://')) {
-    return `${value.replace(/^http/, 'ws').replace(/\/$/, '')}/ws`;
+    try {
+      const parsed = new URL(value);
+      parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      if (!parsed.pathname || parsed.pathname === '/') parsed.pathname = '/ws';
+      return parsed.toString();
+    } catch {
+      return `${value.replace(/^http/, 'ws').replace(/\/$/, '')}/ws`;
+    }
   }
   return value;
 }
 
 function opError(op, response) {
-  const message = response?.payload?.message || response?.message || 'Неизвестная ошибка сервера';
-  const code = response?.payload?.code || response?.code || 'UNKNOWN';
+  const payload = response?.payload || {};
+  const message = payload?.message || response?.message || payload?.error || response?.error || 'Unknown server error';
+  const code = String(payload?.code || response?.code || payload?.error || response?.error || 'UNKNOWN').toUpperCase();
   const error = new Error(`${op}: ${message} (${code})`);
   error.op = op;
   error.code = code;
@@ -51,9 +87,19 @@ function hexToBytes(hex) {
   if (!clean || clean.length % 2 !== 0) throw new Error('Некорректный hex');
   const out = new Uint8Array(clean.length / 2);
   for (let i = 0; i < out.length; i += 1) {
-    out[i] = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+    const byte = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+    if (Number.isNaN(byte)) throw new Error('Некорректный hex');
+    out[i] = byte;
   }
   return out;
+}
+
+function normalizeHex32(value, fallback = ZERO64) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return fallback;
+  if (/^0+$/.test(raw)) return ZERO64;
+  if (!/^[0-9a-f]{64}$/.test(raw)) throw new Error('Bad hash32 format');
+  return raw;
 }
 
 function concatBytes(...chunks) {
@@ -79,6 +125,12 @@ function int16Bytes(value) {
   const view = new DataView(bytes.buffer);
   view.setUint16(0, Number(value), false);
   return bytes;
+}
+
+function int8Byte(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 255) throw new Error('Bad uint8 value');
+  return new Uint8Array([n & 0xff]);
 }
 
 function int64Bytes(value) {
@@ -107,10 +159,179 @@ function makeUserParamBodyBytes({ lineCode, prevLineNumber, prevLineHashHex, thi
   );
 }
 
+function makeReactionLikeBodyBytes({ toBlockchainName, toBlockNumber, toBlockHashHex }) {
+  const cleanBch = String(toBlockchainName || '').trim();
+  if (!cleanBch) throw new Error('toBlockchainName is required for like');
+
+  const blockNumber = Number(toBlockNumber);
+  if (!Number.isFinite(blockNumber) || blockNumber < 0) {
+    throw new Error('Invalid toBlockNumber for like');
+  }
+
+  const bchBytes = utf8Bytes(cleanBch);
+  if (bchBytes.length < 1 || bchBytes.length > 255) {
+    throw new Error('toBlockchainName must be 1..255 bytes');
+  }
+
+  return concatBytes(
+    int8Byte(bchBytes.length),
+    bchBytes,
+    int32Bytes(blockNumber),
+    hexToBytes(normalizeHex32(toBlockHashHex))
+  );
+}
+
+function makeTextReplyBodyBytes({ toBlockchainName, toBlockNumber, toBlockHashHex, text }) {
+  const cleanBch = String(toBlockchainName || '').trim();
+  if (!cleanBch) throw new Error('toBlockchainName is required for reply');
+
+  const blockNumber = Number(toBlockNumber);
+  if (!Number.isFinite(blockNumber) || blockNumber < 0) {
+    throw new Error('Invalid toBlockNumber for reply');
+  }
+
+  const message = String(text || '').trim();
+  if (!message) throw new Error('Reply text is required');
+
+  const bchBytes = utf8Bytes(cleanBch);
+  if (bchBytes.length < 1 || bchBytes.length > 255) {
+    throw new Error('toBlockchainName must be 1..255 bytes');
+  }
+
+  const textBytes = utf8Bytes(message);
+  if (textBytes.length < 1 || textBytes.length > 65535) {
+    throw new Error('Reply text must be 1..65535 UTF-8 bytes');
+  }
+
+  return concatBytes(
+    int8Byte(bchBytes.length),
+    bchBytes,
+    int32Bytes(blockNumber),
+    hexToBytes(normalizeHex32(toBlockHashHex)),
+    int16Bytes(textBytes.length),
+    textBytes
+  );
+}
+
+function makeConnectionBodyBytes({
+  lineCode = 0,
+  prevLineNumber = -1,
+  prevLineHashHex = ZERO64,
+  thisLineNumber = -1,
+  toBlockchainName,
+  toBlockNumber,
+  toBlockHashHex,
+}) {
+  const cleanBch = String(toBlockchainName || '').trim();
+  if (!cleanBch) throw new Error('toBlockchainName is required for connection');
+
+  const blockNumber = Number(toBlockNumber);
+  if (!Number.isFinite(blockNumber) || blockNumber < 0) {
+    throw new Error('Invalid toBlockNumber for connection');
+  }
+
+  const bchBytes = utf8Bytes(cleanBch);
+  if (bchBytes.length < 1 || bchBytes.length > 255) {
+    throw new Error('toBlockchainName must be 1..255 bytes');
+  }
+
+  return concatBytes(
+    int32Bytes(lineCode),
+    int32Bytes(prevLineNumber),
+    hexToBytes(normalizeHex32(prevLineHashHex)),
+    int32Bytes(thisLineNumber),
+    int8Byte(bchBytes.length),
+    bchBytes,
+    int32Bytes(blockNumber),
+    hexToBytes(normalizeHex32(toBlockHashHex))
+  );
+}
+
+function makeCreateChannelBodyBytes({ lineCode, prevLineNumber, prevLineHashHex, thisLineNumber, channelName }) {
+  const check = validateChannelDisplayName(channelName);
+  if (!check.ok) throw new Error(channelNameErrorText(check.code));
+  const cleanName = check.normalized;
+
+  const nameBytes = utf8Bytes(cleanName);
+  if (nameBytes.length < 1 || nameBytes.length > 255) {
+    throw new Error('Channel name must be 1..255 bytes');
+  }
+
+  return concatBytes(
+    int32Bytes(lineCode),
+    int32Bytes(prevLineNumber),
+    hexToBytes(normalizeHex32(prevLineHashHex)),
+    int32Bytes(thisLineNumber),
+    int8Byte(nameBytes.length),
+    nameBytes
+  );
+}
+
+function makeTextPostBodyBytes({ lineCode, prevLineNumber, prevLineHashHex, thisLineNumber, text }) {
+  const message = String(text || '').trim();
+  if (!message) throw new Error('Message text is required');
+
+  const textBytes = utf8Bytes(message);
+  if (textBytes.length < 1 || textBytes.length > 65535) {
+    throw new Error('Message text must be 1..65535 UTF-8 bytes');
+  }
+
+  return concatBytes(
+    int32Bytes(lineCode),
+    int32Bytes(prevLineNumber),
+    hexToBytes(normalizeHex32(prevLineHashHex)),
+    int32Bytes(thisLineNumber),
+    int16Bytes(textBytes.length),
+    textBytes
+  );
+}
+
+function normalizeMessageRefTarget(target, actionName = 'action') {
+  const cleanBch = String(target?.blockchainName || '').trim();
+  const cleanBlockNumber = Number(target?.blockNumber);
+  const cleanBlockHash = String(target?.blockHash || '').trim().toLowerCase();
+
+  if (!cleanBch) {
+    throw new Error(`Missing message target blockchain for ${actionName}`);
+  }
+  if (!Number.isFinite(cleanBlockNumber) || cleanBlockNumber < 0) {
+    throw new Error(`Invalid message target block number for ${actionName}`);
+  }
+  if (!/^[0-9a-f]{64}$/.test(cleanBlockHash) || /^0+$/.test(cleanBlockHash)) {
+    throw new Error(`Invalid message target hash for ${actionName}`);
+  }
+
+  return {
+    blockchainName: cleanBch,
+    blockNumber: cleanBlockNumber,
+    blockHash: cleanBlockHash,
+  };
+}
+
+function buildBlockPreimage({ prevBlockHashHex, blockNumber, msgType, msgSubType, msgVersion = 1, bodyBytes }) {
+  const prevHashBytes = hexToBytes(normalizeHex32(prevBlockHashHex));
+  const body = bodyBytes || new Uint8Array(0);
+  const blockSize = 2 + 32 + 4 + 4 + 8 + 2 + 2 + 2 + body.length;
+
+  return concatBytes(
+    int16Bytes(0),
+    prevHashBytes,
+    int32Bytes(blockSize),
+    int32Bytes(blockNumber),
+    int64Bytes(Math.floor(Date.now() / 1000)),
+    int16Bytes(msgType),
+    int16Bytes(msgSubType),
+    int16Bytes(msgVersion),
+    body
+  );
+}
+
 export class AuthService {
   constructor(serverUrl) {
     this.serverUrl = normalizeServerUrl(serverUrl);
     this.ws = new WsJsonClient(this.serverUrl);
+    this.headerHashCache = new Map();
+    this.writeLocks = new Map();
   }
 
   async reconnect(serverUrl) {
@@ -119,6 +340,20 @@ export class AuthService {
     this.ws.close();
     this.serverUrl = normalized;
     this.ws = new WsJsonClient(this.serverUrl);
+    this.headerHashCache = new Map();
+    this.writeLocks.clear();
+  }
+
+  runWriteLocked(lockKey, runAction) {
+    const key = String(lockKey || '').trim() || 'write';
+    if (this.writeLocks.has(key)) return this.writeLocks.get(key);
+
+    const task = (async () => runAction())().finally(() => {
+      this.writeLocks.delete(key);
+    });
+
+    this.writeLocks.set(key, task);
+    return task;
   }
 
   async getUser(login) {
@@ -293,16 +528,438 @@ export class AuthService {
     return response.payload || {};
   }
 
-  async getChannelMessages(channel, limit = 200, sort = 'asc') {
-    const response = await this.ws.request('GetChannelMessages', { channel, limit, sort });
+  async getChannelMessages(channel, limit = 200, sort = 'asc', login = '') {
+    const payload = { channel, limit, sort };
+    const cleanLogin = String(login || '').trim();
+    if (cleanLogin) payload.login = cleanLogin;
+    const response = await this.ws.request('GetChannelMessages', payload);
     if (response.status !== 200) throw opError('GetChannelMessages', response);
     return response.payload || {};
   }
 
-  async getMessageThread(message, depthUp = 20, depthDown = 2, limitChildrenPerNode = 50) {
-    const response = await this.ws.request('GetMessageThread', { message, depthUp, depthDown, limitChildrenPerNode });
+  async getMessageThread(message, depthUp = 20, depthDown = 2, limitChildrenPerNode = 50, login = '') {
+    const payload = { message, depthUp, depthDown, limitChildrenPerNode };
+    const cleanLogin = String(login || '').trim();
+    if (cleanLogin) payload.login = cleanLogin;
+    const response = await this.ws.request('GetMessageThread', payload);
     if (response.status !== 200) throw opError('GetMessageThread', response);
     return response.payload || {};
+  }
+
+  async addBlockSigned({ login, storagePwd, msgType, msgSubType, msgVersion = 1, bodyBytes }) {
+    const cleanLogin = (login || '').trim();
+    if (!cleanLogin) throw new Error('Missing login for AddBlock');
+    if (!storagePwd) throw new Error('Missing storagePwd for AddBlock signing');
+
+    const user = await this.getUser(cleanLogin);
+    const blockchainName = String(user?.blockchainName || `${cleanLogin}-${BCH_SUFFIX}`).trim();
+    const freshNum = Number(user?.serverLastGlobalNumber);
+    const freshHash = normalizeHex32(user?.serverLastGlobalHash, ZERO64);
+    const freshCursor = {
+      serverLastGlobalNumber: Number.isFinite(freshNum) ? freshNum : -1,
+      serverLastGlobalHash: freshHash,
+    };
+
+    const savedKeys = await loadEncryptedUserSecrets(cleanLogin, storagePwd);
+    const blockchainPrivatePkcs8 = savedKeys?.blockchainKey;
+    if (!blockchainPrivatePkcs8) {
+      throw new Error('Missing saved blockchain private key on device');
+    }
+
+    const privateKey = await importPkcs8Ed25519(blockchainPrivatePkcs8);
+
+    const tryAdd = async (cursor) => {
+      const blockNumber = Number(cursor?.serverLastGlobalNumber ?? -1) + 1;
+      const prevBlockHash = normalizeHex32(cursor?.serverLastGlobalHash, ZERO64);
+      const preimage = buildBlockPreimage({
+        prevBlockHashHex: prevBlockHash,
+        blockNumber,
+        msgType,
+        msgSubType,
+        msgVersion,
+        bodyBytes,
+      });
+
+      const hash32 = await sha256Bytes(preimage);
+      const signatureBytes = await signBytes(privateKey, hash32);
+      const fullBlock = concatBytes(preimage, int16Bytes(0x0100), signatureBytes);
+
+      return this.ws.request('AddBlock', {
+        blockchainName,
+        blockNumber,
+        prevBlockHash,
+        blockBytesB64: bytesToBase64(fullBlock),
+      });
+    };
+
+    let cursor = freshCursor;
+    let response = await tryAdd(cursor);
+    if (response.status !== 200) {
+      const knownNum = Number(response?.payload?.serverLastGlobalNumber);
+      const knownHash = String(response?.payload?.serverLastGlobalHash || '');
+      if (Number.isFinite(knownNum) && /^[0-9a-fA-F]{64}$/.test(knownHash)) {
+        cursor = { serverLastGlobalNumber: knownNum, serverLastGlobalHash: knownHash.toLowerCase() };
+        response = await tryAdd(cursor);
+      }
+    }
+
+    if (response.status !== 200) throw opError('AddBlock', response);
+
+    const payload = response.payload || {};
+    const acceptedNum = Number(payload?.serverLastGlobalNumber);
+    const acceptedHash = normalizeHex32(payload?.serverLastGlobalHash, ZERO64);
+    if (Number.isFinite(acceptedNum) && acceptedNum === 0 && acceptedHash !== ZERO64) {
+      this.headerHashCache.set(blockchainName, acceptedHash);
+    }
+
+    return payload;
+  }
+
+  async ensureChainInitializedForLineOps(login, storagePwd) {
+    const current = await this.getUser(login);
+    const lastNum = Number(current?.serverLastGlobalNumber);
+    if (Number.isFinite(lastNum) && lastNum >= 0) return current;
+    if (!(Number.isFinite(lastNum) && lastNum === -1)) return current;
+
+    // Bootstrap an empty chain with a minimal USER_PARAM block so line-based
+    // channel operations have a valid anchor at block #0.
+    await this.addBlockUserParam({
+      login,
+      storagePwd,
+      param: 'shine',
+      value: 'yes',
+    });
+
+    return this.getUser(login);
+  }
+
+  async addBlockLike({ login, message, storagePwd }) {
+    const cleanLogin = String(login || '').trim();
+    const target = normalizeMessageRefTarget(message, 'like');
+    const key = `like:${cleanLogin}:${target.blockchainName}:${target.blockNumber}:${target.blockHash}`;
+
+    return this.runWriteLocked(key, async () => {
+      const bodyBytes = makeReactionLikeBodyBytes({
+        toBlockchainName: target.blockchainName,
+        toBlockNumber: target.blockNumber,
+        toBlockHashHex: target.blockHash,
+      });
+
+      return this.addBlockSigned({
+        login: cleanLogin,
+        storagePwd,
+        msgType: MSG_TYPE_REACTION,
+        msgSubType: MSG_SUBTYPE_REACTION_LIKE,
+        msgVersion: 1,
+        bodyBytes,
+      });
+    });
+  }
+
+  async addBlockUnlike({ login, message, storagePwd }) {
+    const cleanLogin = String(login || '').trim();
+    const target = normalizeMessageRefTarget(message, 'unlike');
+    const key = `unlike:${cleanLogin}:${target.blockchainName}:${target.blockNumber}:${target.blockHash}`;
+
+    return this.runWriteLocked(key, async () => {
+      const bodyBytes = makeReactionLikeBodyBytes({
+        toBlockchainName: target.blockchainName,
+        toBlockNumber: target.blockNumber,
+        toBlockHashHex: target.blockHash,
+      });
+
+      return this.addBlockSigned({
+        login: cleanLogin,
+        storagePwd,
+        msgType: MSG_TYPE_REACTION,
+        msgSubType: MSG_SUBTYPE_REACTION_UNLIKE,
+        msgVersion: 1,
+        bodyBytes,
+      });
+    });
+  }
+
+  async addBlockReply({ login, message, text, storagePwd }) {
+    const cleanLogin = String(login || '').trim();
+    const cleanText = String(text || '').trim();
+    const target = normalizeMessageRefTarget(message, 'reply');
+    const key = `reply:${cleanLogin}:${target.blockchainName}:${target.blockNumber}:${target.blockHash}:${cleanText}`;
+
+    return this.runWriteLocked(key, async () => {
+      const bodyBytes = makeTextReplyBodyBytes({
+        toBlockchainName: target.blockchainName,
+        toBlockNumber: target.blockNumber,
+        toBlockHashHex: target.blockHash,
+        text: cleanText,
+      });
+
+      return this.addBlockSigned({
+        login: cleanLogin,
+        storagePwd,
+        msgType: MSG_TYPE_TEXT,
+        msgSubType: MSG_SUBTYPE_TEXT_REPLY,
+        msgVersion: 1,
+        bodyBytes,
+      });
+    });
+  }
+
+  async addBlockFollowUser({ login, targetLogin, storagePwd, unfollow = false }) {
+    const cleanTargetLogin = String(targetLogin || '').trim().replace(/^@+/, '');
+    if (!cleanTargetLogin) throw new Error('Target login is required');
+    const cleanLogin = String(login || '').trim();
+    const key = `${unfollow ? 'unfollow-user' : 'follow-user'}:${cleanLogin}:${cleanTargetLogin.toLowerCase()}`;
+
+    return this.runWriteLocked(key, async () => {
+      const targetUser = await this.getUser(cleanTargetLogin);
+      if (!targetUser?.exists) throw new Error('Target user not found');
+      const targetHeaderHash = await this.resolveHeaderHashForBlockchain(targetUser.blockchainName);
+
+      return this.addBlockFollowChannel({
+        login: cleanLogin,
+        storagePwd,
+        targetBlockchainName: targetUser.blockchainName,
+        targetBlockNumber: 0,
+        targetBlockHashHex: targetHeaderHash,
+        unfollow,
+      });
+    });
+  }
+
+  async addBlockFollowChannel({
+    login,
+    storagePwd,
+    targetBlockchainName,
+    targetBlockNumber,
+    targetBlockHashHex,
+    unfollow = false,
+  }) {
+    const cleanLogin = String(login || '').trim();
+    const cleanTargetBch = String(targetBlockchainName || '').trim();
+    const cleanTargetBlockNumber = Number(targetBlockNumber);
+    if (!cleanTargetBch) throw new Error('Target blockchain is required');
+    if (!Number.isFinite(cleanTargetBlockNumber) || cleanTargetBlockNumber < 0) {
+      throw new Error('Invalid target block number');
+    }
+    const seedHash = normalizeHex32(targetBlockHashHex, ZERO64);
+    const key = `${unfollow ? 'unfollow-channel' : 'follow-channel'}:${cleanLogin}:${cleanTargetBch}:${cleanTargetBlockNumber}:${seedHash}`;
+
+    return this.runWriteLocked(key, async () => {
+      let targetHashHex = seedHash;
+      if (targetHashHex === ZERO64) {
+        targetHashHex = cleanTargetBlockNumber === 0
+          ? await this.resolveHeaderHashForBlockchain(cleanTargetBch)
+          : await this.getBlockHashByNumber(cleanTargetBch, cleanTargetBlockNumber);
+      }
+
+      const bodyBytes = makeConnectionBodyBytes({
+        lineCode: 0,
+        prevLineNumber: -1,
+        prevLineHashHex: ZERO64,
+        thisLineNumber: -1,
+        toBlockchainName: cleanTargetBch,
+        toBlockNumber: cleanTargetBlockNumber,
+        toBlockHashHex: targetHashHex,
+      });
+
+      return this.addBlockSigned({
+        login: cleanLogin,
+        storagePwd,
+        msgType: MSG_TYPE_CONNECTION,
+        msgSubType: unfollow ? MSG_SUBTYPE_CONNECTION_UNFOLLOW : MSG_SUBTYPE_CONNECTION_FOLLOW,
+        msgVersion: 1,
+        bodyBytes,
+      });
+    });
+  }
+
+  async getBlockHashByNumber(blockchainName, blockNumber) {
+    const cleanBlockNumber = Number(blockNumber);
+    try {
+      const payload = await this.getMessageThread(
+        {
+          blockchainName: String(blockchainName || '').trim(),
+          blockNumber: cleanBlockNumber,
+          blockHash: ZERO64,
+        },
+        0,
+        0,
+        1
+      );
+      const hash = payload?.focus?.messageRef?.blockHash;
+      return normalizeHex32(hash, ZERO64);
+    } catch (error) {
+      if (cleanBlockNumber === 0 && Number(error?.status) === 404) {
+        return ZERO64;
+      }
+      throw error;
+    }
+  }
+
+  async resolveHeaderHashForBlockchain(blockchainName) {
+    const cleanBch = String(blockchainName || '').trim();
+    if (!cleanBch) throw new Error('Missing blockchainName');
+
+    if (this.headerHashCache.has(cleanBch)) {
+      const cached = normalizeHex32(this.headerHashCache.get(cleanBch), ZERO64);
+      if (cached !== ZERO64) return cached;
+      this.headerHashCache.delete(cleanBch);
+    }
+
+    const headerHash = await this.getBlockHashByNumber(cleanBch, 0);
+    if (headerHash !== ZERO64) {
+      this.headerHashCache.set(cleanBch, headerHash);
+    } else {
+      this.headerHashCache.delete(cleanBch);
+    }
+    return headerHash;
+  }
+
+  async listOwnChannelsForBlockchain(login, blockchainName) {
+    const feed = await this.listSubscriptionsFeed(login, 500);
+    const own = feed?.ownedChannels || [];
+    return own
+      .filter((item) => String(item?.channel?.ownerBlockchainName || '') === blockchainName)
+      .map((item) => ({
+        rootBlockNumber: Number(item?.channel?.channelRoot?.blockNumber),
+        rootBlockHash: normalizeHex32(item?.channel?.channelRoot?.blockHash, ZERO64),
+        channelName: String(item?.channel?.channelName || ''),
+      }))
+      .filter((item) => Number.isFinite(item.rootBlockNumber) && item.rootBlockNumber >= 0);
+  }
+
+  async addBlockCreateChannel({ login, channelName, storagePwd }) {
+    const cleanLogin = (login || '').trim();
+    if (!cleanLogin) throw new Error('Missing login');
+
+    const check = validateChannelDisplayName(channelName);
+    if (!check.ok) throw new Error(channelNameErrorText(check.code));
+    const cleanChannelName = normalizeChannelDisplayName(check.normalized);
+    const channelSlug = toCanonicalChannelSlug(cleanChannelName);
+
+    const key = `create-channel:${cleanLogin}:${channelSlug || cleanChannelName.toLowerCase()}`;
+    return this.runWriteLocked(key, async () => {
+      const user = await this.ensureChainInitializedForLineOps(cleanLogin, storagePwd);
+      const blockchainName = String(user?.blockchainName || `${cleanLogin}-${BCH_SUFFIX}`).trim();
+      const userLastGlobalNumber = Number(user?.serverLastGlobalNumber);
+      const userLastGlobalHash = normalizeHex32(user?.serverLastGlobalHash, ZERO64);
+
+      const ownChannels = await this.listOwnChannelsForBlockchain(cleanLogin, blockchainName);
+      const createdChannels = ownChannels
+        .filter((item) => item.rootBlockNumber > 0)
+        .sort((a, b) => a.rootBlockNumber - b.rootBlockNumber);
+
+      let prevLineNumber = 0;
+      let prevLineHashHex = (
+        Number.isFinite(userLastGlobalNumber) &&
+        userLastGlobalNumber === 0 &&
+        userLastGlobalHash !== ZERO64
+      )
+        ? userLastGlobalHash
+        : await this.resolveHeaderHashForBlockchain(blockchainName);
+      let thisLineNumber = 1;
+
+      if (createdChannels.length > 0) {
+        const last = createdChannels[createdChannels.length - 1];
+        prevLineNumber = last.rootBlockNumber;
+        prevLineHashHex = normalizeHex32(last.rootBlockHash, ZERO64);
+        thisLineNumber = createdChannels.length + 1;
+      }
+
+      const bodyBytes = makeCreateChannelBodyBytes({
+        lineCode: 0,
+        prevLineNumber,
+        prevLineHashHex,
+        thisLineNumber,
+        channelName: cleanChannelName,
+      });
+
+      const payload = await this.addBlockSigned({
+        login: cleanLogin,
+        storagePwd,
+        msgType: MSG_TYPE_TECH,
+        msgSubType: MSG_SUBTYPE_TECH_CREATE_CHANNEL,
+        msgVersion: 1,
+        bodyBytes,
+      });
+
+      return {
+        ...payload,
+        channel: {
+          ownerBlockchainName: blockchainName,
+          channelRootBlockNumber: Number(payload?.serverLastGlobalNumber),
+          channelRootBlockHash: normalizeHex32(payload?.serverLastGlobalHash, ZERO64),
+        },
+      };
+    });
+  }
+
+  async addBlockTextPost({ login, channel, text, storagePwd }) {
+    const cleanLogin = (login || '').trim();
+    if (!cleanLogin) throw new Error('Missing login');
+    const cleanText = String(text || '').trim();
+    const selector = channel || {};
+    const owner = String(selector?.ownerBlockchainName || '').trim();
+    const root = Number(selector?.channelRootBlockNumber);
+    const key = `text-post:${cleanLogin}:${owner}:${root}:${cleanText}`;
+
+    return this.runWriteLocked(key, async () => {
+      const user = await this.ensureChainInitializedForLineOps(cleanLogin, storagePwd);
+      const blockchainName = String(user?.blockchainName || `${cleanLogin}-${BCH_SUFFIX}`).trim();
+      const userLastGlobalNumber = Number(user?.serverLastGlobalNumber);
+      const userLastGlobalHash = normalizeHex32(user?.serverLastGlobalHash, ZERO64);
+
+      const ownerBlockchainName = owner;
+      const lineCode = root;
+      if (!ownerBlockchainName || !Number.isFinite(lineCode) || lineCode < 0) {
+        throw new Error('Invalid channel selector');
+      }
+      if (ownerBlockchainName !== blockchainName) {
+        throw new Error('Posting is allowed only to your own channels');
+      }
+
+      let rootHashHex = normalizeHex32(selector?.channelRootBlockHash, ZERO64);
+      if (lineCode === 0) {
+        rootHashHex = (
+          Number.isFinite(userLastGlobalNumber) &&
+          userLastGlobalNumber === 0 &&
+          userLastGlobalHash !== ZERO64
+        )
+          ? userLastGlobalHash
+          : await this.resolveHeaderHashForBlockchain(blockchainName);
+      } else if (rootHashHex === ZERO64) {
+        const ownChannels = await this.listOwnChannelsForBlockchain(cleanLogin, blockchainName);
+        const rootChannel = ownChannels.find((item) => item.rootBlockNumber === lineCode);
+        if (!rootChannel) throw new Error('Channel root not found');
+        rootHashHex = normalizeHex32(rootChannel.rootBlockHash, ZERO64);
+      }
+
+      const bodyBytes = makeTextPostBodyBytes({
+        lineCode,
+        prevLineNumber: lineCode,
+        prevLineHashHex: rootHashHex,
+        thisLineNumber: 0,
+        text: cleanText,
+      });
+
+      const payload = await this.addBlockSigned({
+        login: cleanLogin,
+        storagePwd,
+        msgType: MSG_TYPE_TEXT,
+        msgSubType: MSG_SUBTYPE_TEXT_POST,
+        msgVersion: 1,
+        bodyBytes,
+      });
+
+      return {
+        ...payload,
+        channel: {
+          ownerBlockchainName,
+          channelRootBlockNumber: lineCode,
+          channelRootBlockHash: rootHashHex,
+        },
+      };
+    });
   }
 
 

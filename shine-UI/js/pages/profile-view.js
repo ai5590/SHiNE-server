@@ -39,6 +39,20 @@ export function render({ navigate }) {
   const card = document.createElement('div');
   card.className = 'card stack';
 
+  const nextStepCard = document.createElement('div');
+  nextStepCard.className = 'card stack';
+  nextStepCard.innerHTML = `
+    <strong>Вы вошли как @${login}</strong>
+    <p class="meta-muted">Следующий шаг для ручной проверки: откройте вкладку «Каналы» в нижнем меню.</p>
+  `;
+
+  const openChannelsButton = document.createElement('button');
+  openChannelsButton.className = 'primary-btn';
+  openChannelsButton.type = 'button';
+  openChannelsButton.textContent = 'Открыть каналы';
+  openChannelsButton.addEventListener('click', () => navigate('channels-list'));
+  nextStepCard.append(openChannelsButton);
+
   const topRow = document.createElement('div');
   topRow.className = 'row';
   topRow.innerHTML = `
@@ -201,7 +215,7 @@ export function render({ navigate }) {
   shineBtn.addEventListener('click', () => onToggleClick('shine'));
 
   card.append(topRow, badgesRow, status, listWrap);
-  screen.append(card);
+  screen.append(nextStepCard, card);
 
   refreshProfileSnapshot();
 

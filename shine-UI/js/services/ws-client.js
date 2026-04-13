@@ -5,10 +5,50 @@ const DEFAULT_TIMEOUT_MS = 12000;
 function buildWsUrl(raw) {
   const value = (raw || '').trim();
   if (!value) return 'wss://shineup.me/ws';
-  if (value.startsWith('ws://') || value.startsWith('wss://')) return value;
-  if (value.startsWith('http://')) return `ws://${value.slice('http://'.length)}`;
-  if (value.startsWith('https://')) return `wss://${value.slice('https://'.length)}`;
+  if (value.startsWith('/')) {
+    const secure = window.location.protocol === 'https:';
+    const scheme = secure ? 'wss' : 'ws';
+    return `${scheme}://${window.location.host}${value}`;
+  }
+  if (value.startsWith('ws://') || value.startsWith('wss://')) {
+    try {
+      const parsed = new URL(value);
+      if (!parsed.pathname || parsed.pathname === '/') parsed.pathname = '/ws';
+      return parsed.toString();
+    } catch {
+      return value;
+    }
+  }
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    try {
+      const parsed = new URL(value);
+      parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      if (!parsed.pathname || parsed.pathname === '/') parsed.pathname = '/ws';
+      return parsed.toString();
+    } catch {
+      return value.startsWith('https://')
+        ? `wss://${value.slice('https://'.length)}`
+        : `ws://${value.slice('http://'.length)}`;
+    }
+  }
   return value;
+}
+
+function isLoopbackHost(hostname = '') {
+  const host = String(hostname || '').toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+}
+
+function isMixedContentWs(url) {
+  try {
+    const pageIsHttps = window.location.protocol === 'https:';
+    if (!pageIsHttps) return false;
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'ws:') return false;
+    return !isLoopbackHost(parsed.hostname);
+  } catch {
+    return false;
+  }
 }
 
 function createRequestId(op) {
@@ -27,6 +67,15 @@ export class WsJsonClient {
   async open() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
     if (this.openPromise) return this.openPromise;
+    if (isMixedContentWs(this.url)) {
+      const error = new Error('Страница открыта по HTTPS, а сервер указан как ws://. Используйте wss:// адрес для Shine сервера.');
+      captureClientError({
+        kind: 'ws_mixed_content_blocked',
+        message: error.message,
+        context: { url: this.url, pageProtocol: window.location.protocol },
+      });
+      throw error;
+    }
 
     this.openPromise = new Promise((resolve, reject) => {
       const ws = new WebSocket(this.url);
@@ -54,7 +103,6 @@ export class WsJsonClient {
       });
     }).finally(() => {
       this.openPromise = null;
-    this.eventListeners = new Map();
     });
 
     return this.openPromise;

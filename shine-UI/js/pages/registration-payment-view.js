@@ -1,4 +1,4 @@
-import { renderHeader } from '../components/header.js';
+﻿import { renderHeader } from '../components/header.js';
 import {
   authService,
   refreshRegistrationBalance,
@@ -6,8 +6,24 @@ import {
   setAuthInfo,
   state,
 } from '../state.js';
+import { toUserMessage } from '../services/ui-error-texts.js';
 
 export const pageMeta = { id: 'registration-payment-view', title: 'Оплата регистрации', showAppChrome: false };
+
+const MIN_REGISTER_BALANCE_SOL = 0.01;
+
+function parseBalanceSol(value) {
+  const parsed = Number.parseFloat(String(value || '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getCryptoRuntimeState() {
+  const hasCrypto = Boolean(globalThis.crypto);
+  const hasGetRandomValues = Boolean(globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function');
+  const hasSubtle = Boolean(globalThis.crypto && (globalThis.crypto.subtle || globalThis.crypto.webkitSubtle));
+  const secureContext = window.isSecureContext === true;
+  return { hasCrypto, hasGetRandomValues, hasSubtle, secureContext };
+}
 
 export function render({ navigate }) {
   const screen = document.createElement('section');
@@ -15,6 +31,10 @@ export function render({ navigate }) {
 
   const card = document.createElement('div');
   card.className = 'card stack';
+
+  const status = document.createElement('p');
+  status.className = 'status-line is-unavailable';
+  status.style.display = 'none';
 
   const walletValue = document.createElement('input');
   walletValue.className = 'input';
@@ -39,7 +59,9 @@ export function render({ navigate }) {
         copyButton.textContent = 'Скопировать номер';
       }, 1500);
     } catch {
-      window.alert('Не удалось скопировать номер кошелька.');
+      status.className = 'status-line is-unavailable';
+      status.textContent = 'Не удалось скопировать номер кошелька.';
+      status.style.display = '';
     }
   });
 
@@ -73,6 +95,24 @@ export function render({ navigate }) {
   submitButton.type = 'button';
   submitButton.textContent = 'Зарегистрироваться';
   submitButton.addEventListener('click', async () => {
+    status.style.display = 'none';
+
+    const balanceSol = parseBalanceSol(state.registrationPayment.balanceSOL);
+    if (balanceSol < MIN_REGISTER_BALANCE_SOL) {
+      status.className = 'status-line is-unavailable';
+      status.textContent = `Недостаточный баланс для регистрации: ${state.registrationPayment.balanceSOL} SOL. Нужно минимум ${MIN_REGISTER_BALANCE_SOL.toFixed(2)} SOL.`;
+      status.style.display = '';
+      return;
+    }
+
+    const cryptoState = getCryptoRuntimeState();
+    if (!cryptoState.hasCrypto || !cryptoState.hasGetRandomValues || !cryptoState.hasSubtle) {
+      status.className = 'status-line is-unavailable';
+      status.textContent = 'Криптография браузера недоступна. Откройте приложение через HTTPS tunnel или localhost и повторите регистрацию.';
+      status.style.display = '';
+      return;
+    }
+
     try {
       submitButton.disabled = true;
       submitButton.textContent = 'Регистрация...';
@@ -85,12 +125,14 @@ export function render({ navigate }) {
       state.registrationDraft.pendingKeyBundle = result.keyBundle;
       state.registrationDraft.pendingSessionMaterial = result.sessionMaterial;
 
-      setAuthInfo(`Отлично, вы зарегистрировались: ${result.login}`);
-      window.alert('Отлично, вы зарегистрировались');
+      setAuthInfo(`Регистрация завершена. Вы вошли как @${result.login}. Далее откройте вкладку «Каналы».`);
       navigate('registration-keys-view');
     } catch (error) {
-      setAuthError(error.message);
-      window.alert(error.message);
+      const message = toUserMessage(error, 'Не удалось завершить регистрацию.');
+      setAuthError(message);
+      status.className = 'status-line is-unavailable';
+      status.textContent = message;
+      status.style.display = '';
     } finally {
       submitButton.disabled = false;
       submitButton.textContent = 'Зарегистрироваться';
@@ -106,7 +148,7 @@ export function render({ navigate }) {
   `;
   card.children[1].append(walletRow);
   card.children[2].append(balanceRow);
-  card.append(topupButton, submitButton);
+  card.append(topupButton, submitButton, status);
 
   screen.append(
     renderHeader({

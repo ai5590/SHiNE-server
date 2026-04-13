@@ -36,6 +36,7 @@ public final class DatabaseInitializer {
     /* ===================== REACTION (msg_type=2) ===================== */
 
     public static final short REACTION_LIKE = 1;
+    public static final short REACTION_UNLIKE = 2;
 
     /* ===================== CONNECTION (msg_type=3) ===================== */
     public static final short CONNECTION_FRIEND     = 10;
@@ -273,12 +274,12 @@ public final class DatabaseInitializer {
                     rel_type        INTEGER NOT NULL,
                     to_login        TEXT    NOT NULL,
                     to_bch_name     TEXT    NOT NULL,
-                    to_block_number INTEGER,
-                    to_block_hash   BLOB,
+                    to_block_number INTEGER NOT NULL,
+                    to_block_hash   BLOB    NOT NULL,
 
                     FOREIGN KEY (login) REFERENCES solana_users(login),
 
-                    UNIQUE (login, rel_type, to_login)
+                    UNIQUE (login, rel_type, to_login, to_bch_name, to_block_number, to_block_hash)
                 );
                 """);
 
@@ -295,6 +296,11 @@ public final class DatabaseInitializer {
             st.executeUpdate("""
                 CREATE INDEX IF NOT EXISTS idx_connections_state_pair
                 ON connections_state (login, to_login);
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_connections_state_target
+                ON connections_state (login, rel_type, to_bch_name, to_block_number);
                 """);
 
             // 8) message_stats
@@ -328,7 +334,69 @@ public final class DatabaseInitializer {
                 ON message_stats (to_login);
                 """);
 
-            // 9) direct_messages
+            // 8.1) reactions_state (идемпотентный LIKE/UNLIKE per actor/target)
+            st.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS reactions_state (
+                    from_login       TEXT    NOT NULL,
+                    from_bch_name    TEXT    NOT NULL,
+                    reaction_type    INTEGER NOT NULL,
+                    to_login         TEXT    NOT NULL,
+                    to_bch_name      TEXT    NOT NULL,
+                    to_block_number  INTEGER NOT NULL,
+                    to_block_hash    BLOB    NOT NULL,
+                    last_sub_type    INTEGER NOT NULL,
+
+                    UNIQUE (
+                        from_login,
+                        from_bch_name,
+                        reaction_type,
+                        to_login,
+                        to_bch_name,
+                        to_block_number,
+                        to_block_hash
+                    )
+                );
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_reactions_state_target
+                ON reactions_state (to_bch_name, to_block_number, to_block_hash);
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_reactions_state_actor
+                ON reactions_state (from_login, from_bch_name, reaction_type);
+                """);
+
+            // 9) channel_names_state (global normalized channel names)
+            st.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS channel_names_state (
+                    slug                      TEXT    NOT NULL PRIMARY KEY,
+                    display_name              TEXT    NOT NULL,
+                    owner_login               TEXT    NOT NULL,
+                    owner_bch_name            TEXT    NOT NULL,
+                    channel_root_block_number INTEGER NOT NULL,
+                    channel_root_block_hash   BLOB    NOT NULL,
+                    created_at_ms             INTEGER NOT NULL
+                );
+                """);
+
+            st.executeUpdate("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_channel_names_state_slug
+                ON channel_names_state (slug);
+                """);
+
+            st.executeUpdate("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_channel_names_state_target
+                ON channel_names_state (owner_bch_name, channel_root_block_number, channel_root_block_hash);
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_channel_names_state_owner
+                ON channel_names_state (owner_login, owner_bch_name);
+                """);
+
+            // 10) direct_messages
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS direct_messages (
                     message_id     TEXT    NOT NULL PRIMARY KEY,
@@ -351,7 +419,7 @@ public final class DatabaseInitializer {
                 ON direct_messages (from_login, created_at_ms);
                 """);
 
-            // 10) user_push_tokens
+            // 11) user_push_tokens
             st.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS user_push_tokens (
                     token_id       TEXT    NOT NULL PRIMARY KEY,

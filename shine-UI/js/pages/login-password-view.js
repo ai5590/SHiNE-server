@@ -6,6 +6,7 @@ import {
   setAuthError,
   state,
 } from '../state.js';
+import { toUserMessage } from '../services/ui-error-texts.js';
 
 export const pageMeta = { id: 'login-password-view', title: 'Войти по логину', showAppChrome: false };
 
@@ -32,7 +33,11 @@ export function render({ navigate }) {
 
   const hint = document.createElement('p');
   hint.className = 'meta-muted';
-  hint.textContent = 'Root/dev/bch ключи вычисляются из пароля через SHA-256, storagePwd каждый вход приходит с сервера.';
+  hint.textContent = 'Введите логин и пароль. На следующем шаге сохраните ключи на устройстве.';
+
+  const status = document.createElement('p');
+  status.className = 'status-line is-unavailable';
+  status.style.display = 'none';
 
   form.innerHTML = `
     <label class="stack"><span class="field-label">Логин</span></label>
@@ -40,7 +45,7 @@ export function render({ navigate }) {
   `;
   form.children[0].append(loginInput);
   form.children[1].append(passwordInput);
-  form.append(hint);
+  form.append(hint, status);
 
   const actions = document.createElement('div');
   actions.className = 'auth-footer-actions';
@@ -56,11 +61,13 @@ export function render({ navigate }) {
   enterButton.type = 'button';
   enterButton.textContent = 'Войти';
   enterButton.addEventListener('click', async () => {
+    status.style.display = 'none';
     state.loginDraft.login = loginInput.value.trim();
     state.loginDraft.password = passwordInput.value;
 
     if (!state.loginDraft.login || !state.loginDraft.password) {
-      window.alert('Введите логин и пароль');
+      status.textContent = 'Введите логин и пароль.';
+      status.style.display = '';
       return;
     }
 
@@ -81,8 +88,10 @@ export function render({ navigate }) {
       state.registrationDraft.pendingSessionMaterial = result.sessionMaterial;
       navigate('registration-keys-view');
     } catch (error) {
-      setAuthError(error.message);
-      window.alert(error.message);
+      const message = toUserMessage(error, 'Не удалось выполнить вход.');
+      setAuthError(message);
+      status.textContent = message;
+      status.style.display = '';
     } finally {
       setAuthBusy(false);
       enterButton.disabled = false;

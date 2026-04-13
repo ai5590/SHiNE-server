@@ -41,6 +41,7 @@ public class Net_GetChannelMessages_Response extends Net_Response {
         private long createdAtMs;
         private String text;
         private int likesCount;
+        private boolean likedByMe;
         private int repliesCount;
         private int versionsTotal;
         private List<VersionItem> versions = new ArrayList<>();
@@ -62,6 +63,9 @@ public class Net_GetChannelMessages_Response extends Net_Response {
 
         public int getLikesCount() { return likesCount; }
         public void setLikesCount(int likesCount) { this.likesCount = likesCount; }
+
+        public boolean isLikedByMe() { return likedByMe; }
+        public void setLikedByMe(boolean likedByMe) { this.likedByMe = likedByMe; }
 
         public int getRepliesCount() { return repliesCount; }
         public void setRepliesCount(int repliesCount) { this.repliesCount = repliesCount; }

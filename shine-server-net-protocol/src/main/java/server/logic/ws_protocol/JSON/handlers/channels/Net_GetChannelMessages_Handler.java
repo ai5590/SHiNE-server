@@ -38,6 +38,10 @@ public class Net_GetChannelMessages_Handler implements JsonMessageHandler {
         boolean asc = req.getSort() == null || !"desc".equalsIgnoreCase(req.getSort());
 
         try (Connection c = SqliteDbController.getInstance().getConnection()) {
+            String viewerLogin = ctx != null ? ctx.getLogin() : null;
+            if (viewerLogin == null || viewerLogin.isBlank()) {
+                viewerLogin = ChannelsReadSupport.canonicalLogin(c, req.getLogin());
+            }
             String ownerBch = req.getChannel().getOwnerBlockchainName();
             int lineCode = req.getChannel().getChannelRootBlockNumber();
 
@@ -102,6 +106,7 @@ public class Net_GetChannelMessages_Handler implements JsonMessageHandler {
                 int[] stats = ChannelsReadSupport.loadStats(c, ownerBch, post.blockNumber, post.blockHash);
                 item.setLikesCount(stats[0]);
                 item.setRepliesCount(stats[1]);
+                item.setLikedByMe(ChannelsReadSupport.isLikedByLogin(c, viewerLogin, post.bchName, post.blockNumber, post.blockHash));
 
                 items.add(item);
             }

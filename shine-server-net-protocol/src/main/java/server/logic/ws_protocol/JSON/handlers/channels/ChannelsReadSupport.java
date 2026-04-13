@@ -4,6 +4,8 @@ import blockchain.BchBlockEntry;
 import blockchain.body.BodyRecord;
 import blockchain.body.CreateChannelBody;
 import blockchain.body.TextBody;
+import blockchain.body.TextLineBody;
+import blockchain.body.TextReplyBody;
 import shine.db.MsgSubType;
 
 import java.sql.Connection;
@@ -15,6 +17,7 @@ import java.util.List;
 
 final class ChannelsReadSupport {
     static final int MSG_TYPE_TEXT = 1;
+    static final int MSG_TYPE_REACTION = 2;
     static final int MSG_TYPE_TECH = 0;
 
     private ChannelsReadSupport() {}
@@ -122,7 +125,11 @@ final class ChannelsReadSupport {
             BchBlockEntry e = new BchBlockEntry(blockBytes);
             TextInfo ti = new TextInfo();
             ti.createdAtMs = e.timestamp * 1000L;
-            if (e.body instanceof TextBody tb) {
+            if (e.body instanceof TextLineBody tlb) {
+                ti.text = tlb.message;
+            } else if (e.body instanceof TextReplyBody trb) {
+                ti.text = trb.message;
+            } else if (e.body instanceof TextBody tb) {
                 ti.text = tb.message;
             }
             return ti;
@@ -201,6 +208,34 @@ final class ChannelsReadSupport {
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) return new int[] {0, 0};
                 return new int[] {rs.getInt("likes_count"), rs.getInt("replies_count")};
+            }
+        }
+    }
+
+    static boolean isLikedByLogin(Connection c, String login, String toBch, int toBlockNumber, byte[] toBlockHash) throws SQLException {
+        if (login == null || login.isBlank() || toBch == null || toBch.isBlank() || toBlockHash == null || toBlockHash.length != 32) {
+            return false;
+        }
+        String sql = """
+            SELECT msg_sub_type
+            FROM blocks
+            WHERE login = ? COLLATE NOCASE
+              AND msg_type = ?
+              AND to_bch_name = ?
+              AND to_block_number = ?
+              AND to_block_hash = ?
+            ORDER BY block_number DESC
+            LIMIT 1
+            """;
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, login);
+            ps.setInt(2, MSG_TYPE_REACTION);
+            ps.setString(3, toBch);
+            ps.setInt(4, toBlockNumber);
+            ps.setBytes(5, toBlockHash);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return false;
+                return rs.getInt("msg_sub_type") == MsgSubType.REACTION_LIKE;
             }
         }
     }

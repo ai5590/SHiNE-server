@@ -7,6 +7,7 @@ import {
   setAuthInfo,
   state,
 } from '../state.js';
+import { toUserMessage } from '../services/ui-error-texts.js';
 
 export const pageMeta = { id: 'registration-keys-view', title: 'Сохранение ключей', showAppChrome: false };
 
@@ -31,6 +32,14 @@ export function render({ navigate }) {
   question.className = 'auth-copy';
   question.textContent = 'Какие ключи сохранить в зашифрованном контейнере IndexedDB?';
 
+  const nextStep = document.createElement('p');
+  nextStep.className = 'meta-muted';
+  nextStep.textContent = 'После сохранения откроется профиль. Для проверки откройте вкладку «Каналы».';
+
+  const status = document.createElement('p');
+  status.className = 'status-line is-unavailable';
+  status.style.display = 'none';
+
   const rootToggle = document.createElement('input');
   rootToggle.type = 'checkbox';
   rootToggle.checked = state.keyStorage.saveRoot;
@@ -46,17 +55,17 @@ export function render({ navigate }) {
 
   const rootRow = document.createElement('label');
   rootRow.className = 'checkbox-row';
-  rootRow.append(rootToggle, document.createTextNode('root key'));
+  rootRow.append(rootToggle, document.createTextNode('Ключ root'));
 
   const blockchainRow = document.createElement('label');
   blockchainRow.className = 'checkbox-row';
-  blockchainRow.append(blockchainToggle, document.createTextNode('blockchain.key'));
+  blockchainRow.append(blockchainToggle, document.createTextNode('Ключ blockchain'));
 
   const deviceRow = document.createElement('label');
   deviceRow.className = 'checkbox-row';
-  deviceRow.append(deviceToggle, document.createTextNode('device key (всегда)'));
+  deviceRow.append(deviceToggle, document.createTextNode('Ключ device (всегда)'));
 
-  card.append(title, question, rootRow, blockchainRow, deviceRow);
+  card.append(title, question, nextStep, rootRow, blockchainRow, deviceRow, status);
 
   const actions = document.createElement('div');
   actions.className = 'auth-footer-actions';
@@ -72,6 +81,7 @@ export function render({ navigate }) {
   okButton.type = 'button';
   okButton.textContent = 'OK';
   okButton.addEventListener('click', async () => {
+    status.style.display = 'none';
     try {
       if (!state.registrationDraft.pendingKeyBundle || !state.registrationDraft.pendingSessionMaterial) {
         throw new Error('Сначала завершите шаг регистрации на предыдущем экране');
@@ -117,11 +127,15 @@ export function render({ navigate }) {
       state.registrationDraft.pendingSessionMaterial = null;
 
       await refreshSessions();
-      setAuthInfo(isLoginFlow ? 'Ключи сохранены, вход завершён.' : 'Ключи сохранены, регистрация завершена.');
+      setAuthInfo(isLoginFlow
+        ? `Ключи сохранены. Вы вошли как @${state.registrationDraft.login}. Далее откройте вкладку «Каналы».`
+        : `Ключи сохранены. Регистрация завершена для @${state.registrationDraft.login}. Далее откройте вкладку «Каналы».`);
       navigate('profile-view');
     } catch (error) {
-      setAuthError(error.message);
-      window.alert(error.message);
+      const message = toUserMessage(error, 'Не удалось сохранить ключи на устройстве.');
+      setAuthError(message);
+      status.textContent = message;
+      status.style.display = '';
     }
   });
 

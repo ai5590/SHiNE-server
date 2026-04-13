@@ -19,14 +19,49 @@ export function getRoute() {
     return { pageId: '', params: {} };
   }
 
-  const [pageId, dynamicId] = raw.split('/');
+  const segments = raw.split('/').filter(Boolean);
+  const pageId = segments[0] || '';
+  const dynamicId = segments[1] || '';
+
+  const decodePart = (value) => {
+    try {
+      return decodeURIComponent(value || '');
+    } catch {
+      return value || '';
+    }
+  };
 
   if (pageId === 'chat-view') {
     return { pageId, params: { chatId: dynamicId || '' } };
   }
 
   if (pageId === 'channel-view') {
+    if (segments.length >= 4) {
+      return {
+        pageId,
+        params: {
+          ownerBlockchainName: decodePart(segments[1]),
+          channelRootBlockNumber: segments[2] || '',
+          channelRootBlockHash: segments[3] || '',
+          channelId: '',
+        },
+      };
+    }
     return { pageId, params: { channelId: dynamicId || '' } };
+  }
+
+  if (pageId === 'channel-thread-view') {
+    return {
+      pageId,
+      params: {
+        messageBlockchainName: decodePart(segments[1]),
+        messageBlockNumber: segments[2] || '',
+        messageBlockHash: segments[3] || '',
+        channelOwnerBlockchainName: decodePart(segments[4]),
+        channelRootBlockNumber: segments[5] || '',
+        channelRootBlockHash: segments[6] || '',
+      },
+    };
   }
 
   if (pageId === 'device-session-view') {
@@ -57,6 +92,6 @@ export function resolveToolbarActive(pageId) {
     return 'profile-view';
   }
   if (pageId === 'chat-view' || pageId === 'contact-search-view') return 'messages-list';
-  if (pageId === 'channel-view' || pageId === 'add-channel-view') return 'channels-list';
+  if (pageId === 'channel-view' || pageId === 'channel-thread-view' || pageId === 'add-channel-view') return 'channels-list';
   return 'profile-view';
 }

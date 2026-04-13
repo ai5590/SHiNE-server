@@ -1,5 +1,6 @@
-import { renderHeader } from '../components/header.js';
+﻿import { renderHeader } from '../components/header.js';
 import { authService, clearAuthMessages, state } from '../state.js';
+import { toUserMessage } from '../services/ui-error-texts.js';
 
 export const pageMeta = { id: 'register-view', title: 'Зарегистрироваться', showAppChrome: false };
 
@@ -28,6 +29,10 @@ export function render({ navigate }) {
   statusText.className = 'meta-muted';
   statusText.textContent = 'Проверка логина: не выполнена';
 
+  const formError = document.createElement('p');
+  formError.className = 'status-line is-unavailable';
+  formError.style.display = 'none';
+
   const checkButton = document.createElement('button');
   checkButton.className = 'ghost-btn';
   checkButton.type = 'button';
@@ -37,6 +42,7 @@ export function render({ navigate }) {
     const login = loginInput.value.trim();
     if (!login) {
       statusText.textContent = 'Введите логин';
+      formError.style.display = 'none';
       return false;
     }
 
@@ -47,9 +53,10 @@ export function render({ navigate }) {
       const isFree = await authService.ensureLoginFree(login);
       statusText.textContent = isFree ? 'Логин свободен ✅' : 'Логин уже занят ❌';
       statusText.className = isFree ? 'is-available' : 'is-unavailable';
+      formError.style.display = 'none';
       return isFree;
     } catch (error) {
-      statusText.textContent = error.message;
+      statusText.textContent = toUserMessage(error, 'Не удалось проверить логин');
       statusText.className = 'is-unavailable';
       return false;
     } finally {
@@ -66,7 +73,7 @@ export function render({ navigate }) {
   `;
   form.children[0].append(loginInput);
   form.children[1].append(passwordInput);
-  form.append(checkButton, statusText);
+  form.append(checkButton, statusText, formError);
 
   const actions = document.createElement('div');
   actions.className = 'auth-footer-actions';
@@ -82,9 +89,9 @@ export function render({ navigate }) {
   nextButton.type = 'button';
   nextButton.textContent = 'Далее';
   nextButton.addEventListener('click', async () => {
+    formError.style.display = 'none';
     const isFree = await runAvailabilityCheck();
     if (!isFree) {
-      window.alert('Выберите свободный логин');
       return;
     }
 
@@ -92,7 +99,8 @@ export function render({ navigate }) {
     state.registrationDraft.password = passwordInput.value;
 
     if (!state.registrationDraft.password) {
-      window.alert('Введите пароль');
+      formError.textContent = 'Введите пароль.';
+      formError.style.display = '';
       return;
     }
 

@@ -45,6 +45,7 @@ import server.logic.ws_protocol.JSON.handlers.userParams.entyties.Net_UpsertUser
 // --- NEW: connections friends lists ---
 import server.logic.ws_protocol.JSON.handlers.connections.Net_GetFriendsLists_Handler;
 import server.logic.ws_protocol.JSON.handlers.connections.entyties.Net_GetFriendsLists_Request;
+import server.logic.ws_protocol.JSON.handlers.channels.ChannelNamesStateBootstrapper;
 import server.logic.ws_protocol.JSON.handlers.channels.Net_GetChannelMessages_Handler;
 import server.logic.ws_protocol.JSON.handlers.channels.Net_GetMessageThread_Handler;
 import server.logic.ws_protocol.JSON.handlers.channels.Net_ListSubscriptionsFeed_Handler;
@@ -79,6 +80,10 @@ import java.util.Map;
  * JSON-операции: op → handler и op → requestClass.
  */
 public final class JsonHandlerRegistry {
+
+    static {
+        ChannelNamesStateBootstrapper.bootstrapOrFailFast();
+    }
 
     private static final Map<String, JsonMessageHandler> HANDLERS = Map.ofEntries(
             Map.entry("AddUser",            new Net_AddUser_Handler()),

@@ -3,10 +3,14 @@ package server.logic.ws_protocol.JSON.handlers.channels.entyties;
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
 
 public class Net_GetMessageThread_Request extends Net_Request {
+    private String login;
     private MessageSelector message;
     private Integer depthUp;
     private Integer depthDown;
     private Integer limitChildrenPerNode;
+
+    public String getLogin() { return login; }
+    public void setLogin(String login) { this.login = login; }
 
     public MessageSelector getMessage() { return message; }
     public void setMessage(MessageSelector message) { this.message = message; }

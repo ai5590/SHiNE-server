@@ -6,6 +6,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.regex.Pattern;
 import java.util.Objects;
 
 /**
@@ -39,6 +40,10 @@ public final class CreateChannelBody implements BodyRecord, BodyHasLine {
     public static final short SUBTYPE = MsgSubType.TECH_CREATE_CHANNEL;
 
     private static final byte[] ZERO32 = new byte[32];
+    private static final int MIN_NAME_LENGTH = 3;
+    private static final int MAX_NAME_LENGTH = 32;
+    private static final Pattern ALLOWED_NAME_PATTERN =
+            Pattern.compile("^[\\p{IsLatin}\\p{IsCyrillic}0-9 _-]+$");
 
     public final short subType;   // из header
     public final short version;   // из header
@@ -121,14 +126,15 @@ public final class CreateChannelBody implements BodyRecord, BodyHasLine {
         if ((subType & 0xFFFF) != (SUBTYPE & 0xFFFF))
             throw new IllegalArgumentException("CreateChannelBody subType must be TECH_CREATE_CHANNEL(1)");
 
-        if (channelName == null || channelName.isBlank())
+        String normalizedName = normalizeDisplayName(channelName);
+        if (normalizedName.isEmpty())
             throw new IllegalArgumentException("channelName is blank");
-
-        if (!channelName.matches("^[A-Za-z0-9_]+$"))
-            throw new IllegalArgumentException("channelName must match ^[A-Za-z0-9_]+$");
-
-        if ("0".equals(channelName))
-            throw new IllegalArgumentException("channelName \"0\" is reserved");
+        int cpLen = normalizedName.codePointCount(0, normalizedName.length());
+        // Backward compatibility for historical blocks:
+        // strict create-channel rules are enforced in AddBlock handler (ChannelNameRules),
+        // but parser-level check must allow legacy channel names during bootstrap/replay.
+        if (cpLen > MAX_NAME_LENGTH)
+            throw new IllegalArgumentException("channelName length must be <=32");
 
         // tech-line: prev обязателен (минимум HEADER=0)
         if (prevLineNumber < 0)
@@ -139,6 +145,11 @@ public final class CreateChannelBody implements BodyRecord, BodyHasLine {
             throw new IllegalArgumentException("thisLineNumber must be >=1 for CreateChannelBody");
 
         return this;
+    }
+
+    private static String normalizeDisplayName(String value) {
+        if (value == null) return "";
+        return value.trim().replaceAll("\\s+", " ");
     }
 
     @Override

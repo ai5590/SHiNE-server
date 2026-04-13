@@ -1,4 +1,21 @@
 const encoder = new TextEncoder();
+const WEB_CRYPTO_REQUIRED_MESSAGE = 'Регистрация и подпись блоков требуют WebCrypto (crypto.subtle). Откройте приложение через HTTPS или localhost в современном браузере и повторите попытку.';
+
+function getCryptoApi() {
+  const api = globalThis.crypto;
+  if (!api || typeof api.getRandomValues !== 'function') {
+    throw new Error(WEB_CRYPTO_REQUIRED_MESSAGE);
+  }
+  return api;
+}
+
+function getSubtleApi() {
+  const api = getCryptoApi();
+  if (!api.subtle) {
+    throw new Error(WEB_CRYPTO_REQUIRED_MESSAGE);
+  }
+  return api.subtle;
+}
 
 
 function base64UrlToBase64(value) {
@@ -8,7 +25,7 @@ function base64UrlToBase64(value) {
 }
 
 export function randomBase64(byteLen = 32) {
-  const bytes = crypto.getRandomValues(new Uint8Array(byteLen));
+  const bytes = getCryptoApi().getRandomValues(new Uint8Array(byteLen));
   return bytesToBase64(bytes);
 }
 
@@ -35,7 +52,7 @@ export function utf8Bytes(value) {
 }
 
 export async function sha256Bytes(bytes) {
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const digest = await getSubtleApi().digest('SHA-256', bytes);
   return new Uint8Array(digest);
 }
 
@@ -65,8 +82,9 @@ function ed25519Pkcs8FromSeed(seed32) {
 export async function deriveEd25519FromPassword(password, suffix) {
   const seed = await derivePasswordSeed(password, suffix);
   const pkcs8 = ed25519Pkcs8FromSeed(seed);
-  const privateKey = await crypto.subtle.importKey('pkcs8', pkcs8, { name: 'Ed25519' }, true, ['sign']);
-  const jwk = await crypto.subtle.exportKey('jwk', privateKey);
+  const subtle = getSubtleApi();
+  const privateKey = await subtle.importKey('pkcs8', pkcs8, { name: 'Ed25519' }, true, ['sign']);
+  const jwk = await subtle.exportKey('jwk', privateKey);
   if (!jwk.x) throw new Error('Не удалось получить публичный ключ Ed25519');
 
   return {
@@ -77,7 +95,8 @@ export async function deriveEd25519FromPassword(password, suffix) {
 }
 
 export async function deriveAesKeyFromStoragePwd(storagePwd, saltBytes) {
-  const baseKey = await crypto.subtle.importKey(
+  const subtle = getSubtleApi();
+  const baseKey = await subtle.importKey(
     'raw',
     utf8Bytes(storagePwd),
     { name: 'PBKDF2' },
@@ -85,7 +104,7 @@ export async function deriveAesKeyFromStoragePwd(storagePwd, saltBytes) {
     ['deriveKey'],
   );
 
-  return crypto.subtle.deriveKey(
+  return subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt: saltBytes,
@@ -103,11 +122,13 @@ export async function deriveAesKeyFromStoragePwd(storagePwd, saltBytes) {
 }
 
 export async function encryptJsonWithStoragePwd(value, storagePwd) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cryptoApi = getCryptoApi();
+  const subtle = getSubtleApi();
+  const salt = cryptoApi.getRandomValues(new Uint8Array(16));
+  const iv = cryptoApi.getRandomValues(new Uint8Array(12));
   const key = await deriveAesKeyFromStoragePwd(storagePwd, salt);
   const plainBytes = utf8Bytes(JSON.stringify(value));
-  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plainBytes);
+  const cipher = await subtle.encrypt({ name: 'AES-GCM', iv }, key, plainBytes);
 
   return {
     saltB64: bytesToBase64(salt),
@@ -121,35 +142,35 @@ export async function decryptJsonWithStoragePwd(envelope, storagePwd) {
   const iv = base64ToBytes(envelope.ivB64);
   const cipher = base64ToBytes(envelope.cipherB64);
   const key = await deriveAesKeyFromStoragePwd(storagePwd, salt);
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
+  const plain = await getSubtleApi().decrypt({ name: 'AES-GCM', iv }, key, cipher);
   const text = new TextDecoder().decode(plain);
   return JSON.parse(text);
 }
 
 export async function generateEd25519Pair() {
-  return crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+  return getSubtleApi().generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
 }
 
 export async function exportEd25519PublicKeyB64(publicKey) {
-  const raw = await crypto.subtle.exportKey('raw', publicKey);
+  const raw = await getSubtleApi().exportKey('raw', publicKey);
   return bytesToBase64(new Uint8Array(raw));
 }
 
 export async function exportPkcs8B64(privateKey) {
-  const raw = await crypto.subtle.exportKey('pkcs8', privateKey);
+  const raw = await getSubtleApi().exportKey('pkcs8', privateKey);
   return bytesToBase64(new Uint8Array(raw));
 }
 
 export async function importPkcs8Ed25519(pkcs8B64) {
-  return crypto.subtle.importKey('pkcs8', base64ToBytes(pkcs8B64), { name: 'Ed25519' }, false, ['sign']);
+  return getSubtleApi().importKey('pkcs8', base64ToBytes(pkcs8B64), { name: 'Ed25519' }, false, ['sign']);
 }
 
 export async function signBase64(privateKey, text) {
-  const signature = await crypto.subtle.sign({ name: 'Ed25519' }, privateKey, utf8Bytes(text));
+  const signature = await getSubtleApi().sign({ name: 'Ed25519' }, privateKey, utf8Bytes(text));
   return bytesToBase64(new Uint8Array(signature));
 }
 
 export async function signBytes(privateKey, bytes) {
-  const signature = await crypto.subtle.sign({ name: 'Ed25519' }, privateKey, bytes);
+  const signature = await getSubtleApi().sign({ name: 'Ed25519' }, privateKey, bytes);
   return new Uint8Array(signature);
 }
