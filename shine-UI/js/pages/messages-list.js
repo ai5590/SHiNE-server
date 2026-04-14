@@ -45,20 +45,20 @@ export function render({ navigate }) {
   async function loadList() {
     try {
       const relations = await loadCurrentRelations();
-      const follows = relations.outFollows || [];
+      const contacts = relations.outContacts || [];
       list.innerHTML = '';
 
-      if (!follows.length) {
+      if (!contacts.length) {
         const empty = document.createElement('div');
         empty.className = 'card meta-muted';
         empty.textContent = 'Ваш список контактов пока пуст';
         list.append(empty);
         status.className = 'status-line is-available';
-        status.textContent = 'Нет подписок на пользователей.';
+        status.textContent = 'Нет контактов.';
         return;
       }
 
-      const rows = follows.map((login) => {
+      const rows = contacts.map((login) => {
         const preview = directMessages.find((item) => item.id.toLowerCase() === login.toLowerCase());
         const chat = getChatMessages(login);
         const lastChat = chat[chat.length - 1];

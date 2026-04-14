@@ -3,11 +3,8 @@ package server.logic.ws_protocol.JSON.messages.entyties;
 import server.logic.ws_protocol.JSON.entyties.Net_Request;
 
 public class Net_SendDirectMessage_Request extends Net_Request {
-    private String toLogin;
-    private String text;
+    private String blobB64;
 
-    public String getToLogin() { return toLogin; }
-    public void setToLogin(String toLogin) { this.toLogin = toLogin; }
-    public String getText() { return text; }
-    public void setText(String text) { this.text = text; }
+    public String getBlobB64() { return blobB64; }
+    public void setBlobB64(String blobB64) { this.blobB64 = blobB64; }
 }

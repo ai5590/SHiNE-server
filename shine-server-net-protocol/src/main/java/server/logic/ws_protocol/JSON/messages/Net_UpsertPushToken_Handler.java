@@ -8,8 +8,7 @@ import server.logic.ws_protocol.JSON.messages.entyties.Net_UpsertPushToken_Reque
 import server.logic.ws_protocol.JSON.messages.entyties.Net_UpsertPushToken_Response;
 import server.logic.ws_protocol.JSON.utils.NetExceptionResponseFactory;
 import server.logic.ws_protocol.WireCodes;
-import shine.db.dao.PushTokensDAO;
-import shine.db.entities.PushTokenEntry;
+import shine.db.dao.ActiveSessionsDAO;
 
 public class Net_UpsertPushToken_Handler implements JsonMessageHandler {
     @Override
@@ -18,27 +17,27 @@ public class Net_UpsertPushToken_Handler implements JsonMessageHandler {
         if (ctx == null || !ctx.isAuthenticatedUser()) {
             return NetExceptionResponseFactory.error(req, WireCodes.Status.UNVERIFIED, "NOT_AUTHENTICATED", "Требуется авторизация");
         }
-        if (req.getTokenId() == null || req.getTokenId().isBlank() || req.getToken() == null || req.getToken().isBlank()) {
-            return NetExceptionResponseFactory.error(req, WireCodes.Status.BAD_REQUEST, "BAD_FIELDS", "tokenId и token обязательны");
+        if (req.getEndpoint() == null || req.getEndpoint().isBlank()
+                || req.getP256dhKey() == null || req.getP256dhKey().isBlank()
+                || req.getAuthKey() == null || req.getAuthKey().isBlank()) {
+            return NetExceptionResponseFactory.error(req, WireCodes.Status.BAD_REQUEST, "BAD_FIELDS", "endpoint/p256dhKey/authKey обязательны");
         }
 
-        PushTokenEntry e = new PushTokenEntry();
-        e.setTokenId(req.getTokenId().trim());
-        e.setLogin(ctx.getLogin());
-        e.setSessionId((req.getSessionId() == null || req.getSessionId().isBlank()) ? ctx.getSessionId() : req.getSessionId().trim());
-        e.setProvider(req.getProvider() == null || req.getProvider().isBlank() ? "fcm" : req.getProvider().trim());
-        e.setToken(req.getToken().trim());
-        e.setPlatform(req.getPlatform());
-        e.setUserAgent(req.getUserAgent());
-        e.setUpdatedAtMs(System.currentTimeMillis());
-        PushTokensDAO.getInstance().upsert(e);
+        String sessionId = (req.getSessionId() == null || req.getSessionId().isBlank()) ? ctx.getSessionId() : req.getSessionId().trim();
+        long now = System.currentTimeMillis();
+        ActiveSessionsDAO.getInstance().updatePushSubscription(
+                sessionId,
+                req.getEndpoint().trim(),
+                req.getP256dhKey().trim(),
+                req.getAuthKey().trim()
+        );
 
         Net_UpsertPushToken_Response resp = new Net_UpsertPushToken_Response();
         resp.setOp(req.getOp());
         resp.setRequestId(req.getRequestId());
         resp.setStatus(WireCodes.Status.OK);
-        resp.setTokenId(e.getTokenId());
-        resp.setUpdatedAtMs(e.getUpdatedAtMs());
+        resp.setTokenId(sessionId);
+        resp.setUpdatedAtMs(now);
         return resp;
     }
 }
