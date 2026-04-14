@@ -1115,14 +1115,14 @@ export class AuthService {
     return response.payload || {};
   }
 
-  async sendDirectMessage({ toLogin, text, storagePwd, targetSessionId = null, messageType = 1 }) {
+  async sendDirectMessage({ login, toLogin, text, storagePwd, targetSessionId = null, messageType = 1 }) {
+    const cleanFromLogin = String(login || '').trim();
     const cleanToLogin = String(toLogin || '').trim();
     const cleanText = String(text || '');
-    if (!cleanToLogin || !cleanText) throw new Error('Не передан toLogin/text');
+    if (!cleanFromLogin || !cleanToLogin || !cleanText) throw new Error('Не передан login/toLogin/text');
     if (!storagePwd) throw new Error('Не передан storagePwd для подписи');
-    if (!this.ws.login) throw new Error('Нет активной авторизованной сессии');
 
-    const secrets = await loadEncryptedUserSecrets(this.ws.login, storagePwd);
+    const secrets = await loadEncryptedUserSecrets(cleanFromLogin, storagePwd);
     const devicePriv = secrets?.deviceKey;
     if (!devicePriv) throw new Error('Не найден приватный deviceKey');
     const privateKey = await importPkcs8Ed25519(devicePriv);
@@ -1130,7 +1130,7 @@ export class AuthService {
     const prefix = utf8Bytes('SHiNE_msg');
     const version = uint8Bytes(1);
     const toBytes = utf8Bytes(cleanToLogin);
-    const fromBytes = utf8Bytes(this.ws.login);
+    const fromBytes = utf8Bytes(cleanFromLogin);
     if (toBytes.length < 1 || toBytes.length > 30) throw new Error('toLogin должен быть 1..30 ASCII-символов');
     if (fromBytes.length < 1 || fromBytes.length > 30) throw new Error('fromLogin должен быть 1..30 ASCII-символов');
     if (cleanText.length > 3000) throw new Error('Слишком длинное сообщение');

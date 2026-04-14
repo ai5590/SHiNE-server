@@ -197,6 +197,7 @@ export const state = createInitialState();
 
 export const authService = new AuthService(state.entrySettings.shineServer);
 let onSessionReset = null;
+let onSessionAuthorized = null;
 
 export function getChatMessages(chatId) {
   if (!state.chats[chatId]) {
@@ -321,7 +322,11 @@ export function clearAuthMessages() {
   state.authUi.info = '';
 }
 
-export function authorizeSession({ login, sessionId, storagePwd }) {
+export function authorizeSession({
+  login = state.session.login,
+  sessionId = state.session.sessionId,
+  storagePwd = state.session.storagePwdInMemory,
+} = {}) {
   state.session.isAuthorized = true;
   state.session.login = login;
   state.session.sessionId = sessionId;
@@ -332,10 +337,17 @@ export function authorizeSession({ login, sessionId, storagePwd }) {
     sessionId,
   });
   state.startHint = '';
+  if (onSessionAuthorized) {
+    onSessionAuthorized();
+  }
 }
 
 export function setSessionResetHandler(handler) {
   onSessionReset = typeof handler === 'function' ? handler : null;
+}
+
+export function setSessionAuthorizedHandler(handler) {
+  onSessionAuthorized = typeof handler === 'function' ? handler : null;
 }
 
 export function isSessionInvalidError(error) {

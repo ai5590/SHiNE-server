@@ -67,6 +67,7 @@ export function render({ navigate, route }) {
 
     try {
       await authService.sendDirectMessage({
+        login: state.session.login,
         toLogin: chatId,
         text,
         storagePwd: state.session.storagePwdInMemory,

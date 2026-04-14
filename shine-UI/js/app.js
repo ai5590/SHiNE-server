@@ -8,6 +8,7 @@ import {
   authorizeSession,
   isSessionInvalidError,
   refreshSessions,
+  setSessionAuthorizedHandler,
   setSessionResetHandler,
   state,
   terminateCurrentSession,
@@ -88,6 +89,8 @@ const screenEl = document.getElementById('app-screen');
 const toolbarEl = document.getElementById('toolbar-slot');
 
 let currentCleanup = null;
+let pingIntervalId = null;
+let sessionRuntimeStarted = false;
 
 setClientErrorTransport((payload) => authService.reportClientError(payload));
 
@@ -273,6 +276,29 @@ async function tryAutoLogin() {
   }
 }
 
+async function ensureSessionRuntimeStarted() {
+  if (!state.session.isAuthorized || sessionRuntimeStarted) return;
+  sessionRuntimeStarted = true;
+
+  await initPwaPush({
+    authService,
+    onLog: (entry) => addAppLogEntry(entry),
+  });
+
+  if (pingIntervalId) {
+    window.clearInterval(pingIntervalId);
+    pingIntervalId = null;
+  }
+  pingIntervalId = window.setInterval(async () => {
+    if (!state.session.isAuthorized) return;
+    try {
+      await authService.ws.request('Ping', { timeMs: Date.now() });
+    } catch {
+      // silent keep-alive
+    }
+  }, 60_000);
+}
+
 async function init() {
   addAppLogEntry({
     level: 'info',
@@ -281,7 +307,16 @@ async function init() {
   });
 
   setSessionResetHandler(() => {
+    sessionRuntimeStarted = false;
+    if (pingIntervalId) {
+      window.clearInterval(pingIntervalId);
+      pingIntervalId = null;
+    }
     navigate('start-view');
+  });
+
+  setSessionAuthorizedHandler(() => {
+    void ensureSessionRuntimeStarted();
   });
 
   if ('serviceWorker' in navigator) {
@@ -347,20 +382,7 @@ async function init() {
     }
   });
   await tryAutoLogin();
-  if (state.session.isAuthorized) {
-    await initPwaPush({
-      authService,
-      onLog: (entry) => addAppLogEntry(entry),
-    });
-    window.setInterval(async () => {
-      if (!state.session.isAuthorized) return;
-      try {
-        await authService.ws.request('Ping', { timeMs: Date.now() });
-      } catch {
-        // silent keep-alive
-      }
-    }, 60_000);
-  }
+  await ensureSessionRuntimeStarted();
 
   if (!window.location.hash) {
     navigate(state.session.isAuthorized ? 'profile-view' : 'start-view');

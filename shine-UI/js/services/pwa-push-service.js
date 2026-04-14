@@ -76,15 +76,20 @@ export async function initPwaPush({ authService, onLog = null }) {
 
     const serialized = JSON.stringify(sub);
     const prevSerialized = localStorage.getItem(LS_KEY);
-    if (prevSerialized === serialized) {
+    if (prevSerialized !== serialized) {
+      localStorage.setItem(LS_KEY, serialized);
       log({
         level: 'info',
         source: 'web-push',
-        message: 'Push-подписка не изменилась, отправка на сервер не требуется',
+        message: 'Push-подписка изменилась относительно прошлого запуска',
       });
-      return;
+    } else {
+      log({
+        level: 'info',
+        source: 'web-push',
+        message: 'Push-подписка не изменилась, но в MVP включена принудительная отправка на сервер',
+      });
     }
-    localStorage.setItem(LS_KEY, serialized);
 
     const json = sub.toJSON();
     const endpoint = json.endpoint || '';

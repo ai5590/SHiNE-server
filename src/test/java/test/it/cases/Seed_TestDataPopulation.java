@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  *
  * ВАЖНО:
  * - НЕ заполняет БД напрямую.
- * - Создаёт тестовых пользователей A1..A10 через API AddUser.
+ * - Создаёт тестовых пользователей 1..9 через API AddUser.
  * - Создаёт сеть дружбы через API AddBlock (CONNECTION_FRIEND).
  */
 public class Seed_TestDataPopulation {
@@ -45,7 +45,7 @@ public class Seed_TestDataPopulation {
         try (WsSession ws = WsSession.open()) {
             UserKeys keys = deriveKeysFromPassword(PASSWORD);
 
-            List<String> users = List.of("A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10");
+            List<String> users = List.of("1", "2", "3", "4", "5", "6", "7", "8", "9");
 
             for (String login : users) {
                 createUserViaApi(ws, r, login, keys, t);
@@ -70,36 +70,38 @@ public class Seed_TestDataPopulation {
             }
 
             // Насыщенная сеть дружбы (взаимно). Целевые контрольные значения:
-            // A1=5 друзей, A2=7 друзей (<8), A3=3 друга.
-            addMutualFriend(senders, states, headerHashes, "A1", "A2", t);
-            addMutualFriend(senders, states, headerHashes, "A1", "A3", t);
-            addMutualFriend(senders, states, headerHashes, "A1", "A4", t);
-            addMutualFriend(senders, states, headerHashes, "A1", "A5", t);
-            addMutualFriend(senders, states, headerHashes, "A1", "A6", t);
+            // 1=5 друзей, 2=7 друзей (<8), 3=3 друга.
+            addMutualFriend(senders, states, headerHashes, "1", "2", t);
+            addMutualFriend(senders, states, headerHashes, "1", "3", t);
+            addMutualFriend(senders, states, headerHashes, "1", "4", t);
+            addMutualFriend(senders, states, headerHashes, "1", "5", t);
+            addMutualFriend(senders, states, headerHashes, "1", "6", t);
 
-            addMutualFriend(senders, states, headerHashes, "A2", "A3", t);
-            addMutualFriend(senders, states, headerHashes, "A2", "A4", t);
-            addMutualFriend(senders, states, headerHashes, "A2", "A5", t);
-            addMutualFriend(senders, states, headerHashes, "A2", "A6", t);
-            addMutualFriend(senders, states, headerHashes, "A2", "A7", t);
-            addMutualFriend(senders, states, headerHashes, "A2", "A8", t);
+            addMutualFriend(senders, states, headerHashes, "2", "3", t);
+            addMutualFriend(senders, states, headerHashes, "2", "4", t);
+            addMutualFriend(senders, states, headerHashes, "2", "5", t);
+            addMutualFriend(senders, states, headerHashes, "2", "6", t);
+            addMutualFriend(senders, states, headerHashes, "2", "7", t);
+            addMutualFriend(senders, states, headerHashes, "2", "8", t);
 
-            addMutualFriend(senders, states, headerHashes, "A3", "A4", t);
-            addMutualFriend(senders, states, headerHashes, "A4", "A5", t);
-            addMutualFriend(senders, states, headerHashes, "A5", "A6", t);
-            addMutualFriend(senders, states, headerHashes, "A5", "A7", t);
-            addMutualFriend(senders, states, headerHashes, "A6", "A8", t);
-            addMutualFriend(senders, states, headerHashes, "A6", "A9", t);
-            addMutualFriend(senders, states, headerHashes, "A7", "A10", t);
-            addMutualFriend(senders, states, headerHashes, "A8", "A9", t);
-            addMutualFriend(senders, states, headerHashes, "A8", "A10", t);
-            addMutualFriend(senders, states, headerHashes, "A9", "A10", t);
+            addMutualFriend(senders, states, headerHashes, "3", "4", t);
+            addMutualFriend(senders, states, headerHashes, "4", "5", t);
+            addMutualFriend(senders, states, headerHashes, "5", "6", t);
+            addMutualFriend(senders, states, headerHashes, "5", "7", t);
+            addMutualFriend(senders, states, headerHashes, "6", "8", t);
+            addMutualFriend(senders, states, headerHashes, "6", "9", t);
+            addMutualFriend(senders, states, headerHashes, "8", "9", t);
 
-            verifyOutFriendsCount(ws, r, "A1", 5, t);
-            verifyOutFriendsCount(ws, r, "A2", 7, t);
-            verifyOutFriendsCount(ws, r, "A3", 3, t);
+            // Контакты: 1/2/3 должны быть друг у друга в контактах (взаимно).
+            addMutualContact(senders, states, headerHashes, "1", "2", t);
+            addMutualContact(senders, states, headerHashes, "1", "3", t);
+            addMutualContact(senders, states, headerHashes, "2", "3", t);
 
-            r.ok("Пользователи A1..A10 созданы через API, дружеские связи созданы через AddBlock");
+            verifyOutFriendsCount(ws, r, "1", 5, t);
+            verifyOutFriendsCount(ws, r, "2", 7, t);
+            verifyOutFriendsCount(ws, r, "3", 3, t);
+
+            r.ok("Пользователи 1..9 созданы через API, дружеские и контактные связи созданы через AddBlock");
         } catch (Throwable e) {
             r.fail("Ошибка IT_07: " + e.getMessage());
             fail("IT_07 failed", e);
@@ -159,13 +161,30 @@ public class Seed_TestDataPopulation {
                                              String targetBch,
                                              byte[] targetHeaderHash,
                                              Duration timeout) {
+        sendConnection(sender, st, MsgSubType.CONNECTION_FRIEND, targetBch, targetHeaderHash, timeout);
+    }
+
+    private static void sendContactConnection(AddBlockSender sender,
+                                              ChainState st,
+                                              String targetBch,
+                                              byte[] targetHeaderHash,
+                                              Duration timeout) {
+        sendConnection(sender, st, MsgSubType.CONNECTION_CONTACT, targetBch, targetHeaderHash, timeout);
+    }
+
+    private static void sendConnection(AddBlockSender sender,
+                                       ChainState st,
+                                       short relationSubType,
+                                       String targetBch,
+                                       byte[] targetHeaderHash,
+                                       Duration timeout) {
         ChainState.NextLine ln = st.nextLineByType(ChainState.TYPE_CONNECTION);
         sender.send(new ConnectionBody(
                 0,
                 ln.prevLineNumber,
                 ln.prevLineHash32,
                 ln.thisLineNumber,
-                MsgSubType.CONNECTION_FRIEND,
+                relationSubType,
                 targetBch,
                 0,
                 targetHeaderHash
@@ -180,6 +199,16 @@ public class Seed_TestDataPopulation {
                                         Duration t) {
         sendFriendConnection(senders.get(a), states.get(a), bch(b), headerHashes.get(b), t);
         sendFriendConnection(senders.get(b), states.get(b), bch(a), headerHashes.get(a), t);
+    }
+
+    private static void addMutualContact(Map<String, AddBlockSender> senders,
+                                         Map<String, ChainState> states,
+                                         Map<String, byte[]> headerHashes,
+                                         String a,
+                                         String b,
+                                         Duration t) {
+        sendContactConnection(senders.get(a), states.get(a), bch(b), headerHashes.get(b), t);
+        sendContactConnection(senders.get(b), states.get(b), bch(a), headerHashes.get(a), t);
     }
 
     private static void verifyOutFriendsCount(WsSession ws, TestResult r, String login, int expectedCount, Duration t) {
