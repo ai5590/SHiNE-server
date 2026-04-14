@@ -32,7 +32,7 @@ export function getRoute() {
   };
 
   if (pageId === 'chat-view') {
-    return { pageId, params: { chatId: dynamicId || '' } };
+    return { pageId, params: { chatId: dynamicId ? decodeURIComponent(dynamicId) : '' } };
   }
 
   if (pageId === 'channel-view') {
@@ -65,7 +65,17 @@ export function getRoute() {
   }
 
   if (pageId === 'device-session-view') {
-    return { pageId, params: { sessionId: dynamicId || '' } };
+    return { pageId, params: { sessionId: dynamicId ? decodeURIComponent(dynamicId) : '' } };
+  }
+
+  if (pageId === 'user-profile-view') {
+    return {
+      pageId,
+      params: {
+        login: dynamicId ? decodeURIComponent(dynamicId) : '',
+        fromPage: segments[2] ? decodeURIComponent(segments[2]) : 'messages-list',
+      },
+    };
   }
 
   return { pageId, params: {} };
@@ -87,11 +97,13 @@ export function resolveToolbarActive(pageId) {
     pageId === 'device-camera-view' ||
     pageId === 'show-keys-view' ||
     pageId === 'device-session-view' ||
-    pageId === 'language-view'
+    pageId === 'language-view' ||
+    pageId === 'app-log-view'
   ) {
     return 'profile-view';
   }
   if (pageId === 'chat-view' || pageId === 'contact-search-view') return 'messages-list';
   if (pageId === 'channel-view' || pageId === 'channel-thread-view' || pageId === 'add-channel-view') return 'channels-list';
+  if (pageId === 'user-profile-view') return 'messages-list';
   return 'profile-view';
 }

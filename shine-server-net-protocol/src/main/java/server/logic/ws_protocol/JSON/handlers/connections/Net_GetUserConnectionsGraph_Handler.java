@@ -31,16 +31,24 @@ public class Net_GetUserConnectionsGraph_Handler implements JsonMessageHandler {
                 return NetExceptionResponseFactory.error(req, 404, "USER_NOT_FOUND", "Пользователь не найден");
             }
 
-            List<String> out = ConnectionsStateDAO.getInstance().listOutgoingByRelTypeCanonical(c, canonicalLogin, MsgSubType.CONNECTION_FRIEND);
-            List<String> in = ConnectionsStateDAO.getInstance().listIncomingByRelTypeCanonical(c, canonicalLogin, MsgSubType.CONNECTION_FRIEND);
+            List<String> outFriends = ConnectionsStateDAO.getInstance().listOutgoingByRelTypeCanonical(c, canonicalLogin, MsgSubType.CONNECTION_FRIEND);
+            List<String> inFriends = ConnectionsStateDAO.getInstance().listIncomingByRelTypeCanonical(c, canonicalLogin, MsgSubType.CONNECTION_FRIEND);
+            List<String> outContacts = ConnectionsStateDAO.getInstance().listOutgoingByRelTypeCanonical(c, canonicalLogin, MsgSubType.CONNECTION_CONTACT);
+            List<String> inContacts = ConnectionsStateDAO.getInstance().listIncomingByRelTypeCanonical(c, canonicalLogin, MsgSubType.CONNECTION_CONTACT);
+            List<String> outFollows = ConnectionsStateDAO.getInstance().listOutgoingByRelTypeCanonical(c, canonicalLogin, MsgSubType.CONNECTION_FOLLOW);
+            List<String> inFollows = ConnectionsStateDAO.getInstance().listIncomingByRelTypeCanonical(c, canonicalLogin, MsgSubType.CONNECTION_FOLLOW);
 
             Net_GetUserConnectionsGraph_Response resp = new Net_GetUserConnectionsGraph_Response();
             resp.setOp(req.getOp());
             resp.setRequestId(req.getRequestId());
             resp.setStatus(WireCodes.Status.OK);
             resp.setLogin(canonicalLogin);
-            resp.setOutFriends(out);
-            resp.setInFriends(in);
+            resp.setOutFriends(outFriends);
+            resp.setInFriends(inFriends);
+            resp.setOutContacts(outContacts);
+            resp.setInContacts(inContacts);
+            resp.setOutFollows(outFollows);
+            resp.setInFollows(inFollows);
             return resp;
         }
     }

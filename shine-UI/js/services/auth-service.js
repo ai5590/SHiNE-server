@@ -1,5 +1,6 @@
 import { WsJsonClient } from './ws-client.js';
 import {
+  base64ToBytes,
   bytesToBase64,
   deriveEd25519FromPassword,
   exportEd25519PublicKeyB64,
@@ -27,6 +28,7 @@ import {
 
 const BCH_SUFFIX = '001';
 const ZERO64 = '0'.repeat(64);
+const ZERO_HASH_HEX = ZERO64;
 
 const MSG_TYPE_TECH = 0;
 const MSG_TYPE_TEXT = 1;
@@ -41,6 +43,12 @@ const MSG_SUBTYPE_REACTION_UNLIKE = 2;
 const MSG_SUBTYPE_CONNECTION_FOLLOW = 30;
 const MSG_SUBTYPE_CONNECTION_UNFOLLOW = 31;
 const CREATE_CHANNEL_BODY_VERSION = 2;
+
+const CONNECTION_SUBTYPES = Object.freeze({
+  friend: { on: 10, off: 11 },
+  contact: { on: 20, off: 21 },
+  follow: { on: 30, off: 31 },
+});
 
 function normalizeServerUrl(url) {
   const value = (url || '').trim();
@@ -160,6 +168,31 @@ function int64Bytes(value) {
   const view = new DataView(bytes.buffer);
   view.setBigInt64(0, BigInt(value), false);
   return bytes;
+}
+
+function uint16Bytes(value) {
+  const bytes = new Uint8Array(2);
+  const view = new DataView(bytes.buffer);
+  view.setUint16(0, Number(value), false);
+  return bytes;
+}
+
+function uint32Bytes(value) {
+  const bytes = new Uint8Array(4);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, Number(value), false);
+  return bytes;
+}
+
+function uint64Bytes(value) {
+  const bytes = new Uint8Array(8);
+  const view = new DataView(bytes.buffer);
+  view.setBigUint64(0, BigInt(value), false);
+  return bytes;
+}
+
+function uint8Bytes(value) {
+  return new Uint8Array([Number(value) & 0xff]);
 }
 
 function makeUserParamBodyBytes({ lineCode, prevLineNumber, prevLineHashHex, thisLineNumber, key, value }) {
@@ -1076,14 +1109,57 @@ export class AuthService {
     return this.ws.onEvent(op, handler);
   }
 
-  async upsertPushToken({ tokenId, token, provider = 'fcm', platform = 'web', userAgent = navigator.userAgent || '' }) {
-    const response = await this.ws.request('UpsertPushToken', { tokenId, token, provider, platform, userAgent });
+  async upsertPushToken({ endpoint, p256dhKey, authKey, sessionId, platform = 'web', userAgent = navigator.userAgent || '' }) {
+    const response = await this.ws.request('UpsertPushToken', { endpoint, p256dhKey, authKey, sessionId, platform, userAgent });
     if (response.status !== 200) throw opError('UpsertPushToken', response);
     return response.payload || {};
   }
 
-  async sendDirectMessage(toLogin, text) {
-    const response = await this.ws.request('SendDirectMessage', { toLogin, text });
+  async sendDirectMessage({ toLogin, text, storagePwd, targetSessionId = null, messageType = 1 }) {
+    const cleanToLogin = String(toLogin || '').trim();
+    const cleanText = String(text || '');
+    if (!cleanToLogin || !cleanText) throw new Error('Не передан toLogin/text');
+    if (!storagePwd) throw new Error('Не передан storagePwd для подписи');
+    if (!this.ws.login) throw new Error('Нет активной авторизованной сессии');
+
+    const secrets = await loadEncryptedUserSecrets(this.ws.login, storagePwd);
+    const devicePriv = secrets?.deviceKey;
+    if (!devicePriv) throw new Error('Не найден приватный deviceKey');
+    const privateKey = await importPkcs8Ed25519(devicePriv);
+
+    const prefix = utf8Bytes('SHiNE_msg');
+    const version = uint8Bytes(1);
+    const toBytes = utf8Bytes(cleanToLogin);
+    const fromBytes = utf8Bytes(this.ws.login);
+    if (toBytes.length < 1 || toBytes.length > 30) throw new Error('toLogin должен быть 1..30 ASCII-символов');
+    if (fromBytes.length < 1 || fromBytes.length > 30) throw new Error('fromLogin должен быть 1..30 ASCII-символов');
+    if (cleanText.length > 3000) throw new Error('Слишком длинное сообщение');
+
+    const mode = targetSessionId ? 1 : 0;
+    const targetBytes = targetSessionId ? utf8Bytes(String(targetSessionId)) : new Uint8Array(0);
+    if (mode === 1 && (targetBytes.length < 1 || targetBytes.length > 255)) {
+      throw new Error('targetSessionId должен быть 1..255 символов');
+    }
+    const bodyBytes = utf8Bytes(cleanText);
+
+    const preimage = concatBytes(
+      prefix,
+      version,
+      uint8Bytes(toBytes.length), toBytes,
+      uint8Bytes(fromBytes.length), fromBytes,
+      uint64Bytes(Date.now()),
+      uint32Bytes(Math.floor(Math.random() * 0x100000000)),
+      uint16Bytes(messageType),
+      uint8Bytes(mode),
+      mode === 1 ? concatBytes(uint8Bytes(targetBytes.length), targetBytes) : new Uint8Array(0),
+      uint16Bytes(bodyBytes.length),
+      bodyBytes,
+    );
+    const signature = await signBytes(privateKey, preimage);
+    const packet = concatBytes(preimage, signature);
+    const blobB64 = bytesToBase64(packet);
+
+    const response = await this.ws.request('SendDirectMessage', { blobB64 });
     if (response.status !== 200) throw opError('SendDirectMessage', response);
     return response.payload || {};
   }
@@ -1134,6 +1210,14 @@ export class AuthService {
     throw opError('GetUserParam', response);
   }
 
+  async setUserRelation({ login, toLogin, kind, enabled, storagePwd }) {
+    const cleanKind = String(kind || '').trim().toLowerCase();
+    const kinds = CONNECTION_SUBTYPES[cleanKind];
+    if (!kinds) throw new Error(`Неподдерживаемый тип связи: ${kind}`);
+    const subType = enabled ? kinds.on : kinds.off;
+    return this.addBlockConnection({ login, toLogin, subType, storagePwd });
+  }
+
   async addBlockUserParam({ login, param, value, storagePwd }) {
     const cleanLogin = (login || '').trim();
     const cleanParam = (param || '').trim();
@@ -1148,7 +1232,7 @@ export class AuthService {
     const freshHash = String(user?.serverLastGlobalHash || '').trim().toLowerCase();
     const freshCursor = {
       serverLastGlobalNumber: Number.isFinite(freshNum) ? freshNum : -1,
-      serverLastGlobalHash: freshHash.length === 64 ? freshHash : '0'.repeat(64),
+      serverLastGlobalHash: freshHash.length === 64 ? freshHash : ZERO_HASH_HEX,
     };
 
     const savedKeys = await loadEncryptedUserSecrets(cleanLogin, storagePwd);
@@ -1161,7 +1245,7 @@ export class AuthService {
 
     const tryAdd = async (cursor) => {
       const blockNumber = Number(cursor?.serverLastGlobalNumber ?? -1) + 1;
-      const prevBlockHash = String(cursor?.serverLastGlobalHash || '0'.repeat(64));
+      const prevBlockHash = String(cursor?.serverLastGlobalHash || ZERO_HASH_HEX);
 
       // Для USER_PARAM отправляем старт новой line-цепочки:
       // prevLineNumber=-1, prevLineHash=0x00..00, thisLineNumber=-1.
@@ -1169,7 +1253,7 @@ export class AuthService {
       const bodyBytes = makeUserParamBodyBytes({
         lineCode: 0,
         prevLineNumber: -1,
-        prevLineHashHex: '0'.repeat(64),
+        prevLineHashHex: ZERO_HASH_HEX,
         thisLineNumber: -1,
         key: cleanParam,
         value: cleanValue,
@@ -1206,6 +1290,94 @@ export class AuthService {
     if (response.status !== 200) {
       const knownNum = Number(response?.payload?.serverLastGlobalNumber);
       const knownHash = String(response?.payload?.serverLastGlobalHash || '');
+      if (Number.isFinite(knownNum) && knownHash.length === 64) {
+        cursor = { serverLastGlobalNumber: knownNum, serverLastGlobalHash: knownHash };
+        response = await tryAdd(cursor);
+      }
+    }
+
+    if (response.status !== 200) throw opError('AddBlock', response);
+    return response.payload || {};
+  }
+
+  async addBlockConnection({ login, toLogin, subType, storagePwd }) {
+    const cleanLogin = (login || '').trim();
+    const cleanToLogin = (toLogin || '').trim();
+    const cleanSubType = Number(subType);
+    if (!cleanLogin || !cleanToLogin) throw new Error('Не переданы login/toLogin для CONNECTION.');
+    if (!Number.isFinite(cleanSubType)) throw new Error('Не передан subType для CONNECTION.');
+    if (!storagePwd) throw new Error('Не передан storagePwd для подписи AddBlock.');
+    if (cleanLogin.toLowerCase() === cleanToLogin.toLowerCase()) {
+      throw new Error('Нельзя создать связь на самого себя.');
+    }
+
+    const user = await this.getUser(cleanLogin);
+    if (user?.exists === false) throw new Error('Текущий пользователь не найден.');
+    const blockchainName = String(user?.blockchainName || `${cleanLogin}-${BCH_SUFFIX}`).trim();
+    const freshNum = Number(user?.serverLastGlobalNumber);
+    const freshHash = String(user?.serverLastGlobalHash || '').trim().toLowerCase();
+    const freshCursor = {
+      serverLastGlobalNumber: Number.isFinite(freshNum) ? freshNum : -1,
+      serverLastGlobalHash: freshHash.length === 64 ? freshHash : ZERO_HASH_HEX,
+    };
+
+    const targetUser = await this.getUser(cleanToLogin);
+    if (!targetUser?.exists) throw new Error('Пользователь цели не найден.');
+    const toBlockchainName = String(targetUser?.blockchainName || `${cleanToLogin}-${BCH_SUFFIX}`).trim();
+
+    const savedKeys = await loadEncryptedUserSecrets(cleanLogin, storagePwd);
+    const blockchainPrivatePkcs8 = savedKeys?.blockchainKey;
+    if (!blockchainPrivatePkcs8) {
+      throw new Error('На устройстве нет сохраненного приватного blockchainKey');
+    }
+    const privateKey = await importPkcs8Ed25519(blockchainPrivatePkcs8);
+
+    const tryAdd = async (cursor) => {
+      const blockNumber = Number(cursor?.serverLastGlobalNumber ?? -1) + 1;
+      const prevBlockHash = String(cursor?.serverLastGlobalHash || ZERO_HASH_HEX);
+
+      // Для CONNECTION в UI-MVP всегда стартуем новую line-цепочку:
+      // prevLineNumber=-1, prevLineHash=0x00..00, thisLineNumber=-1.
+      // target для user-связей указывает на HEADER пользователя (blockNumber=0).
+      const bodyBytes = makeConnectionBodyBytes({
+        lineCode: 0,
+        prevLineNumber: -1,
+        prevLineHashHex: ZERO_HASH_HEX,
+        thisLineNumber: -1,
+        toBlockchainName,
+        toBlockNumber: 0,
+        toBlockHashHex: ZERO_HASH_HEX,
+      });
+
+      const preimage = concatBytes(
+        int16Bytes(0),
+        hexToBytes(prevBlockHash),
+        int32Bytes(2 + 32 + 4 + 4 + 8 + 2 + 2 + 2 + bodyBytes.length),
+        int32Bytes(blockNumber),
+        int64Bytes(Math.floor(Date.now() / 1000)),
+        int16Bytes(3),
+        int16Bytes(cleanSubType),
+        int16Bytes(1),
+        bodyBytes,
+      );
+
+      const hash32 = await sha256Bytes(preimage);
+      const signatureBytes = await signBytes(privateKey, hash32);
+      const fullBlock = concatBytes(preimage, int16Bytes(0x0100), signatureBytes);
+
+      return this.ws.request('AddBlock', {
+        blockchainName,
+        blockNumber,
+        prevBlockHash,
+        blockBytesB64: bytesToBase64(fullBlock),
+      });
+    };
+
+    let cursor = freshCursor;
+    let response = await tryAdd(cursor);
+    if (response.status !== 200) {
+      const knownNum = Number(response?.payload?.serverLastGlobalNumber);
+      const knownHash = String(response?.payload?.serverLastGlobalHash || '').trim().toLowerCase();
       if (Number.isFinite(knownNum) && knownHash.length === 64) {
         cursor = { serverLastGlobalNumber: knownNum, serverLastGlobalHash: knownHash };
         response = await tryAdd(cursor);

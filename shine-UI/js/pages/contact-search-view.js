@@ -1,6 +1,5 @@
 import { renderHeader } from '../components/header.js';
-import { directMessages } from '../mock-data.js';
-import { authService, ensureChat, setContacts, state } from '../state.js';
+import { authService } from '../state.js';
 
 export const pageMeta = { id: 'contact-search-view', title: 'Поиск контактов' };
 
@@ -26,10 +25,7 @@ export function render({ navigate }) {
   const resultsList = document.createElement('div');
   resultsList.className = 'stack';
 
-  let latestMatches = [];
-
   const renderResults = (matches, query) => {
-    latestMatches = matches;
     resultsList.innerHTML = '';
     resultsCard.hidden = false;
 
@@ -56,6 +52,9 @@ export function render({ navigate }) {
         </div>
         <div class="meta-muted">Профиль</div>
       `;
+      row.addEventListener('click', () => {
+        navigate(`user-profile-view/${encodeURIComponent(login)}/contact-search-view`);
+      });
       resultsList.append(row);
     });
   };
@@ -65,51 +64,24 @@ export function render({ navigate }) {
   searchButton.type = 'button';
   searchButton.textContent = 'Поиск';
   searchButton.addEventListener('click', async () => {
+    const query = input.value.trim();
+    if (!query) {
+      renderResults([], '');
+      return;
+    }
+
     try {
-      const logins = await authService.searchUsers(input.value.trim());
-      renderResults(logins, input.value);
+      const logins = await authService.searchUsers(query);
+      renderResults((logins || []).slice(0, 5), query);
     } catch (e) {
       status.textContent = `Ошибка поиска: ${e.message || 'unknown'}`;
       resultsCard.hidden = false;
     }
   });
 
-  const addButton = document.createElement('button');
-  addButton.className = 'ghost-btn';
-  addButton.type = 'button';
-  addButton.textContent = 'Открыть чат';
-  addButton.addEventListener('click', () => {
-    if (!latestMatches.length) {
-      status.textContent = 'Сначала выполните поиск.';
-      resultsCard.hidden = false;
-      return;
-    }
-
-    const login = latestMatches[0];
-    const exists = directMessages.some((item) => item.id === login);
-
-    if (!exists) {
-      directMessages.unshift({
-        id: login,
-        name: login,
-        initials: (login[0] || '?').toUpperCase(),
-        lastMessage: 'Диалог создан. Пользователь пока не в контактах.',
-        time: 'сейчас',
-        unread: 0,
-      });
-    }
-
-    if (!state.contacts.includes(login)) {
-      setContacts([...state.contacts, login]);
-    }
-
-    ensureChat(login);
-    navigate(`chat-view/${login}`);
-  });
-
   const controls = document.createElement('div');
   controls.className = 'contact-search-actions';
-  controls.append(searchButton, addButton);
+  controls.append(searchButton);
 
   const formCard = document.createElement('section');
   formCard.className = 'card stack';

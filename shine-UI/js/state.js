@@ -5,6 +5,7 @@ import { clearClientAuthData } from './services/key-vault.js';
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const SESSION_STORAGE_KEY = 'shine-ui-current-session-v1';
 const REACTIONS_STORAGE_KEY = 'shine-ui-message-reactions-v2';
+const MAX_APP_LOG_ENTRIES = 500;
 const INVALID_SESSION_CODES = new Set([
   'NOT_AUTHENTICATED',
   'SESSION_NOT_FOUND',
@@ -127,6 +128,7 @@ function createInitialState({ withStoredSession = true } = {}) {
   return {
     chats: clone(chatMessages),
     contacts: [],
+    appLog: [],
     incomingDedup: {},
     notificationsTab: 'replies',
     pageLabelCollapsed: false,
@@ -221,6 +223,49 @@ export function addIncomingMessage(chatId, text, messageId = '') {
 
 export function setContacts(list) {
   state.contacts = Array.isArray(list) ? [...list] : [];
+}
+
+function toText(value) {
+  if (typeof value === 'string') return value;
+  if (value == null) return '';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+export function addAppLogEntry({
+  level = 'info',
+  source = 'ui',
+  message = '',
+  details = '',
+} = {}) {
+  const cleanMessage = String(message || '').trim();
+  if (!cleanMessage) return;
+  const cleanLevel = String(level || 'info').trim().toLowerCase();
+  const normalizedLevel = (cleanLevel === 'error' || cleanLevel === 'warn') ? cleanLevel : 'info';
+
+  state.appLog.push({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+    ts: Date.now(),
+    level: normalizedLevel,
+    source: String(source || 'ui').trim() || 'ui',
+    message: cleanMessage,
+    details: toText(details),
+  });
+
+  if (state.appLog.length > MAX_APP_LOG_ENTRIES) {
+    state.appLog.splice(0, state.appLog.length - MAX_APP_LOG_ENTRIES);
+  }
+}
+
+export function getAppLogEntries() {
+  return [...state.appLog];
+}
+
+export function clearAppLogEntries() {
+  state.appLog = [];
 }
 
 export function togglePageLabel() {

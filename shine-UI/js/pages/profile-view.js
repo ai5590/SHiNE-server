@@ -6,6 +6,7 @@ import {
   saveProfileParamBlock,
   saveProfileToggle,
 } from '../services/user-profile-params.js';
+import { buildIdentityLines } from '../services/user-connections.js';
 
 export const pageMeta = { id: 'profile-view', title: 'Профиль' };
 
@@ -19,9 +20,17 @@ function showLocalErrorAlert(prefix, error) {
   window.alert(`${prefix}: ${message}${stack}`);
 }
 
+function escapeHtml(text) {
+  return String(text || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 export function render({ navigate }) {
   const login = state.session.login || profile.login;
-  const displayLogin = String(login || '').toUpperCase();
 
   const screen = document.createElement('section');
   screen.className = 'stack';
@@ -44,8 +53,8 @@ export function render({ navigate }) {
   topRow.innerHTML = `
     <div class="row" style="gap:12px; align-items:center;">
       <div class="avatar large">${profile.avatarInitials}</div>
-      <div>
-        <h2 style="font-size:22px; margin-bottom:2px;" data-profile-login="true">${displayLogin}</h2>
+      <div class="profile-identity-lines" data-profile-identity="true">
+        <div class="profile-identity-line profile-identity-login">${String(login || '').trim() || 'unknown'}</div>
       </div>
     </div>
     <button class="primary-btn" type="button" data-reload="true">Обновить</button>
@@ -71,6 +80,17 @@ export function render({ navigate }) {
 
   let currentFields = [];
   let currentToggles = [];
+  const identityEl = topRow.querySelector('[data-profile-identity="true"]');
+
+  function syncIdentity() {
+    if (!identityEl) return;
+    const firstName = currentFields.find((field) => field.key === 'first_name')?.value || '';
+    const lastName = currentFields.find((field) => field.key === 'last_name')?.value || '';
+    const lines = buildIdentityLines({ login, firstName, lastName });
+    identityEl.innerHTML = lines.map((line, idx) => (
+      `<div class="profile-identity-line${idx === lines.length - 1 ? ' profile-identity-login' : ''}">${escapeHtml(line)}</div>`
+    )).join('');
+  }
 
   function updateToggleButton(button, prefix, enabled) {
     button.textContent = `${prefix}: ${toggleText(enabled)}`;
@@ -123,6 +143,7 @@ export function render({ navigate }) {
       currentFields = snapshot.fields;
       currentToggles = snapshot.toggles;
 
+      syncIdentity();
       renderFields(currentFields);
       updateTogglesUi();
 

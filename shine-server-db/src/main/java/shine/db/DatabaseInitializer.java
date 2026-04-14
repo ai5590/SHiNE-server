@@ -445,6 +445,45 @@ public final class DatabaseInitializer {
                 ON user_push_tokens (login, session_id);
                 """);
 
+            // 11) signed_direct_message_replay (anti-replay window)
+            st.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS signed_direct_message_replay (
+                    from_login     TEXT    NOT NULL,
+                    time_ms        INTEGER NOT NULL,
+                    nonce          INTEGER NOT NULL,
+                    created_at_ms  INTEGER NOT NULL,
+                    UNIQUE (from_login, time_ms, nonce)
+                );
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_signed_dm_replay_created
+                ON signed_direct_message_replay (created_at_ms);
+                """);
+
+            // 12) signed_direct_messages_history (сырой бинарный пакет + мета)
+            st.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS signed_direct_messages_history (
+                    message_id         TEXT    NOT NULL PRIMARY KEY,
+                    from_login         TEXT    NOT NULL,
+                    to_login           TEXT    NOT NULL,
+                    target_mode        INTEGER NOT NULL,
+                    target_session_id  TEXT,
+                    message_type       INTEGER NOT NULL,
+                    time_ms            INTEGER NOT NULL,
+                    nonce              INTEGER NOT NULL,
+                    raw_packet         BLOB    NOT NULL,
+                    created_at_ms      INTEGER NOT NULL,
+                    FOREIGN KEY (from_login) REFERENCES solana_users(login),
+                    FOREIGN KEY (to_login) REFERENCES solana_users(login)
+                );
+                """);
+
+            st.executeUpdate("""
+                CREATE INDEX IF NOT EXISTS idx_signed_dm_history_to
+                ON signed_direct_messages_history (to_login, created_at_ms);
+                """);
+
             DatabaseTriggersInstaller.createAllTriggers(st);
         }
     }

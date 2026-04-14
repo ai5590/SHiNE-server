@@ -135,6 +135,24 @@
   background: rgba(83, 216, 251, 0.11);
 }
 
+.badge.is-no {
+  border-color: rgba(170, 180, 205, 0.3);
+  color: #c5cedd;
+  background: rgba(152, 164, 190, 0.14);
+}
+
+.badge.is-yes-official {
+  border-color: rgba(132, 244, 161, 0.5);
+  color: #ddffe7;
+  background: rgba(132, 244, 161, 0.2);
+}
+
+.badge.is-yes-shine {
+  border-color: rgba(183, 122, 255, 0.6);
+  color: #f4e7ff;
+  background: rgba(176, 102, 255, 0.22);
+}
+
 .badge.profile-toggle-btn.is-no {
   border-color: rgba(170, 180, 205, 0.3);
   color: #c5cedd;
@@ -196,6 +214,22 @@
 
 .profile-param-list {
   gap: 8px;
+}
+
+.profile-identity-lines {
+  display: grid;
+  gap: 4px;
+}
+
+.profile-identity-line {
+  line-height: 1.2;
+  color: #eef3ff;
+  font-size: 17px;
+}
+
+.profile-identity-login {
+  font-weight: 700;
+  font-size: 20px;
 }
 
 .profile-param-item {
@@ -606,7 +640,7 @@
 
 .contact-search-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
@@ -826,6 +860,25 @@ textarea.input {
 .node-label {
   font-size: 11px;
   color: #d6e2ff;
+}
+
+.node-menu {
+  position: absolute;
+  z-index: 3;
+  min-width: 240px;
+  padding: 8px;
+}
+
+.user-relations-list {
+  gap: 6px;
+}
+
+.user-rel-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #d8e3ff;
+  font-size: 14px;
 }
 
 .tabs {
