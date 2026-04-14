@@ -49,7 +49,7 @@ export function render({ navigate }) {
   loginButton.addEventListener('click', () => navigate('login-password-view'));
 
   const actions = document.createElement('div');
-  actions.className = 'auth-actions';
+  actions.className = 'auth-actions login-actions-wide';
   actions.append(cameraButton, loginButton);
 
   const backButton = document.createElement('button');

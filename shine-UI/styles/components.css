@@ -289,6 +289,10 @@
   width: min(100%, 320px);
 }
 
+.login-actions-wide {
+  width: 100%;
+}
+
 .auth-footer-actions {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

@@ -10,6 +10,8 @@ import utils.config.AppConfig;
 
 import java.security.GeneralSecurityException;
 import java.security.NoSuchAlgorithmException;
+import java.security.Provider;
+import java.security.Security;
 
 public final class WebPushSender {
     private static final Logger log = LoggerFactory.getLogger(WebPushSender.class);
@@ -17,10 +19,27 @@ public final class WebPushSender {
 
     private WebPushSender() {}
 
+    private static void ensureBouncyCastleProvider() {
+        if (Security.getProvider("BC") != null) return;
+        try {
+            Class<?> providerClass = Class.forName("org.bouncycastle.jce.provider.BouncyCastleProvider");
+            Object providerInstance = providerClass.getDeclaredConstructor().newInstance();
+            if (providerInstance instanceof Provider provider) {
+                Security.addProvider(provider);
+                log.info("WebPush: registered crypto provider {}", provider.getName());
+                return;
+            }
+            log.warn("WebPush: class org.bouncycastle.jce.provider.BouncyCastleProvider is not a java.security.Provider");
+        } catch (Exception e) {
+            log.warn("WebPush: failed to register BC provider: {}", e.getMessage());
+        }
+    }
+
     private static PushService service() throws GeneralSecurityException, JoseException {
         if (service != null) return service;
         synchronized (WebPushSender.class) {
             if (service != null) return service;
+            ensureBouncyCastleProvider();
             AppConfig cfg = AppConfig.getInstance();
             String pub = cfg.getStringOrEmpty("webpush.vapid.public");
             String priv = cfg.getStringOrEmpty("webpush.vapid.private");
@@ -35,6 +54,9 @@ public final class WebPushSender {
 
     public static boolean sendBase64Payload(String endpoint, String p256dhKey, String authKey, String payloadB64) {
         try {
+            // Some web-push library code may touch crypto provider while building Notification.
+            // Register BC before creating any push objects.
+            ensureBouncyCastleProvider();
             Subscription subscription = new Subscription(
                     endpoint,
                     new Subscription.Keys(p256dhKey, authKey)
@@ -47,7 +69,7 @@ public final class WebPushSender {
             log.warn("WebPush crypto unsupported", e);
             return false;
         } catch (Exception e) {
-            log.warn("WebPush send failed: {}", e.getMessage());
+            log.warn("WebPush send failed: {}", e.getMessage(), e);
             return false;
         }
     }

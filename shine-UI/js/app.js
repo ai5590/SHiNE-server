@@ -292,7 +292,7 @@ async function ensureSessionRuntimeStarted() {
   pingIntervalId = window.setInterval(async () => {
     if (!state.session.isAuthorized) return;
     try {
-      await authService.ws.request('Ping', { timeMs: Date.now() });
+      await authService.ws.request('Ping', { ts: Date.now() });
     } catch {
       // silent keep-alive
     }

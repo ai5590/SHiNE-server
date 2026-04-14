@@ -1,6 +1,6 @@
 import { renderHeader } from '../components/header.js';
 import { directMessages } from '../mock-data.js';
-import { addChatMessage, getChatMessages, authService, state } from '../state.js';
+import { addAppLogEntry, addChatMessage, getChatMessages, authService, state } from '../state.js';
 
 export const pageMeta = { id: 'chat-view', title: 'Чат' };
 
@@ -66,14 +66,35 @@ export function render({ navigate, route }) {
     renderLog(log, chatId);
 
     try {
-      await authService.sendDirectMessage({
+      const result = await authService.sendDirectMessage({
         login: state.session.login,
         toLogin: chatId,
         text,
         storagePwd: state.session.storagePwdInMemory,
       });
+      addAppLogEntry({
+        level: 'info',
+        source: 'outgoing-dm',
+        message: `Сообщение отправлено для ${chatId}`,
+        details: {
+          toLogin: chatId,
+          messageId: result?.messageId || '',
+          deliveredWsSessions: Number(result?.deliveredWsSessions || 0),
+          deliveredWebPushSessions: Number(result?.deliveredWebPushSessions || 0),
+          sessionNotFound: Boolean(result?.sessionNotFound),
+        },
+      });
     } catch (e) {
       addChatMessage(chatId, `Ошибка отправки: ${e.message || 'unknown'}`);
+      addAppLogEntry({
+        level: 'warn',
+        source: 'outgoing-dm',
+        message: 'Ошибка отправки личного сообщения',
+        details: {
+          toLogin: chatId,
+          error: e?.message || 'unknown',
+        },
+      });
       renderLog(log, chatId);
     }
   });

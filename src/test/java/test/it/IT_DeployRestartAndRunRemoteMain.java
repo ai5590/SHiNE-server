@@ -2,6 +2,10 @@ package test.it;
 
 import test.it.runner.IT_RunAllMain;
 
+import java.io.File;
+import java.util.Enumeration;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.Objects;
 
 public class IT_DeployRestartAndRunRemoteMain {
@@ -30,7 +34,9 @@ public class IT_DeployRestartAndRunRemoteMain {
         sshStrict("sudo systemctl stop " + SERVICE_NAME + " || true");
 
         // 2) upload jar -> .new
+        validateLocalFatJarOrThrow(LOCAL_JAR);
         scpStrict(LOCAL_JAR, REMOTE_JAR + ".new");
+        verifyRemoteNewJarOrThrow(REMOTE_JAR + ".new");
 
         // 3) заменить jar атомарно
         sshStrict("mv -f " + q(REMOTE_JAR + ".new") + " " + q(REMOTE_JAR));
@@ -102,5 +108,46 @@ public class IT_DeployRestartAndRunRemoteMain {
     private static void sleepMs(long ms) {
         try { Thread.sleep(ms); }
         catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+    }
+
+    private static void validateLocalFatJarOrThrow(String localJarPath) {
+        File jar = new File(localJarPath);
+        if (!jar.isFile()) {
+            throw new RuntimeException("Local jar not found: " + localJarPath);
+        }
+        long size = jar.length();
+        // В нашем проекте fat-jar обычно ~30+ MB. Маленький (<10 MB) — почти точно не fat-jar.
+        if (size < 10L * 1024L * 1024L) {
+            throw new RuntimeException("Local jar is too small for fat-jar: " + size + " bytes (" + localJarPath + ")");
+        }
+        try (JarFile jf = new JarFile(jar)) {
+            boolean hasJetty = false;
+            boolean hasBc = false;
+            Enumeration<JarEntry> entries = jf.entries();
+            while (entries.hasMoreElements()) {
+                String name = entries.nextElement().getName();
+                if (!hasJetty && "org/eclipse/jetty/server/Handler.class".equals(name)) hasJetty = true;
+                if (!hasBc && "org/bouncycastle/jce/provider/BouncyCastleProvider.class".equals(name)) hasBc = true;
+                if (hasJetty && hasBc) break;
+            }
+            if (!hasJetty || !hasBc) {
+                throw new RuntimeException(
+                        "Local jar doesn't look like fat-jar (missing deps). hasJetty=" + hasJetty + ", hasBC=" + hasBc
+                );
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to inspect local jar: " + localJarPath, e);
+        }
+    }
+
+    private static void verifyRemoteNewJarOrThrow(String remoteJarNewPath) {
+        // Проверка на сервере до mv: файл существует и не подозрительно маленький.
+        String cmd = "test -f " + q(remoteJarNewPath) + " && " +
+                "sz=$(stat -c %s " + q(remoteJarNewPath) + ") && " +
+                "echo remote_new_size=$sz && test \"$sz\" -ge 10485760";
+        int code = ssh(cmd);
+        if (code != 0) {
+            throw new RuntimeException("Remote uploaded jar is missing or too small: " + remoteJarNewPath);
+        }
     }
 }

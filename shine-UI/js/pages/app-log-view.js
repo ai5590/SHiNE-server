@@ -24,10 +24,12 @@ export function render({ navigate }) {
 
   const controls = document.createElement('div');
   controls.className = 'card row';
-  controls.style.justifyContent = 'space-between';
+  controls.style.justifyContent = 'flex-start';
   controls.style.gap = '8px';
+  controls.style.flexWrap = 'wrap';
   controls.innerHTML = `
     <button class="ghost-btn" type="button" data-action="refresh">Обновить</button>
+    <button class="ghost-btn" type="button" data-action="copy-all">Скопировать всё</button>
     <button class="ghost-btn" type="button" data-action="clear">Очистить</button>
   `;
 
@@ -37,6 +39,39 @@ export function render({ navigate }) {
 
   const list = document.createElement('div');
   list.className = 'stack';
+
+  function entriesToClipboardText(entries) {
+    return entries
+      .slice()
+      .reverse()
+      .map((entry) => {
+        const level = String(entry.level || 'info').toUpperCase();
+        const source = String(entry.source || 'ui');
+        const header = `[${formatTime(entry.ts)}] ${level} ${source}`;
+        const message = String(entry.message || '');
+        const details = String(entry.details || '').trim();
+        return details ? `${header}\n${message}\n${details}` : `${header}\n${message}`;
+      })
+      .join('\n\n');
+  }
+
+  async function copyTextToClipboard(text) {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    ta.style.pointerEvents = 'none';
+    document.body.append(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return !!ok;
+  }
 
   function renderEntries() {
     const entries = getAppLogEntries();
@@ -85,6 +120,23 @@ export function render({ navigate }) {
   }
 
   controls.querySelector('[data-action="refresh"]').addEventListener('click', renderEntries);
+  controls.querySelector('[data-action="copy-all"]').addEventListener('click', async () => {
+    const entries = getAppLogEntries();
+    if (!entries.length) {
+      status.className = 'status-line';
+      status.textContent = 'Лог пуст, копировать нечего.';
+      return;
+    }
+    try {
+      const text = entriesToClipboardText(entries);
+      await copyTextToClipboard(text);
+      status.className = 'status-line is-available';
+      status.textContent = `Записей: ${entries.length} · скопировано`;
+    } catch (e) {
+      status.className = 'status-line';
+      status.textContent = 'Ошибка копирования лога.';
+    }
+  });
   controls.querySelector('[data-action="clear"]').addEventListener('click', () => {
     clearAppLogEntries();
     renderEntries();
