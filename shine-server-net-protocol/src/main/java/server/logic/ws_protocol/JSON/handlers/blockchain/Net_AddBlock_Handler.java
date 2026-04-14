@@ -19,19 +19,21 @@ import server.logic.ws_protocol.JSON.handlers.blockchain.Net_AddBlock_Handler_ut
 import server.logic.ws_protocol.JSON.handlers.blockchain.Net_AddBlock_Handler_utils.BlockchainWriter;
 import server.logic.ws_protocol.JSON.handlers.blockchain.entyties.Net_AddBlock_Request;
 import server.logic.ws_protocol.JSON.handlers.blockchain.entyties.Net_AddBlock_Response;
+import server.logic.ws_protocol.JSON.handlers.channels.ChannelNamesStateBootstrapper;
 import server.logic.ws_protocol.WireCodes;
+import shine.db.channels.ChannelNameRules;
 import shine.db.dao.BlockchainStateDAO;
 import shine.db.dao.BlocksDAO;
+import shine.db.dao.ChannelNameStateDAO;
 import shine.db.dao.UserParamsDAO;
 import shine.db.entities.BlockchainStateEntry;
 import shine.db.entities.BlockEntry;
+import shine.db.entities.ChannelNameStateEntry;
 import shine.db.entities.UserParamEntry;
 import utils.blockchain.BlockchainNameUtil;
 
 import java.util.Arrays;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -49,8 +51,13 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
     private final BlocksDAO blocksDAO = BlocksDAO.getInstance();
     private final BlockchainStateDAO stateDAO = BlockchainStateDAO.getInstance();
     private final UserParamsDAO userParamsDAO = UserParamsDAO.getInstance();
+    private final ChannelNameStateDAO channelNameStateDAO = ChannelNameStateDAO.getInstance();
 
-    private final BlockchainWriter dbWriter = new BlockchainWriter(blocksDAO, stateDAO, userParamsDAO);
+    private final BlockchainWriter dbWriter = new BlockchainWriter(blocksDAO, stateDAO, userParamsDAO, channelNameStateDAO);
+
+    public Net_AddBlock_Handler() {
+        ChannelNamesStateBootstrapper.bootstrapOrFailFast();
+    }
 
     @Override
     public Net_Response handle(Net_Request baseReq, ConnectionContext ctx) {
@@ -114,9 +121,7 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
     }
 
     private static String humanMessage(String code) {
-        if (code == null) return "Ошибка добавления блока";
-
-        return switch (code) {
+        if (code == null) return "Ошибка добавления блока";        return switch (code) {
             case "empty_blockchain_name" -> "Пустое имя блокчейна";
             case "bad_blockchain_name" -> "Некорректное имя блокчейна";
             case "db_error" -> "Ошибка базы данных";
@@ -127,6 +132,7 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
             case "limit_check_failed" -> "Ошибка проверки лимита размера";
             case "bad_block_format" -> "Некорректный формат блока";
             case "bad_block_body" -> "Некорректное тело блока";
+            case "bad_channel_name" -> "Некорректное название канала";
             case "bad_block_number" -> "Некорректный номер блока";
             case "req_global_mismatch" -> "Номер блока в запросе не совпадает с номером в блоке";
             case "bad_prev_hash" -> "Некорректный prevHash (цепочка не совпадает)";
@@ -136,7 +142,7 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
             case "prev_line_block_not_found" -> "Не найден блок prevLineNumber для проверки линии";
             case "bad_prev_line_hash" -> "Некорректный prevLineHash";
             case "db_error_prev_line_check" -> "Ошибка БД при проверке prevLine";
-            case "channel_name_already_exists" -> "Канал с таким именем уже существует";
+            case "channel_name_already_exists" -> "Такое название канала уже занято";
             case "internal_error" -> "Внутренняя ошибка сервера при записи блока";
             default -> "Ошибка: " + code;
         };
@@ -237,9 +243,19 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
             return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_block_body", serverLastNum, serverLastHashHex);
         }
 
+        ChannelNameStateEntry channelNameStateEntry = null;
         if (block.body instanceof CreateChannelBody createChannelBody) {
+            final String normalizedName;
+            final String slug;
             try {
-                if (channelNameExists(blockchainName, createChannelBody.channelName)) {
+                normalizedName = ChannelNameRules.requireValidDisplayNameForCreate(createChannelBody.channelName);
+                slug = ChannelNameRules.toCanonicalSlug(normalizedName);
+            } catch (IllegalArgumentException badName) {
+                return new AddBlockResult(WireCodes.Status.BAD_REQUEST, "bad_channel_name", serverLastNum, serverLastHashHex);
+            }
+
+            try {
+                if (channelNameStateDAO.existsBySlug(slug)) {
                     return new AddBlockResult(409, "channel_name_already_exists", serverLastNum, serverLastHashHex);
                 }
             } catch (Exception e) {
@@ -247,6 +263,20 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
                         blockchainName, createChannelBody.channelName, e);
                 return new AddBlockResult(WireCodes.Status.INTERNAL_ERROR, "internal_error", serverLastNum, serverLastHashHex);
             }
+
+            channelNameStateEntry = new ChannelNameStateEntry();
+            channelNameStateEntry.setSlug(slug);
+            channelNameStateEntry.setDisplayName(normalizedName);
+            channelNameStateEntry.setChannelDescription(
+                    createChannelBody.channelDescription == null
+                            ? ""
+                            : ChannelNameRules.normalizeDisplayName(createChannelBody.channelDescription)
+            );
+            channelNameStateEntry.setOwnerLogin(login);
+            channelNameStateEntry.setOwnerBlockchainName(blockchainName);
+            channelNameStateEntry.setChannelRootBlockNumber(block.blockNumber);
+            channelNameStateEntry.setChannelRootBlockHash(block.getHash32());
+            channelNameStateEntry.setCreatedAtMs(block.timestamp * 1000L);
         }
 
         // 4.2) запрет дырок: blockNumber строго last+1
@@ -390,9 +420,11 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
                 );
             }
 
-            dbWriter.appendBlockAndState(blockchainName, block, st, be, upsertedParam);
-
+            dbWriter.appendBlockAndState(blockchainName, block, st, be, upsertedParam, channelNameStateEntry);
         } catch (Exception e) {
+            if (isChannelSlugConflict(e)) {
+                return new AddBlockResult(409, "channel_name_already_exists", serverLastNum, serverLastHashHex);
+            }
             log.error("AddBlock: внутренняя ошибка при записи блока (login={}, blockchainName={}, blockNumber={})",
                     login, blockchainName, block.blockNumber, e);
             return new AddBlockResult(WireCodes.Status.INTERNAL_ERROR, "internal_error", serverLastNum, serverLastHashHex);
@@ -415,28 +447,15 @@ public final class Net_AddBlock_Handler implements JsonMessageHandler {
         return Base64Ws.decode(b64);
     }
 
-    private boolean channelNameExists(String blockchainName, String channelName) throws Exception {
-        String sql = """
-                SELECT block_bytes
-                FROM blocks
-                WHERE bch_name = ? AND msg_type = 0 AND msg_sub_type = 1
-                """;
-        try (Connection c = shine.db.SqliteDbController.getInstance().getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, blockchainName);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    byte[] bytes = rs.getBytes("block_bytes");
-                    try {
-                        BchBlockEntry entry = new BchBlockEntry(bytes);
-                        if (entry.body instanceof CreateChannelBody ccb) {
-                            if (ccb.channelName.equalsIgnoreCase(channelName)) return true;
-                        }
-                    } catch (Exception ignored) {
-                        // ignore bad historic rows, uniqueness check is best effort
-                    }
-                }
+    private static boolean isChannelSlugConflict(Throwable throwable) {
+        Throwable cur = throwable;
+        while (cur != null) {
+            String message = String.valueOf(cur.getMessage());
+            if (message.contains("channel_names_state.slug")
+                    || message.contains("uq_channel_names_state_slug")) {
+                return true;
             }
+            cur = cur.getCause();
         }
         return false;
     }

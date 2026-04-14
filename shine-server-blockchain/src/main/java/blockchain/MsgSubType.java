@@ -68,6 +68,8 @@ public final class MsgSubType {
 
     /** Лайк (LIKE). */
     public static final short REACTION_LIKE = 1;
+    /** Снятие лайка (UNLIKE). */
+    public static final short REACTION_UNLIKE = 2;
 
     /* ===================== CONNECTION (msg_type=3) ===================== */
 

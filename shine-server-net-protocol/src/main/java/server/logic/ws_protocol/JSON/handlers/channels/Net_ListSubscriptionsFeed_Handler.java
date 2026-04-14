@@ -64,6 +64,7 @@ public class Net_ListSubscriptionsFeed_Handler implements JsonMessageHandler {
             channelRef.setOwnerLogin(key.ownerLogin);
             channelRef.setOwnerBlockchainName(key.ownerBch);
             channelRef.setChannelName(ChannelsReadSupport.detectChannelName(c, key.ownerBch, key.rootNumber));
+            channelRef.setChannelDescription(ChannelsReadSupport.detectChannelDescription(c, key.ownerBch, key.rootNumber));
             channelRef.setPersonal(key.rootNumber == 0);
 
             Net_ListSubscriptionsFeed_Response.BlockRef rootRef = new Net_ListSubscriptionsFeed_Response.BlockRef();

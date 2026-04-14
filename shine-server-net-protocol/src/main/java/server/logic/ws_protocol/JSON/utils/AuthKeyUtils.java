@@ -23,9 +23,17 @@ public final class AuthKeyUtils {
     public static byte[] parseEd25519PublicKey(String key, String fieldName) {
         String normalized = normalize(key, fieldName);
 
+        // Legacy format is plain BASE64(32 bytes) and may contain '/' characters.
+        // Try legacy decode first to avoid misinterpreting base64 payload as algorithm prefix.
+        try {
+            return Base64Ws.decodeLen(normalized, 32, fieldName);
+        } catch (IllegalArgumentException ignored) {
+            // continue with explicit algorithm/key format
+        }
+
         int slash = normalized.indexOf('/');
         if (slash < 0) {
-            return Base64Ws.decodeLen(normalized, 32, fieldName);
+            throw new IllegalArgumentException(fieldName + " has bad base64/key format");
         }
 
         String algorithm = normalized.substring(0, slash).trim();

@@ -4,6 +4,7 @@ import { clearClientAuthData } from './services/key-vault.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const SESSION_STORAGE_KEY = 'shine-ui-current-session-v1';
+const REACTIONS_STORAGE_KEY = 'shine-ui-message-reactions-v2';
 const INVALID_SESSION_CODES = new Set([
   'NOT_AUTHENTICATED',
   'SESSION_NOT_FOUND',
@@ -13,18 +14,63 @@ const INVALID_SESSION_CODES = new Set([
 
 function readLocalWsOverrideUrl() {
   try {
-    const value = new URLSearchParams(window.location.search).get('localWsPort');
+    const params = new URLSearchParams(window.location.search);
+
+    const explicitWsUrl = String(params.get('wsUrl') || '').trim();
+    if (explicitWsUrl) {
+      if (explicitWsUrl.startsWith('ws://') || explicitWsUrl.startsWith('wss://')) {
+        try {
+          const parsed = new URL(explicitWsUrl);
+          if (!parsed.pathname || parsed.pathname === '/') parsed.pathname = '/ws';
+          return parsed.toString();
+        } catch {
+          return explicitWsUrl;
+        }
+      }
+      if (explicitWsUrl.startsWith('http://') || explicitWsUrl.startsWith('https://')) {
+        try {
+          const parsed = new URL(explicitWsUrl);
+          parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+          if (!parsed.pathname || parsed.pathname === '/') parsed.pathname = '/ws';
+          return parsed.toString();
+        } catch {
+          return `${explicitWsUrl.replace(/^http/, 'ws').replace(/\/$/, '')}/ws`;
+        }
+      }
+      return '';
+    }
+
+    const value = params.get('localWsPort');
     const asNum = Number(value);
     if (!Number.isFinite(asNum)) return '';
     const port = Math.trunc(asNum);
     if (port <= 0 || port > 65535) return '';
-    return `ws://localhost:${port}/ws`;
+    const isHttpsPage = window.location.protocol === 'https:';
+    const forceInsecureLocal = params.get('allowInsecureLocalWs') === '1';
+    const scheme = (isHttpsPage && !forceInsecureLocal) ? 'wss' : 'ws';
+    return `${scheme}://localhost:${port}/ws`;
   } catch {
     return '';
   }
 }
 
-const LOCAL_WS_OVERRIDE_URL = readLocalWsOverrideUrl();
+function inferTunnelWsUrl() {
+  try {
+    const host = String(window.location.host || '').toLowerCase();
+    const isTunnelHost = (
+      host.endsWith('.ngrok-free.dev') ||
+      host.endsWith('.ngrok.io') ||
+      host.endsWith('.trycloudflare.com')
+    );
+    if (!isTunnelHost) return '';
+    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${scheme}://${window.location.host}/ws`;
+  } catch {
+    return '';
+  }
+}
+
+const LOCAL_WS_OVERRIDE_URL = readLocalWsOverrideUrl() || inferTunnelWsUrl();
 const DEFAULT_SHINE_SERVER = 'wss://shineup.me/ws';
 
 function loadStoredSession() {
@@ -34,6 +80,26 @@ function loadStoredSession() {
     return JSON.parse(raw);
   } catch {
     return null;
+  }
+}
+
+function loadStoredReactions() {
+  try {
+    const raw = localStorage.getItem(REACTIONS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function persistStoredReactions(reactions) {
+  try {
+    localStorage.setItem(REACTIONS_STORAGE_KEY, JSON.stringify(reactions || {}));
+  } catch {
+    // ignore storage errors
   }
 }
 
@@ -55,6 +121,7 @@ function clearStoredSession() {
 
 function createInitialState({ withStoredSession = true } = {}) {
   const storedSession = withStoredSession ? loadStoredSession() : null;
+  const storedReactions = loadStoredReactions();
   const initialShineServer = LOCAL_WS_OVERRIDE_URL || DEFAULT_SHINE_SERVER;
 
   return {
@@ -120,6 +187,7 @@ function createInitialState({ withStoredSession = true } = {}) {
     channelsFeed: null,
     channelsIndex: {},
     localChannelPosts: {},
+    messageReactions: storedReactions,
   };
 }
 
@@ -247,6 +315,10 @@ function resetStateForSignedOut() {
   state.deviceConnect = next.deviceConnect;
   state.authUi = next.authUi;
   state.sessions = next.sessions;
+  state.channelsFeed = next.channelsFeed;
+  state.channelsIndex = next.channelsIndex;
+  state.localChannelPosts = next.localChannelPosts;
+  state.messageReactions = next.messageReactions;
 }
 
 export async function terminateCurrentSession({ infoMessage = '' } = {}) {
@@ -294,4 +366,32 @@ export function addLocalChannelPost(channelId, post) {
     title: post.title || `${state.session.login || 'Вы'} • сейчас`,
     body: text,
   });
+}
+
+function makeMessageReactionKey(messageRef, login = state.session.login) {
+  const bch = String(messageRef?.blockchainName || '').trim();
+  const blockNumber = Number(messageRef?.blockNumber);
+  const blockHash = String(messageRef?.blockHash || '').trim().toLowerCase();
+  const cleanLogin = String(login || '').trim().toLowerCase();
+  if (!cleanLogin || !bch || !Number.isFinite(blockNumber) || blockNumber < 0 || !blockHash) return '';
+  return `${cleanLogin}|${bch}|${blockNumber}|${blockHash}`;
+}
+
+export function getMessageReactionState(messageRef) {
+  const key = makeMessageReactionKey(messageRef);
+  if (!key) return '';
+  return state.messageReactions[key] || '';
+}
+
+export function setMessageReactionState(messageRef, nextState) {
+  const key = makeMessageReactionKey(messageRef);
+  if (!key) return;
+  const normalized = String(nextState || '').trim().toLowerCase();
+  if (normalized === 'liked' || normalized === 'unliked') {
+    state.messageReactions[key] = normalized;
+    persistStoredReactions(state.messageReactions);
+    return;
+  }
+  delete state.messageReactions[key];
+  persistStoredReactions(state.messageReactions);
 }

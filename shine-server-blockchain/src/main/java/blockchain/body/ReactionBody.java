@@ -13,6 +13,7 @@ import java.util.Objects;
  *
  * subType (в заголовке блока):
  *   1 = LIKE
+ *   2 = UNLIKE
  *
  * bodyBytes (BigEndian), новый формат:
  *   [1] toBlockchainNameLen (uint8)
@@ -45,7 +46,7 @@ public final class ReactionBody implements BodyRecord, BodyHasTarget {
         if ((this.version & 0xFFFF) != (VER & 0xFFFF)) {
             throw new IllegalArgumentException("ReactionBody version must be 1, got=" + (this.version & 0xFFFF));
         }
-        if ((this.subType & 0xFFFF) != (MsgSubType.REACTION_LIKE & 0xFFFF)) {
+        if (!isSupportedSubType(this.subType)) {
             throw new IllegalArgumentException("Bad reaction subType: " + (this.subType & 0xFFFF));
         }
 
@@ -88,7 +89,7 @@ public final class ReactionBody implements BodyRecord, BodyHasTarget {
 
     @Override
     public ReactionBody check() {
-        if ((subType & 0xFFFF) != (MsgSubType.REACTION_LIKE & 0xFFFF))
+        if (!isSupportedSubType(subType))
             throw new IllegalArgumentException("Bad reaction subType: " + (subType & 0xFFFF));
 
         if (toBlockchainName == null || toBlockchainName.isBlank())
@@ -123,4 +124,10 @@ public final class ReactionBody implements BodyRecord, BodyHasTarget {
     @Override public String toBchName() { return toBlockchainName; }
     @Override public Integer toBlockGlobalNumber() { return toBlockGlobalNumber; }
     @Override public byte[] toBlockHashBytes() { return toBlockHash32; }
+
+    private static boolean isSupportedSubType(short subType) {
+        int st = subType & 0xFFFF;
+        return st == (MsgSubType.REACTION_LIKE & 0xFFFF)
+                || st == (MsgSubType.REACTION_UNLIKE & 0xFFFF);
+    }
 }

@@ -41,6 +41,7 @@ import * as contactSearchView from './pages/contact-search-view.js';
 import * as chatView from './pages/chat-view.js';
 import * as channelsList from './pages/channels-list.js';
 import * as channelView from './pages/channel-view.js';
+import * as channelThreadView from './pages/channel-thread-view.js';
 import * as addChannelView from './pages/add-channel-view.js';
 import * as networkView from './pages/network-view.js';
 import * as notificationsView from './pages/notifications-view.js';
@@ -72,6 +73,7 @@ const routes = {
   'chat-view': chatView,
   'channels-list': channelsList,
   'channel-view': channelView,
+  'channel-thread-view': channelThreadView,
   'add-channel-view': addChannelView,
   'network-view': networkView,
   'notifications-view': notificationsView,
@@ -141,6 +143,45 @@ window.addEventListener('unhandledrejection', (event) => {
   });
 });
 
+function renderPageFailureFallback(pageId, error) {
+  captureClientError({
+    kind: 'page_render_failure',
+    message: error?.message || 'Page render failed',
+    stack: error?.stack || '',
+    context: {
+      pageId,
+      routeHash: window.location.hash || '',
+    },
+  });
+
+  screenEl.innerHTML = '';
+  const wrap = document.createElement('section');
+  wrap.className = 'stack';
+
+  const card = document.createElement('div');
+  card.className = 'card stack channels-status';
+
+  const title = document.createElement('strong');
+  title.textContent = 'Не удалось отрисовать экран';
+
+  const details = document.createElement('p');
+  details.className = 'meta-muted';
+  details.textContent = `Экран: ${pageId || 'неизвестно'}. Попробуйте повторить.`;
+
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'primary-btn';
+  retry.textContent = 'Повторить';
+  retry.addEventListener('click', () => renderApp());
+
+  card.append(title, details, retry);
+  wrap.append(card);
+  screenEl.append(wrap);
+
+  screenEl.classList.toggle('no-app-chrome', false);
+  toolbarEl.innerHTML = '';
+}
+
 function renderApp() {
   const route = getRoute();
   const pageId = route.pageId || (state.session.isAuthorized ? 'profile-view' : 'start-view');
@@ -162,18 +203,26 @@ function renderApp() {
     currentCleanup = null;
   }
 
-  screenEl.innerHTML = '';
-  const screen = page.render({ route, navigate });
-  screenEl.append(screen);
-  currentCleanup = typeof screen.cleanup === 'function' ? screen.cleanup : null;
+  try {
+    screenEl.innerHTML = '';
+    const screen = page.render({ route, navigate });
+    if (!(screen instanceof Node)) {
+      throw new Error('Page render returned invalid node');
+    }
 
-  const showAppChrome = page.pageMeta?.showAppChrome !== false;
-  screenEl.classList.toggle('no-app-chrome', !showAppChrome);
+    screenEl.append(screen);
+    currentCleanup = typeof screen.cleanup === 'function' ? screen.cleanup : null;
 
-  toolbarEl.innerHTML = '';
+    const showAppChrome = page.pageMeta?.showAppChrome !== false;
+    screenEl.classList.toggle('no-app-chrome', !showAppChrome);
 
-  if (showAppChrome) {
-    toolbarEl.append(renderToolbar(page.pageMeta.id, navigate));
+    toolbarEl.innerHTML = '';
+    if (showAppChrome) {
+      toolbarEl.append(renderToolbar(page.pageMeta.id, navigate));
+    }
+  } catch (error) {
+    console.error('[renderApp] controlled fallback', error);
+    renderPageFailureFallback(pageId, error);
   }
 }
 

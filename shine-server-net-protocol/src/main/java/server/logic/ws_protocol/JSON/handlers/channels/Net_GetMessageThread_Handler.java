@@ -27,7 +27,7 @@ public class Net_GetMessageThread_Handler implements JsonMessageHandler {
     public Net_Response handle(Net_Request baseRequest, ConnectionContext ctx) {
         Net_GetMessageThread_Request req = (Net_GetMessageThread_Request) baseRequest;
         if (req.getMessage() == null || req.getMessage().getBlockchainName() == null || req.getMessage().getBlockNumber() == null) {
-            return NetExceptionResponseFactory.error(req, WireCodes.Status.BAD_REQUEST, "bad_fields", "Некорректные поля message");
+            return NetExceptionResponseFactory.error(req, WireCodes.Status.BAD_REQUEST, "bad_fields", "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РїРѕР»СЏ message");
         }
 
         int depthUp = req.getDepthUp() == null ? 20 : Math.max(0, req.getDepthUp());
@@ -35,9 +35,13 @@ public class Net_GetMessageThread_Handler implements JsonMessageHandler {
         int childLimit = req.getLimitChildrenPerNode() == null ? 50 : Math.max(1, req.getLimitChildrenPerNode());
 
         try (Connection c = SqliteDbController.getInstance().getConnection()) {
+            String viewerLogin = ctx != null ? ctx.getLogin() : null;
+            if (viewerLogin == null || viewerLogin.isBlank()) {
+                viewerLogin = ChannelsReadSupport.canonicalLogin(c, req.getLogin());
+            }
             PostRow focusRow = findByNumber(c, req.getMessage().getBlockchainName(), req.getMessage().getBlockNumber());
             if (focusRow == null) {
-                return NetExceptionResponseFactory.error(req, 404, "message_not_found", "Сообщение не найдено");
+                return NetExceptionResponseFactory.error(req, 404, "message_not_found", "РЎРѕРѕР±С‰РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ");
             }
 
             Net_GetMessageThread_Response resp = new Net_GetMessageThread_Response();
@@ -45,7 +49,7 @@ public class Net_GetMessageThread_Handler implements JsonMessageHandler {
             resp.setRequestId(req.getRequestId());
             resp.setStatus(WireCodes.Status.OK);
 
-            resp.setFocus(toNode(c, focusRow));
+            resp.setFocus(toNode(c, focusRow, viewerLogin));
 
             List<Net_GetMessageThread_Response.MessageNode> ancestors = new ArrayList<>();
             PostRow cur = focusRow;
@@ -53,27 +57,27 @@ public class Net_GetMessageThread_Handler implements JsonMessageHandler {
                 if (cur.toBlockNumber == null || cur.toBchName == null) break;
                 PostRow parent = findByNumber(c, cur.toBchName, cur.toBlockNumber);
                 if (parent == null) break;
-                ancestors.add(0, toNode(c, parent));
+                ancestors.add(0, toNode(c, parent, viewerLogin));
                 cur = parent;
             }
             resp.setAncestors(ancestors);
 
-            resp.setDescendants(loadChildren(c, focusRow, depthDown, childLimit));
+            resp.setDescendants(loadChildren(c, focusRow, depthDown, childLimit, viewerLogin));
             return resp;
         } catch (Exception e) {
             log.error("GetMessageThread failed", e);
-            return NetExceptionResponseFactory.error(req, WireCodes.Status.INTERNAL_ERROR, "internal_error", "Внутренняя ошибка сервера");
+            return NetExceptionResponseFactory.error(req, WireCodes.Status.INTERNAL_ERROR, "internal_error", "Р’РЅСѓС‚СЂРµРЅРЅСЏСЏ РѕС€РёР±РєР° СЃРµСЂРІРµСЂР°");
         }
     }
 
-    private List<Net_GetMessageThread_Response.MessageNodeTree> loadChildren(Connection c, PostRow parent, int depthDown, int childLimit) throws Exception {
+    private List<Net_GetMessageThread_Response.MessageNodeTree> loadChildren(Connection c, PostRow parent, int depthDown, int childLimit, String viewerLogin) throws Exception {
         if (depthDown <= 0) return List.of();
         List<PostRow> replies = findReplies(c, parent.bchName, parent.blockNumber, parent.blockHash, childLimit);
         List<Net_GetMessageThread_Response.MessageNodeTree> out = new ArrayList<>();
         for (PostRow row : replies) {
             Net_GetMessageThread_Response.MessageNodeTree t = new Net_GetMessageThread_Response.MessageNodeTree();
-            t.setNode(toNode(c, row));
-            t.setChildren(loadChildren(c, row, depthDown - 1, childLimit));
+            t.setNode(toNode(c, row, viewerLogin));
+            t.setChildren(loadChildren(c, row, depthDown - 1, childLimit, viewerLogin));
             out.add(t);
         }
         return out;
@@ -133,7 +137,7 @@ public class Net_GetMessageThread_Handler implements JsonMessageHandler {
         return row;
     }
 
-    private Net_GetMessageThread_Response.MessageNode toNode(Connection c, PostRow row) throws Exception {
+    private Net_GetMessageThread_Response.MessageNode toNode(Connection c, PostRow row, String viewerLogin) throws Exception {
         Net_GetMessageThread_Response.MessageNode node = new Net_GetMessageThread_Response.MessageNode();
         Net_GetChannelMessages_Response.BlockRef ref = new Net_GetChannelMessages_Response.BlockRef();
         ref.setBlockNumber(row.blockNumber);
@@ -173,6 +177,7 @@ public class Net_GetMessageThread_Handler implements JsonMessageHandler {
         int[] stats = ChannelsReadSupport.loadStats(c, row.bchName, row.blockNumber, row.blockHash);
         node.setLikesCount(stats[0]);
         node.setRepliesCount(stats[1]);
+        node.setLikedByMe(ChannelsReadSupport.isLikedByLogin(c, viewerLogin, row.bchName, row.blockNumber, row.blockHash));
 
         if (row.lineCode != null && row.lineCode >= 0) {
             Net_GetMessageThread_Response.ChannelInfo ci = new Net_GetMessageThread_Response.ChannelInfo();
@@ -222,3 +227,4 @@ public class Net_GetMessageThread_Handler implements JsonMessageHandler {
         int msgSubType;
     }
 }
+

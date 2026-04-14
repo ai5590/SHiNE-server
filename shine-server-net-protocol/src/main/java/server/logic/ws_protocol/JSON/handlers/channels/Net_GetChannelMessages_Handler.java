@@ -38,6 +38,10 @@ public class Net_GetChannelMessages_Handler implements JsonMessageHandler {
         boolean asc = req.getSort() == null || !"desc".equalsIgnoreCase(req.getSort());
 
         try (Connection c = SqliteDbController.getInstance().getConnection()) {
+            String viewerLogin = ctx != null ? ctx.getLogin() : null;
+            if (viewerLogin == null || viewerLogin.isBlank()) {
+                viewerLogin = ChannelsReadSupport.canonicalLogin(c, req.getLogin());
+            }
             String ownerBch = req.getChannel().getOwnerBlockchainName();
             int lineCode = req.getChannel().getChannelRootBlockNumber();
 
@@ -50,6 +54,7 @@ public class Net_GetChannelMessages_Handler implements JsonMessageHandler {
             channel.setOwnerBlockchainName(ownerBch);
             channel.setOwnerLogin(BlockchainNameUtil.loginFromBlockchainName(ownerBch));
             channel.setChannelName(ChannelsReadSupport.detectChannelName(c, ownerBch, lineCode));
+            channel.setChannelDescription(ChannelsReadSupport.detectChannelDescription(c, ownerBch, lineCode));
             Net_GetChannelMessages_Response.BlockRef rootRef = new Net_GetChannelMessages_Response.BlockRef();
             rootRef.setBlockNumber(lineCode);
             rootRef.setBlockHash(req.getChannel().getChannelRootBlockHash());
@@ -102,6 +107,7 @@ public class Net_GetChannelMessages_Handler implements JsonMessageHandler {
                 int[] stats = ChannelsReadSupport.loadStats(c, ownerBch, post.blockNumber, post.blockHash);
                 item.setLikesCount(stats[0]);
                 item.setRepliesCount(stats[1]);
+                item.setLikedByMe(ChannelsReadSupport.isLikedByLogin(c, viewerLogin, post.bchName, post.blockNumber, post.blockHash));
 
                 items.add(item);
             }

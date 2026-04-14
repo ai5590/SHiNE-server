@@ -42,6 +42,7 @@ public class Net_ListSubscriptionsFeed_Response extends Net_Response {
         private String ownerLogin;
         private String ownerBlockchainName;
         private String channelName;
+        private String channelDescription;
         private boolean personal;
         private BlockRef channelRoot;
 
@@ -53,6 +54,9 @@ public class Net_ListSubscriptionsFeed_Response extends Net_Response {
 
         public String getChannelName() { return channelName; }
         public void setChannelName(String channelName) { this.channelName = channelName; }
+
+        public String getChannelDescription() { return channelDescription; }
+        public void setChannelDescription(String channelDescription) { this.channelDescription = channelDescription; }
 
         public boolean isPersonal() { return personal; }
         public void setPersonal(boolean personal) { this.personal = personal; }

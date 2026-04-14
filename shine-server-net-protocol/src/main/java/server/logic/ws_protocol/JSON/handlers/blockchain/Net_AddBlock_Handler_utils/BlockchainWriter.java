@@ -3,9 +3,11 @@ package server.logic.ws_protocol.JSON.handlers.blockchain.Net_AddBlock_Handler_u
 import blockchain.BchBlockEntry;
 import shine.db.dao.BlockchainStateDAO;
 import shine.db.dao.BlocksDAO;
+import shine.db.dao.ChannelNameStateDAO;
 import shine.db.dao.UserParamsDAO;
 import shine.db.entities.BlockchainStateEntry;
 import shine.db.entities.BlockEntry;
+import shine.db.entities.ChannelNameStateEntry;
 import shine.db.entities.UserParamEntry;
 import utils.files.FileStoreUtil;
 
@@ -23,20 +25,26 @@ public final class BlockchainWriter {
 
     private final BlocksDAO blocksDAO;
     private final BlockchainStateDAO stateDAO;
+    private final ChannelNameStateDAO channelNameStateDAO;
     private final UserParamsDAO userParamsDAO;
     private final FileStoreUtil fs = FileStoreUtil.getInstance();
 
-    public BlockchainWriter(BlocksDAO blocksDAO, BlockchainStateDAO stateDAO, UserParamsDAO userParamsDAO) {
+    public BlockchainWriter(BlocksDAO blocksDAO,
+                            BlockchainStateDAO stateDAO,
+                            UserParamsDAO userParamsDAO,
+                            ChannelNameStateDAO channelNameStateDAO) {
         this.blocksDAO = blocksDAO;
         this.stateDAO = stateDAO;
         this.userParamsDAO = userParamsDAO;
+        this.channelNameStateDAO = channelNameStateDAO;
     }
 
     public void appendBlockAndState(String blockchainName,
                                     BchBlockEntry block,
                                     BlockchainStateEntry st,
                                     BlockEntry be,
-                                    UserParamEntry userParamEntry) throws SQLException {
+                                    UserParamEntry userParamEntry,
+                                    ChannelNameStateEntry channelNameStateEntry) throws SQLException {
 
         long nowMs = System.currentTimeMillis();
 
@@ -57,6 +65,10 @@ public final class BlockchainWriter {
                 // 2.1) Если блок — USER_PARAM, синхронизируем снимок в users_params в той же транзакции.
                 if (userParamEntry != null) {
                     userParamsDAO.upsertIfNewer(c, userParamEntry);
+                }
+
+                if (channelNameStateEntry != null) {
+                    channelNameStateDAO.insert(c, channelNameStateEntry);
                 }
 
                 c.commit();

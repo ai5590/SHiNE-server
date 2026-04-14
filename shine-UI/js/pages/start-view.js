@@ -1,8 +1,10 @@
-import { clearStartHint, state } from '../state.js';
+import { clearStartHint } from '../state.js';
 
 export const pageMeta = { id: 'start-view', title: 'Старт', showAppChrome: false };
 
 export function render({ navigate }) {
+  clearStartHint();
+
   const screen = document.createElement('section');
   screen.className = 'auth-screen stack';
 
@@ -37,17 +39,6 @@ export function render({ navigate }) {
   settingsButton.addEventListener('click', () => navigate('entry-settings-view'));
 
   actions.append(loginButton, registerButton, settingsButton);
-
-  screen.append(logo, title);
-
-  if (state.startHint) {
-    const notice = document.createElement('div');
-    notice.className = 'card auth-status-card';
-    notice.textContent = state.startHint;
-    screen.append(notice);
-    clearStartHint();
-  }
-
-  screen.append(actions);
+  screen.append(logo, title, actions);
   return screen;
 }
