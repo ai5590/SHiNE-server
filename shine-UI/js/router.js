@@ -62,7 +62,8 @@ export function resolveToolbarActive(pageId) {
     pageId === 'device-camera-view' ||
     pageId === 'show-keys-view' ||
     pageId === 'device-session-view' ||
-    pageId === 'language-view'
+    pageId === 'language-view' ||
+    pageId === 'app-log-view'
   ) {
     return 'profile-view';
   }

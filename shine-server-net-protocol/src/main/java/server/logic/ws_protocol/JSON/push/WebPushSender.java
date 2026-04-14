@@ -8,10 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import utils.config.AppConfig;
 
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.NoSuchAlgorithmException;
-import java.util.Base64;
 
 public final class WebPushSender {
     private static final Logger log = LoggerFactory.getLogger(WebPushSender.class);
@@ -41,8 +39,7 @@ public final class WebPushSender {
                     endpoint,
                     new Subscription.Keys(p256dhKey, authKey)
             );
-            byte[] payloadBytes = Base64.getDecoder().decode(payloadB64);
-            Notification notification = new Notification(subscription, payloadBytes);
+            Notification notification = new Notification(subscription, payloadB64);
             var response = service().send(notification);
             int code = response.getStatusLine().getStatusCode();
             return code >= 200 && code < 300;

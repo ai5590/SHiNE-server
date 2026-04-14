@@ -64,20 +64,20 @@ public class Net_SendDirectMessage_Handler implements JsonMessageHandler {
         try {
             publicKey32 = Ed25519Util.keyFromBase64(fromUser.getDeviceKey());
         } catch (Exception e) {
-            return NetExceptionResponseFactory.error(req, WireCodes.Status.UNPROCESSABLE, "BAD_DEVICE_KEY", "Некорректный deviceKey отправителя");
+            return NetExceptionResponseFactory.error(req, WireCodes.Status.UNVERIFIED, "BAD_DEVICE_KEY", "Некорректный deviceKey отправителя");
         }
         if (!Ed25519Util.verify(packet.signedBody, packet.signature64, publicKey32)) {
-            return NetExceptionResponseFactory.error(req, WireCodes.Status.UNPROCESSABLE, "BAD_SIGNATURE", "Подпись не прошла проверку");
+            return NetExceptionResponseFactory.error(req, WireCodes.Status.UNVERIFIED, "BAD_SIGNATURE", "Подпись не прошла проверку");
         }
 
         long now = System.currentTimeMillis();
         if (Math.abs(now - packet.timeMs) > REPLAY_TTL_MS) {
-            return NetExceptionResponseFactory.error(req, WireCodes.Status.UNPROCESSABLE, "BAD_TIME_WINDOW", "Время сообщения вышло за окно 15 минут");
+            return NetExceptionResponseFactory.error(req, WireCodes.Status.UNVERIFIED, "BAD_TIME_WINDOW", "Время сообщения вышло за окно 15 минут");
         }
 
         boolean replayOk = SignedDmReplayDAO.getInstance().registerUnique(packet.fromLogin, packet.timeMs, packet.nonce, now);
         if (!replayOk) {
-            return NetExceptionResponseFactory.error(req, WireCodes.Status.UNPROCESSABLE, "REPLAY", "Повторное сообщение заблокировано");
+            return NetExceptionResponseFactory.error(req, WireCodes.Status.UNVERIFIED, "REPLAY", "Повторное сообщение заблокировано");
         }
 
         String messageId = NetIdGenerator.eventId("msg");

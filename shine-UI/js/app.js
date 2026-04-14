@@ -4,6 +4,7 @@ import { captureClientError, setClientErrorTransport } from './services/client-e
 import { initPwaPush } from './services/pwa-push-service.js';
 import {
   authService,
+  addAppLogEntry,
   authorizeSession,
   isSessionInvalidError,
   refreshSessions,
@@ -36,6 +37,7 @@ import * as deviceCameraView from './pages/device-camera-view.js';
 import * as showKeysView from './pages/show-keys-view.js';
 import * as deviceSessionView from './pages/device-session-view.js';
 import * as languageView from './pages/language-view.js';
+import * as appLogView from './pages/app-log-view.js';
 import * as messagesList from './pages/messages-list.js';
 import * as contactSearchView from './pages/contact-search-view.js';
 import * as chatView from './pages/chat-view.js';
@@ -68,6 +70,7 @@ const routes = {
   'show-keys-view': showKeysView,
   'device-session-view': deviceSessionView,
   'language-view': languageView,
+  'app-log-view': appLogView,
   'messages-list': messagesList,
   'contact-search-view': contactSearchView,
   'chat-view': chatView,
@@ -100,6 +103,18 @@ function showGlobalErrorAlert(title, details = {}) {
 
 window.addEventListener('error', (event) => {
   const pageId = getRoute().pageId || '';
+  addAppLogEntry({
+    level: 'error',
+    source: 'global_error',
+    message: event.message || 'Global JS error',
+    details: {
+      pageId,
+      sourceUrl: event.filename || '',
+      line: event.lineno,
+      column: event.colno,
+      stack: event.error?.stack || '',
+    },
+  });
   captureClientError({
     kind: 'global_error',
     message: event.message || 'Global JS error',
@@ -125,6 +140,16 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   const reason = event.reason;
   const pageId = getRoute().pageId || '';
+  addAppLogEntry({
+    level: 'error',
+    source: 'unhandled_rejection',
+    message: reason?.message || String(reason || 'Unhandled promise rejection'),
+    details: {
+      pageId,
+      reasonType: reason?.constructor?.name || typeof reason,
+      stack: reason?.stack || '',
+    },
+  });
   captureClientError({
     kind: 'unhandled_rejection',
     message: reason?.message || String(reason || 'Unhandled promise rejection'),
@@ -200,9 +225,29 @@ async function tryAutoLogin() {
 }
 
 async function init() {
+  addAppLogEntry({
+    level: 'info',
+    source: 'app',
+    message: 'Инициализация UI запущена',
+  });
+
   setSessionResetHandler(() => {
     navigate('start-view');
   });
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      const data = event?.data || {};
+      if (data.type !== 'SHINE_WEB_PUSH_EVENT') return;
+      const payload = data.payload || {};
+      addAppLogEntry({
+        level: 'info',
+        source: 'web-push',
+        message: 'Получено push-событие в service worker',
+        details: payload,
+      });
+    });
+  }
 
   authService.onEvent('SessionRevoked', async () => {
     await terminateCurrentSession({ infoMessage: 'Сессия закрыта с другого устройства.' });
@@ -226,18 +271,38 @@ async function init() {
       }
     }
     const added = addIncomingMessage(fromLogin, text, messageId);
+    if (added) {
+      addAppLogEntry({
+        level: 'info',
+        source: 'incoming-dm',
+        message: `Входящее сообщение от ${fromLogin}`,
+        details: { messageId, text },
+      });
+    }
     if (added && Notification.permission === 'granted') {
       try {
         new Notification(`Сообщение от ${fromLogin}`, { body: text || '' });
       } catch {}
     }
     if (eventId) {
-      try { await authService.ackIncomingMessage(eventId, messageId); } catch {}
+      try {
+        await authService.ackIncomingMessage(eventId, messageId);
+      } catch (error) {
+        addAppLogEntry({
+          level: 'warn',
+          source: 'incoming-dm',
+          message: 'Не удалось отправить ACK на входящее сообщение',
+          details: { eventId, messageId, error: error?.message || 'unknown' },
+        });
+      }
     }
   });
   await tryAutoLogin();
   if (state.session.isAuthorized) {
-    await initPwaPush({ authService });
+    await initPwaPush({
+      authService,
+      onLog: (entry) => addAppLogEntry(entry),
+    });
     window.setInterval(async () => {
       if (!state.session.isAuthorized) return;
       try {
