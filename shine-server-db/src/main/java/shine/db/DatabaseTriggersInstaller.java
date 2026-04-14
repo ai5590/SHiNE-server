@@ -212,12 +212,30 @@ public final class DatabaseTriggersInstaller {
                 SELECT
                     NEW.login,
                     NEW.msg_sub_type,
-                    NEW.to_login,
+                    COALESCE(
+                        NEW.to_login,
+                        CASE
+                            WHEN NEW.to_bch_name IS NOT NULL
+                             AND length(NEW.to_bch_name) > 4
+                             AND substr(NEW.to_bch_name, length(NEW.to_bch_name) - 3, 1) = '-'
+                            THEN substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4)
+                            ELSE NULL
+                        END
+                    ),
                     NEW.to_bch_name,
                     NEW.to_block_number,
                     NEW.to_block_hash
                 WHERE NEW.msg_sub_type IN (%d, %d, %d)
-                  AND NEW.to_login IS NOT NULL
+                  AND COALESCE(
+                      NEW.to_login,
+                      CASE
+                          WHEN NEW.to_bch_name IS NOT NULL
+                           AND length(NEW.to_bch_name) > 4
+                           AND substr(NEW.to_bch_name, length(NEW.to_bch_name) - 3, 1) = '-'
+                          THEN substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4)
+                          ELSE NULL
+                      END
+                  ) IS NOT NULL
                   AND NEW.to_bch_name IS NOT NULL;
 
                 -- 2) РµСЃР»Рё Р·Р°РїРёСЃСЊ РµСЃС‚СЊ вЂ” РѕР±РЅРѕРІР»СЏРµРј Р°РєС‚СѓР°Р»СЊРЅС‹Рµ to_*
@@ -228,27 +246,64 @@ public final class DatabaseTriggersInstaller {
                     to_block_hash   = NEW.to_block_hash
                 WHERE login = NEW.login
                   AND rel_type = NEW.msg_sub_type
-                  AND to_login = NEW.to_login
-                  AND NEW.msg_sub_type IN (%d, %d, %d)
-                  AND NEW.to_login IS NOT NULL
+                  AND to_login = COALESCE(
+                      NEW.to_login,
+                      CASE
+                          WHEN NEW.to_bch_name IS NOT NULL
+                           AND length(NEW.to_bch_name) > 4
+                           AND substr(NEW.to_bch_name, length(NEW.to_bch_name) - 3, 1) = '-'
+                          THEN substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4)
+                          ELSE NULL
+                      END
+                  )
+                  AND NEW.msg_sub_type IN (%d, %d)
+                  AND COALESCE(
+                      NEW.to_login,
+                      CASE
+                          WHEN NEW.to_bch_name IS NOT NULL
+                           AND length(NEW.to_bch_name) > 4
+                           AND substr(NEW.to_bch_name, length(NEW.to_bch_name) - 3, 1) = '-'
+                          THEN substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4)
+                          ELSE NULL
+                      END
+                  ) IS NOT NULL
                   AND NEW.to_bch_name IS NOT NULL;
 
                 -- UNFRIEND/UNCONTACT/UNFOLLOW:
                 -- СѓРґР°Р»СЏРµРј СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РµРµ "РїРѕР·РёС‚РёРІРЅРѕРµ" СЃРѕСЃС‚РѕСЏРЅРёРµ
                 DELETE FROM connections_state
                 WHERE login = NEW.login
-                  AND to_login = NEW.to_login
+                  AND to_login = COALESCE(
+                      NEW.to_login,
+                      CASE
+                          WHEN NEW.to_bch_name IS NOT NULL
+                           AND length(NEW.to_bch_name) > 4
+                           AND substr(NEW.to_bch_name, length(NEW.to_bch_name) - 3, 1) = '-'
+                          THEN substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4)
+                          ELSE NULL
+                      END
+                  )
                   AND rel_type = CASE NEW.msg_sub_type
                       WHEN %d THEN %d
                       WHEN %d THEN %d
                       WHEN %d THEN %d
                       ELSE rel_type
                   END
+                  AND COALESCE(
+                      NEW.to_login,
+                      CASE
+                          WHEN NEW.to_bch_name IS NOT NULL
+                           AND length(NEW.to_bch_name) > 4
+                           AND substr(NEW.to_bch_name, length(NEW.to_bch_name) - 3, 1) = '-'
+                          THEN substr(NEW.to_bch_name, 1, length(NEW.to_bch_name) - 4)
+                          ELSE NULL
+                      END
+                  ) IS NOT NULL
                   AND NEW.msg_sub_type IN (%d, %d, %d);
             END;
             """.formatted(
                 FRIEND, CONTACT, FOLLOW,
-                FRIEND, CONTACT, FOLLOW,
+                FRIEND, CONTACT,
 
                 UNFRIEND,  FRIEND,
                 UNCONTACT, CONTACT,

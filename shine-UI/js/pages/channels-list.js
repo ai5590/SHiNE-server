@@ -111,17 +111,22 @@ async function resolveChannelTargetFromInput(rawInput) {
     }
 
     const ownerFeed = await authService.listSubscriptionsFeed(ownerLogin, 500);
-    const ownChannels = (ownerFeed?.ownedChannels || []).filter((item) => (
-      String(item?.channel?.ownerBlockchainName || '') === String(user.blockchainName)
-    ));
-
-    const match = ownChannels.find((item) => (
+    const ownChannels = Array.isArray(ownerFeed?.ownedChannels) ? ownerFeed.ownedChannels : [];
+    const matches = ownChannels.filter((item) => (
       String(item?.channel?.channelName || '').trim().toLowerCase() === channelName
     ));
 
-    if (!match) {
+    if (!matches.length) {
       throw new Error('Канал не найден у указанного автора.');
     }
+
+    const primaryMatches = matches.filter((item) => (
+      String(item?.channel?.ownerBlockchainName || '') === String(user.blockchainName || '')
+    ));
+    const pool = primaryMatches.length ? primaryMatches : matches;
+    const match = [...pool].sort((a, b) => (
+      Number(b?.channel?.channelRoot?.blockNumber || -1) - Number(a?.channel?.channelRoot?.blockNumber || -1)
+    ))[0];
 
     return {
       ownerBlockchainName: String(match?.channel?.ownerBlockchainName || user.blockchainName),
@@ -192,6 +197,36 @@ function renderSuggestions(container, values, onPick) {
     btn.textContent = value;
     btn.addEventListener('click', () => onPick(value));
     container.append(btn);
+  });
+}
+
+function normalizeComparableLogin(value) {
+  return normalizeLoginInput(value).toLowerCase();
+}
+
+function isFollowedUserVisible(targetLogin) {
+  const expected = normalizeComparableLogin(targetLogin);
+  if (!expected) return false;
+  const rows = Array.isArray(state.channelsFeed?.followedUsersChannels)
+    ? state.channelsFeed.followedUsersChannels
+    : [];
+  return rows.some((row) => normalizeComparableLogin(row?.channel?.ownerLogin) === expected);
+}
+
+function isFollowedChannelVisible(target) {
+  const rows = Array.isArray(state.channelsFeed?.followedChannels)
+    ? state.channelsFeed.followedChannels
+    : [];
+  const expectedBch = String(target?.ownerBlockchainName || '');
+  const expectedNo = Number(target?.rootBlockNumber);
+  const expectedHash = normalizeHash(target?.rootBlockHash);
+  if (!expectedBch || !Number.isFinite(expectedNo)) return false;
+
+  return rows.some((row) => {
+    const rowBch = String(row?.channel?.ownerBlockchainName || '');
+    const rowNo = Number(row?.channel?.channelRoot?.blockNumber);
+    const rowHash = normalizeHash(row?.channel?.channelRoot?.blockHash);
+    return rowBch === expectedBch && rowNo === expectedNo && rowHash === expectedHash;
   });
 }
 
@@ -306,35 +341,62 @@ function openSimpleSubscribeModal({ kind, kindLabel, submitLabel, unfollow = fal
     errorEl.textContent = '';
 
     try {
+      let channelTarget = null;
+      let userTargetLogin = '';
+
       if (kind === 'user') {
+        userTargetLogin = normalizeLoginInput(value);
         await authService.addBlockFollowUser({
           login,
-          targetLogin: normalizeLoginInput(value),
+          targetLogin: userTargetLogin,
           storagePwd,
           unfollow,
         });
       } else if (kind === 'channel') {
-        const target = await resolveChannelTargetFromInput(value);
-        if (!target?.ownerBlockchainName || !Number.isFinite(target.rootBlockNumber)) {
+        channelTarget = await resolveChannelTargetFromInput(value);
+        if (!channelTarget?.ownerBlockchainName || !Number.isFinite(channelTarget.rootBlockNumber)) {
           throw new Error('Канал не найден.');
         }
 
         await authService.addBlockFollowChannel({
           login,
           storagePwd,
-          targetBlockchainName: target.ownerBlockchainName,
-          targetBlockNumber: target.rootBlockNumber,
-          targetBlockHashHex: target.rootBlockHash,
+          targetBlockchainName: channelTarget.ownerBlockchainName,
+          targetBlockNumber: channelTarget.rootBlockNumber,
+          targetBlockHashHex: channelTarget.rootBlockHash,
           unfollow,
         });
       } else {
         throw new Error('Неподдерживаемый тип подписки');
       }
 
+      if (typeof onSuccess === 'function') {
+        await onSuccess();
+      }
+
+      if (kind === 'user') {
+        const visible = isFollowedUserVisible(userTargetLogin);
+        if (!unfollow && !visible) {
+          throw new Error('Подписка не подтвердилась после обновления списка.');
+        }
+        if (unfollow && visible) {
+          throw new Error('Отписка не подтвердилась после обновления списка.');
+        }
+      }
+
+      if (kind === 'channel') {
+        const visible = isFollowedChannelVisible(channelTarget);
+        if (!unfollow && !visible) {
+          throw new Error('Подписка на канал не подтвердилась после обновления списка.');
+        }
+        if (unfollow && visible) {
+          throw new Error('Отписка от канала не подтвердилась после обновления списка.');
+        }
+      }
+
       softHaptic(15);
       showToast(unfollow ? 'Отписка выполнена' : 'Подписка выполнена');
       close();
-      if (typeof onSuccess === 'function') onSuccess();
     } catch (error) {
       errorEl.textContent = toUserMessage(error, `${submitText} не удалось.`);
       setBusy(false);
