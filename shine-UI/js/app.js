@@ -2,6 +2,7 @@ import { navigate, getRoute, PRE_AUTH_PAGES } from './router.js';
 import { renderToolbar } from './components/toolbar.js';
 import { captureClientError, setClientErrorTransport } from './services/client-error-reporter.js';
 import { initPwaPush } from './services/pwa-push-service.js';
+import { handleIncomingCallInvite, handleIncomingCallSignal } from './services/call-service.js';
 import {
   authService,
   addAppLogEntry,
@@ -381,6 +382,15 @@ async function init() {
       }
     }
   });
+
+  authService.onEvent('IncomingCallInvite', async (evt) => {
+    try { await handleIncomingCallInvite(evt); } catch {}
+  });
+
+  authService.onEvent('IncomingCallSignal', async (evt) => {
+    try { await handleIncomingCallSignal(evt); } catch {}
+  });
+
   await tryAutoLogin();
   await ensureSessionRuntimeStarted();
 

@@ -1,6 +1,7 @@
 import { renderHeader } from '../components/header.js';
 import { directMessages } from '../mock-data.js';
 import { addAppLogEntry, addChatMessage, getChatMessages, authService, state } from '../state.js';
+import { startOutgoingCall, hangupActiveCall } from '../services/call-service.js';
 
 export const pageMeta = { id: 'chat-view', title: 'Чат' };
 
@@ -33,10 +34,27 @@ export function render({ navigate, route }) {
       leftAction: { label: '←', onClick: () => navigate('messages-list') },
       rightActions: [{
         label: 'Позвонить',
-        onClick: () => {
+        onClick: async () => {
           const confirmed = window.confirm('Позвонить этому пользователю?');
           if (!confirmed) return;
-          window.alert('Функция пока не реализована');
+          try {
+            await startOutgoingCall(chatId);
+            renderLog(log, chatId);
+          } catch (e) {
+            addChatMessage(chatId, `[call] Ошибка звонка: ${e.message || 'unknown'}`);
+            renderLog(log, chatId);
+          }
+        },
+      }, {
+        label: 'Сброс',
+        onClick: async () => {
+          try {
+            await hangupActiveCall();
+            renderLog(log, chatId);
+          } catch (e) {
+            addChatMessage(chatId, `[call] Ошибка сброса: ${e.message || 'unknown'}`);
+            renderLog(log, chatId);
+          }
         },
       }],
     })

@@ -1170,6 +1170,18 @@ export class AuthService {
     return response.payload || {};
   }
 
+
+  async callInviteBroadcast({ toLogin, callId, type = 100 }) {
+    const response = await this.ws.request('CallInviteBroadcast', { toLogin, callId, type });
+    if (response.status !== 200) throw opError('CallInviteBroadcast', response);
+    return response.payload || {};
+  }
+
+  async callSignalToSession({ toLogin, targetSessionId, callId, type, data = '' }) {
+    const response = await this.ws.request('CallSignalToSession', { toLogin, targetSessionId, callId, type, data });
+    if (response.status !== 200) throw opError('CallSignalToSession', response);
+    return response.payload || {};
+  }
   async listContacts() {
     const response = await this.ws.request('ListContacts', {});
     if (response.status !== 200) throw opError('ListContacts', response);
