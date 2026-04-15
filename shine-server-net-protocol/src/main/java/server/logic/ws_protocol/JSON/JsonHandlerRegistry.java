@@ -58,9 +58,13 @@ import server.logic.ws_protocol.JSON.handlers.connections.entyties.Net_GetUserCo
 import server.logic.ws_protocol.JSON.handlers.connections.entyties.Net_AddCloseFriend_Request;
 import server.logic.ws_protocol.JSON.handlers.connections.entyties.Net_ListContacts_Request;
 import server.logic.ws_protocol.JSON.messages.Net_AckIncomingMessage_Handler;
+import server.logic.ws_protocol.JSON.messages.Net_CallInviteBroadcast_Handler;
+import server.logic.ws_protocol.JSON.messages.Net_CallSignalToSession_Handler;
 import server.logic.ws_protocol.JSON.messages.Net_SendDirectMessage_Handler;
 import server.logic.ws_protocol.JSON.messages.Net_UpsertPushToken_Handler;
 import server.logic.ws_protocol.JSON.messages.entyties.Net_AckIncomingMessage_Request;
+import server.logic.ws_protocol.JSON.messages.entyties.Net_CallInviteBroadcast_Request;
+import server.logic.ws_protocol.JSON.messages.entyties.Net_CallSignalToSession_Request;
 import server.logic.ws_protocol.JSON.messages.entyties.Net_SendDirectMessage_Request;
 import server.logic.ws_protocol.JSON.messages.entyties.Net_UpsertPushToken_Request;
 
@@ -116,6 +120,8 @@ public final class JsonHandlerRegistry {
             Map.entry("UpsertPushToken", new Net_UpsertPushToken_Handler()),
             Map.entry("SendDirectMessage", new Net_SendDirectMessage_Handler()),
             Map.entry("AckIncomingMessage", new Net_AckIncomingMessage_Handler()),
+            Map.entry("CallInviteBroadcast", new Net_CallInviteBroadcast_Handler()),
+            Map.entry("CallSignalToSession", new Net_CallSignalToSession_Handler()),
 
             // --- system ---
             Map.entry("Ping",               new Net_Ping_Handler()),
@@ -162,6 +168,8 @@ public final class JsonHandlerRegistry {
             Map.entry("UpsertPushToken", Net_UpsertPushToken_Request.class),
             Map.entry("SendDirectMessage", Net_SendDirectMessage_Request.class),
             Map.entry("AckIncomingMessage", Net_AckIncomingMessage_Request.class),
+            Map.entry("CallInviteBroadcast", Net_CallInviteBroadcast_Request.class),
+            Map.entry("CallSignalToSession", Net_CallSignalToSession_Request.class),
 
             // --- system ---
             Map.entry("Ping",               Net_Ping_Request.class),
