@@ -22,6 +22,13 @@ function boolText(flag) {
   return flag ? 'Да' : 'Нет';
 }
 
+function genderText(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'male') return 'Мужской';
+  if (normalized === 'female') return 'Женский';
+  return 'Не указан';
+}
+
 function relationButtonLabel(kind, flags) {
   if (kind === 'follow') return flags.outFollow ? 'Отписаться' : 'Подписаться';
   if (kind === 'friend') return flags.outFriend ? 'Убрать из друзей' : 'Добавить в друзья';
@@ -85,6 +92,7 @@ function renderReadOnlyParams(card) {
   const rows = [
     { label: 'Имя', value: card.firstName },
     { label: 'Фамилия', value: card.lastName },
+    { label: 'Пол', value: genderText(card.gender) },
     { label: 'Адрес', value: card.address },
     { label: 'Web', value: card.web },
     { label: 'Телефон', value: card.phone },

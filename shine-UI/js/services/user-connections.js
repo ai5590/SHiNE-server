@@ -183,6 +183,7 @@ export async function loadUserProfileCard(login) {
     address: fields.address || '',
     web: fields.web || '',
     phone: fields.phone || '',
+    gender: String(snapshot?.gender || 'unknown').trim().toLowerCase() || 'unknown',
     official: Boolean(toggles.official),
     shine: Boolean(toggles.shine),
   };

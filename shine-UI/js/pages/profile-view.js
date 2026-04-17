@@ -2,7 +2,11 @@ import { renderHeader } from '../components/header.js';
 import { profile } from '../mock-data.js';
 import { state } from '../state.js';
 import {
+  PROFILE_GENDER_FEMALE,
+  PROFILE_GENDER_MALE,
+  PROFILE_GENDER_UNKNOWN,
   loadProfileSnapshot,
+  saveProfileGender,
   saveProfileParamBlock,
   saveProfileToggle,
 } from '../services/user-profile-params.js';
@@ -18,6 +22,35 @@ function showLocalErrorAlert(prefix, error) {
   const message = error?.message || 'Неизвестная ошибка';
   const stack = error?.stack ? `\n\nStack:\n${error.stack}` : '';
   window.alert(`${prefix}: ${message}${stack}`);
+}
+
+function genderLabel(value) {
+  if (value === PROFILE_GENDER_MALE) return 'Мужской';
+  if (value === PROFILE_GENDER_FEMALE) return 'Женский';
+  return 'Не указан';
+}
+
+function parseGenderChoice(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (normalized === '1' || normalized === 'м' || normalized === 'муж' || normalized === 'мужской' || normalized === PROFILE_GENDER_MALE) {
+    return PROFILE_GENDER_MALE;
+  }
+  if (normalized === '2' || normalized === 'ж' || normalized === 'жен' || normalized === 'женский' || normalized === PROFILE_GENDER_FEMALE) {
+    return PROFILE_GENDER_FEMALE;
+  }
+  if (
+    normalized === '3' ||
+    normalized === 'н' ||
+    normalized === 'не указан' ||
+    normalized === 'неуказан' ||
+    normalized === 'не указано' ||
+    normalized === 'неизвестно' ||
+    normalized === PROFILE_GENDER_UNKNOWN
+  ) {
+    return PROFILE_GENDER_UNKNOWN;
+  }
+  return '';
 }
 
 function escapeHtml(text) {
@@ -71,15 +104,25 @@ export function render({ navigate }) {
   status.className = 'status-line';
   status.textContent = 'Загрузка параметров...';
 
+  const genderWrap = document.createElement('div');
+  genderWrap.className = 'card row profile-param-item';
+  genderWrap.innerHTML = `
+    <div class="profile-param-value"><b>Пол</b>: <span data-gender-value>Не указан</span></div>
+    <button class="ghost-btn" type="button" data-edit-gender="true">Выбрать</button>
+  `;
+
   const listWrap = document.createElement('div');
   listWrap.className = 'stack profile-param-list';
 
   const reloadBtn = topRow.querySelector('[data-reload="true"]');
   const officialBtn = badgesRow.querySelector('[data-toggle="official"]');
   const shineBtn = badgesRow.querySelector('[data-toggle="shine"]');
+  const genderValueEl = genderWrap.querySelector('[data-gender-value]');
+  const genderBtn = genderWrap.querySelector('[data-edit-gender="true"]');
 
   let currentFields = [];
   let currentToggles = [];
+  let currentGender = PROFILE_GENDER_UNKNOWN;
   const identityEl = topRow.querySelector('[data-profile-identity="true"]');
 
   function syncIdentity() {
@@ -115,6 +158,11 @@ export function render({ navigate }) {
     updateToggleButton(shineBtn, 'Сияющий', shine.enabled);
   }
 
+  function updateGenderUi() {
+    if (!genderValueEl) return;
+    genderValueEl.textContent = genderLabel(currentGender);
+  }
+
   function renderFields(fields) {
     listWrap.innerHTML = '';
     fields.forEach((field) => {
@@ -137,15 +185,18 @@ export function render({ navigate }) {
     reloadBtn.disabled = true;
     officialBtn.disabled = true;
     shineBtn.disabled = true;
+    genderBtn.disabled = true;
 
     try {
       const snapshot = await loadProfileSnapshot(login);
       currentFields = snapshot.fields;
       currentToggles = snapshot.toggles;
+      currentGender = snapshot.gender || PROFILE_GENDER_UNKNOWN;
 
       syncIdentity();
       renderFields(currentFields);
       updateTogglesUi();
+      updateGenderUi();
 
       status.className = 'status-line is-available';
       status.textContent = 'Актуальные параметры загружены.';
@@ -157,6 +208,7 @@ export function render({ navigate }) {
       reloadBtn.disabled = false;
       officialBtn.disabled = false;
       shineBtn.disabled = false;
+      genderBtn.disabled = false;
     }
   }
 
@@ -209,6 +261,36 @@ export function render({ navigate }) {
     }
   }
 
+  async function onGenderClick() {
+    const entered = window.prompt(
+      'Выберите пол:\n1 — Мужской\n2 — Женский\n3 — Не указан\nМожно ввести номер или значение (male/female/unknown).',
+      currentGender,
+    );
+    if (entered === null) return;
+    const nextGender = parseGenderChoice(entered);
+    if (!nextGender) {
+      window.alert('Некорректный выбор пола. Доступно: male, female, unknown.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Установить пол: «${genderLabel(nextGender)}»?\nБудет создана запись в блокчейне.`,
+    );
+    if (!confirmed) return;
+
+    status.className = 'status-line';
+    status.textContent = 'Сохранение в блокчейн...';
+
+    try {
+      await saveProfileGender(login, nextGender);
+      await refreshProfileSnapshot();
+    } catch (error) {
+      status.className = 'status-line is-unavailable';
+      status.textContent = `Не удалось изменить пол: ${error.message || 'ошибка сети'}`;
+      showLocalErrorAlert('Ошибка изменения пола', error);
+    }
+  }
+
   listWrap.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -220,8 +302,9 @@ export function render({ navigate }) {
   reloadBtn.addEventListener('click', refreshProfileSnapshot);
   officialBtn.addEventListener('click', () => onToggleClick('official'));
   shineBtn.addEventListener('click', () => onToggleClick('shine'));
+  genderBtn.addEventListener('click', onGenderClick);
 
-  card.append(topRow, badgesRow, status, listWrap);
+  card.append(topRow, badgesRow, status, genderWrap, listWrap);
   screen.append(card);
 
   refreshProfileSnapshot();

@@ -13,6 +13,15 @@ export const profileToggleDefs = [
   { key: 'shine', label: 'Сияющий' },
 ];
 
+export const PROFILE_GENDER_MALE = 'male';
+export const PROFILE_GENDER_FEMALE = 'female';
+export const PROFILE_GENDER_UNKNOWN = 'unknown';
+export const PROFILE_GENDER_VALUES = Object.freeze([
+  PROFILE_GENDER_MALE,
+  PROFILE_GENDER_FEMALE,
+  PROFILE_GENDER_UNKNOWN,
+]);
+
 function normalizeItem(param, payload) {
   if (!param) return null;
 
@@ -29,6 +38,13 @@ function normalizeItem(param, payload) {
 function parseToggleValue(value) {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'true' || normalized === 'yes' || normalized === '1';
+}
+
+function normalizeGenderValue(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === PROFILE_GENDER_MALE) return PROFILE_GENDER_MALE;
+  if (normalized === PROFILE_GENDER_FEMALE) return PROFILE_GENDER_FEMALE;
+  return PROFILE_GENDER_UNKNOWN;
 }
 
 async function getStoragePwd() {
@@ -100,7 +116,15 @@ export async function loadProfileSnapshot(login) {
     });
   }
 
-  return { fields, toggles };
+  const latestGender = loadLatestByAliasesFromItems(items, ['gender']);
+  const gender = normalizeGenderValue(latestGender?.value || PROFILE_GENDER_UNKNOWN);
+
+  return {
+    fields,
+    toggles,
+    gender,
+    genderTimeMs: latestGender?.timeMs || 0,
+  };
 }
 
 export async function saveProfileParamBlock(login, key, value) {
@@ -119,6 +143,17 @@ export async function saveProfileToggle(login, key, enabled) {
     login,
     param: key,
     value: enabled ? 'yes' : 'no',
+    storagePwd,
+  });
+}
+
+export async function saveProfileGender(login, gender) {
+  const normalized = normalizeGenderValue(gender);
+  const storagePwd = await getStoragePwd();
+  await authService.addBlockUserParam({
+    login,
+    param: 'gender',
+    value: normalized,
     storagePwd,
   });
 }
