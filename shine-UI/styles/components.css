@@ -253,6 +253,22 @@
   font-size: 13px;
 }
 
+.profile-gender-select {
+  min-height: 46px;
+  border-radius: 12px;
+  border: 1px solid rgba(157, 185, 238, 0.35);
+  background:
+    linear-gradient(150deg, rgba(23, 43, 79, 0.9), rgba(10, 22, 44, 0.92));
+  color: #eef4ff;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.profile-gender-select:focus {
+  border-color: rgba(120, 211, 255, 0.9);
+  box-shadow: 0 0 0 3px rgba(65, 174, 255, 0.2);
+}
+
 .profile-param-time {
   font-size: 12px;
 }
@@ -1468,7 +1484,8 @@ textarea.input {
 }
 
 .thread-node-level {
-  margin-left: calc(min(var(--depth, 0), 4) * 12px);
+  --depth: 0;
+  margin-left: calc(var(--depth) * 12px);
 }
 
 .thread-block {

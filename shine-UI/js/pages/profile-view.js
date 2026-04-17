@@ -30,28 +30,11 @@ function genderLabel(value) {
   return 'Не указан';
 }
 
-function parseGenderChoice(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (!normalized) return '';
-  if (normalized === '1' || normalized === 'м' || normalized === 'муж' || normalized === 'мужской' || normalized === PROFILE_GENDER_MALE) {
-    return PROFILE_GENDER_MALE;
-  }
-  if (normalized === '2' || normalized === 'ж' || normalized === 'жен' || normalized === 'женский' || normalized === PROFILE_GENDER_FEMALE) {
-    return PROFILE_GENDER_FEMALE;
-  }
-  if (
-    normalized === '3' ||
-    normalized === 'н' ||
-    normalized === 'не указан' ||
-    normalized === 'неуказан' ||
-    normalized === 'не указано' ||
-    normalized === 'неизвестно' ||
-    normalized === PROFILE_GENDER_UNKNOWN
-  ) {
-    return PROFILE_GENDER_UNKNOWN;
-  }
-  return '';
-}
+const GENDER_OPTIONS = Object.freeze([
+  { value: PROFILE_GENDER_MALE, label: 'Мужской' },
+  { value: PROFILE_GENDER_FEMALE, label: 'Женский' },
+  { value: PROFILE_GENDER_UNKNOWN, label: 'Не указан' },
+]);
 
 function escapeHtml(text) {
   return String(text || '')
@@ -104,26 +87,69 @@ export function render({ navigate }) {
   status.className = 'status-line';
   status.textContent = 'Загрузка параметров...';
 
-  const genderWrap = document.createElement('div');
-  genderWrap.className = 'card row profile-param-item';
-  genderWrap.innerHTML = `
-    <div class="profile-param-value"><b>Пол</b>: <span data-gender-value>Не указан</span></div>
-    <button class="ghost-btn" type="button" data-edit-gender="true">Выбрать</button>
-  `;
-
   const listWrap = document.createElement('div');
   listWrap.className = 'stack profile-param-list';
 
   const reloadBtn = topRow.querySelector('[data-reload="true"]');
   const officialBtn = badgesRow.querySelector('[data-toggle="official"]');
   const shineBtn = badgesRow.querySelector('[data-toggle="shine"]');
-  const genderValueEl = genderWrap.querySelector('[data-gender-value]');
-  const genderBtn = genderWrap.querySelector('[data-edit-gender="true"]');
 
   let currentFields = [];
   let currentToggles = [];
   let currentGender = PROFILE_GENDER_UNKNOWN;
   const identityEl = topRow.querySelector('[data-profile-identity="true"]');
+
+  function openGenderPickerModal(initialGender) {
+    const root = document.getElementById('modal-root');
+    if (!root) return Promise.resolve(null);
+    root.innerHTML = '';
+
+    const selected = GENDER_OPTIONS.some((item) => item.value === initialGender)
+      ? initialGender
+      : PROFILE_GENDER_UNKNOWN;
+
+    root.innerHTML = `
+      <div class="modal" id="profile-gender-modal">
+        <div class="modal-card stack">
+          <h3 class="modal-title">Выбор пола</h3>
+          <p class="meta-muted">Выберите значение профиля из списка:</p>
+          <select class="input profile-gender-select" id="profile-gender-select">
+            ${GENDER_OPTIONS.map((item) => (
+              `<option value="${item.value}" ${item.value === selected ? 'selected' : ''}>${item.label}</option>`
+            )).join('')}
+          </select>
+          <div class="form-actions-grid">
+            <button class="secondary-btn" id="profile-gender-cancel" type="button">Отмена</button>
+            <button class="primary-btn" id="profile-gender-save" type="button">Сохранить</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    return new Promise((resolve) => {
+      const modal = root.querySelector('#profile-gender-modal');
+      const selectEl = root.querySelector('#profile-gender-select');
+      const saveEl = root.querySelector('#profile-gender-save');
+      const cancelEl = root.querySelector('#profile-gender-cancel');
+      if (!(modal instanceof HTMLElement) || !(selectEl instanceof HTMLSelectElement)) {
+        root.innerHTML = '';
+        resolve(null);
+        return;
+      }
+
+      const close = (value = null) => {
+        root.innerHTML = '';
+        resolve(value);
+      };
+
+      modal.addEventListener('click', (event) => {
+        if (event.target === modal) close(null);
+      });
+      cancelEl?.addEventListener('click', () => close(null));
+      saveEl?.addEventListener('click', () => close(selectEl.value || PROFILE_GENDER_UNKNOWN));
+      window.setTimeout(() => selectEl.focus(), 0);
+    });
+  }
 
   function syncIdentity() {
     if (!identityEl) return;
@@ -159,8 +185,67 @@ export function render({ navigate }) {
   }
 
   function updateGenderUi() {
+    const genderValueEl = listWrap.querySelector('[data-gender-value]');
     if (!genderValueEl) return;
     genderValueEl.textContent = genderLabel(currentGender);
+  }
+
+  function openFieldEditModal({ label, value, placeholder = '' }) {
+    const root = document.getElementById('modal-root');
+    if (!root) return Promise.resolve(null);
+    root.innerHTML = `
+      <div class="modal" id="profile-field-edit-modal">
+        <div class="modal-card stack">
+          <h3 class="modal-title">Изменить: ${escapeHtml(label)}</h3>
+          <input
+            id="profile-field-edit-input"
+            class="input"
+            type="text"
+            maxlength="300"
+            placeholder="${escapeHtml(placeholder || `Введите ${label.toLowerCase()}`)}"
+            value="${escapeHtml(String(value || ''))}"
+          />
+          <div class="form-actions-grid">
+            <button class="secondary-btn" id="profile-field-edit-cancel" type="button">Отмена</button>
+            <button class="primary-btn" id="profile-field-edit-save" type="button">Сохранить</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    return new Promise((resolve) => {
+      const modal = root.querySelector('#profile-field-edit-modal');
+      const inputEl = root.querySelector('#profile-field-edit-input');
+      const saveEl = root.querySelector('#profile-field-edit-save');
+      const cancelEl = root.querySelector('#profile-field-edit-cancel');
+      if (!(modal instanceof HTMLElement) || !(inputEl instanceof HTMLInputElement)) {
+        root.innerHTML = '';
+        resolve(null);
+        return;
+      }
+
+      const close = (nextValue = null) => {
+        root.innerHTML = '';
+        resolve(nextValue);
+      };
+
+      modal.addEventListener('click', (event) => {
+        if (event.target === modal) close(null);
+      });
+      cancelEl?.addEventListener('click', () => close(null));
+      saveEl?.addEventListener('click', () => close(inputEl.value));
+      inputEl.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          close(inputEl.value);
+        }
+      });
+      window.setTimeout(() => {
+        inputEl.focus();
+        inputEl.selectionStart = inputEl.value.length;
+        inputEl.selectionEnd = inputEl.value.length;
+      }, 0);
+    });
   }
 
   function renderFields(fields) {
@@ -172,10 +257,20 @@ export function render({ navigate }) {
       const isNameField = field.key === 'first_name' || field.key === 'last_name';
       const valueClass = isNameField ? 'profile-param-value profile-param-value-small' : 'profile-param-value';
       row.innerHTML = `
-        <div class="${valueClass}"><b>${field.label}</b>: ${value}</div>
+        <div class="${valueClass}"><b>${field.label}</b>: ${escapeHtml(value)}</div>
         <button class="ghost-btn" type="button" data-edit-field="${field.key}">Изменить</button>
       `;
       listWrap.append(row);
+
+      if (field.key === 'last_name') {
+        const genderRow = document.createElement('div');
+        genderRow.className = 'card profile-param-item row';
+        genderRow.innerHTML = `
+          <div class="profile-param-value"><b>Пол</b>: <span data-gender-value>${escapeHtml(genderLabel(currentGender))}</span></div>
+          <button class="ghost-btn" type="button" data-edit-gender="true">Изменить</button>
+        `;
+        listWrap.append(genderRow);
+      }
     });
   }
 
@@ -185,7 +280,10 @@ export function render({ navigate }) {
     reloadBtn.disabled = true;
     officialBtn.disabled = true;
     shineBtn.disabled = true;
-    genderBtn.disabled = true;
+    const genderActionBtn = listWrap.querySelector('[data-edit-gender="true"]');
+    if (genderActionBtn instanceof HTMLButtonElement) {
+      genderActionBtn.disabled = true;
+    }
 
     try {
       const snapshot = await loadProfileSnapshot(login);
@@ -208,7 +306,10 @@ export function render({ navigate }) {
       reloadBtn.disabled = false;
       officialBtn.disabled = false;
       shineBtn.disabled = false;
-      genderBtn.disabled = false;
+      const genderActionBtnAfter = listWrap.querySelector('[data-edit-gender="true"]');
+      if (genderActionBtnAfter instanceof HTMLButtonElement) {
+        genderActionBtnAfter.disabled = false;
+      }
     }
   }
 
@@ -240,13 +341,12 @@ export function render({ navigate }) {
     const field = currentFields.find((item) => item.key === fieldKey);
     if (!field) return;
 
-    const entered = window.prompt(`Введите новое значение для «${field.label}»:`, field.value || '');
+    const entered = await openFieldEditModal({
+      label: field.label,
+      value: field.value || '',
+      placeholder: field.placeholder || '',
+    });
     if (entered === null) return;
-
-    const confirmed = window.confirm(
-      `Записать новое значение параметра «${field.label}» в блокчейн?`,
-    );
-    if (!confirmed) return;
 
     status.className = 'status-line';
     status.textContent = 'Сохранение в блокчейн...';
@@ -262,21 +362,8 @@ export function render({ navigate }) {
   }
 
   async function onGenderClick() {
-    const entered = window.prompt(
-      'Выберите пол:\n1 — Мужской\n2 — Женский\n3 — Не указан\nМожно ввести номер или значение (male/female/unknown).',
-      currentGender,
-    );
-    if (entered === null) return;
-    const nextGender = parseGenderChoice(entered);
-    if (!nextGender) {
-      window.alert('Некорректный выбор пола. Доступно: male, female, unknown.');
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Установить пол: «${genderLabel(nextGender)}»?\nБудет создана запись в блокчейне.`,
-    );
-    if (!confirmed) return;
+    const nextGender = await openGenderPickerModal(currentGender);
+    if (!nextGender) return;
 
     status.className = 'status-line';
     status.textContent = 'Сохранение в блокчейн...';
@@ -294,6 +381,10 @@ export function render({ navigate }) {
   listWrap.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.editGender === 'true') {
+      onGenderClick();
+      return;
+    }
     const fieldKey = target.dataset.editField;
     if (!fieldKey) return;
     onEditFieldClick(fieldKey);
@@ -302,9 +393,8 @@ export function render({ navigate }) {
   reloadBtn.addEventListener('click', refreshProfileSnapshot);
   officialBtn.addEventListener('click', () => onToggleClick('official'));
   shineBtn.addEventListener('click', () => onToggleClick('shine'));
-  genderBtn.addEventListener('click', onGenderClick);
 
-  card.append(topRow, badgesRow, status, genderWrap, listWrap);
+  card.append(topRow, badgesRow, status, listWrap);
   screen.append(card);
 
   refreshProfileSnapshot();
