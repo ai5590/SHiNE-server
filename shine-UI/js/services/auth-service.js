@@ -1222,6 +1222,15 @@ export class AuthService {
     throw opError('GetUserParam', response);
   }
 
+  async listUserParams(login) {
+    const cleanLogin = (login || '').trim();
+    if (!cleanLogin) throw new Error('Не передан login');
+
+    const response = await this.ws.request('ListUserParams', { login: cleanLogin });
+    if (response.status !== 200) throw opError('ListUserParams', response);
+    return response.payload || {};
+  }
+
   async setUserRelation({ login, toLogin, kind, enabled, storagePwd }) {
     const cleanKind = String(kind || '').trim().toLowerCase();
     const kinds = CONNECTION_SUBTYPES[cleanKind];

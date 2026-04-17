@@ -39,29 +39,45 @@ async function getStoragePwd() {
   return storagePwd;
 }
 
-async function loadLatestByAliases(login, aliases) {
-  const collected = [];
+function normalizeListItems(payload) {
+  const rows = Array.isArray(payload?.params) ? payload.params : [];
+  const normalized = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (!row || typeof row !== 'object') continue;
+    const param = String(row.param || '').trim();
+    if (!param) continue;
+    const item = normalizeItem(param, row);
+    if (item) normalized.push(item);
+  }
+  return normalized;
+}
 
-  for (let i = 0; i < aliases.length; i += 1) {
-    const alias = aliases[i];
-    try {
-      const payload = await authService.getUserParam(login, alias);
-      const normalized = normalizeItem(alias, payload);
-      if (normalized) collected.push(normalized);
-    } catch {
-      // Пусто — параметр ещё не создан или endpoint не отвечает для конкретного ключа.
+function loadLatestByAliasesFromItems(items, aliases) {
+  if (!Array.isArray(items) || !items.length || !Array.isArray(aliases) || !aliases.length) return null;
+  const aliasSet = new Set(aliases.map((alias) => String(alias || '').trim().toLowerCase()).filter(Boolean));
+  if (!aliasSet.size) return null;
+
+  let latest = null;
+  for (let i = 0; i < items.length; i += 1) {
+    const item = items[i];
+    const itemParam = String(item?.param || '').trim().toLowerCase();
+    if (!itemParam || !aliasSet.has(itemParam)) continue;
+    if (!latest || Number(item.timeMs || 0) > Number(latest.timeMs || 0)) {
+      latest = item;
     }
   }
-
-  if (!collected.length) return null;
-  return collected.sort((a, b) => b.timeMs - a.timeMs)[0];
+  return latest;
 }
 
 export async function loadProfileSnapshot(login) {
+  const payload = await authService.listUserParams(login);
+  const items = normalizeListItems(payload);
+
   const fields = [];
   for (let i = 0; i < profileFieldDefs.length; i += 1) {
     const field = profileFieldDefs[i];
-    const latest = await loadLatestByAliases(login, field.readKeys);
+    const latest = loadLatestByAliasesFromItems(items, field.readKeys);
     fields.push({
       key: field.key,
       label: field.label,
@@ -74,7 +90,7 @@ export async function loadProfileSnapshot(login) {
   const toggles = [];
   for (let i = 0; i < profileToggleDefs.length; i += 1) {
     const toggle = profileToggleDefs[i];
-    const latest = await loadLatestByAliases(login, [toggle.key]);
+    const latest = loadLatestByAliasesFromItems(items, [toggle.key]);
     toggles.push({
       key: toggle.key,
       label: toggle.label,
